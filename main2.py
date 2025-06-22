@@ -325,7 +325,7 @@ async def handle_user_private_text(event):
     #     await msg.delete()
     #     return
 
-    print(f"【Telethon】收到私聊文本：来自 {to_user_id}",flush=True)
+    # print(f"【Telethon】收到私聊文本：来自 {to_user_id}",flush=True)
     text = msg.text.strip()
 
     if text:
@@ -366,7 +366,7 @@ async def handle_user_private_text(event):
 async def handle_user_private_media(event):
     msg = event.message
     if not msg.is_private or not (msg.document or msg.photo or msg.video):
-        print(f"【Telethon】收到私聊媒体，但不处理：，来自 {event.message.from_id}",flush=True)
+        # print(f"【Telethon】收到私聊媒体，但不处理：，来自 {event.message.from_id}",flush=True)
         return
     print(f"【Telethon】收到私聊媒体：{event.message.media}，来自 {event.message.from_id}",flush=True)
     exit(0)  # ⚠️ 直接退出，避免处理私聊媒体
