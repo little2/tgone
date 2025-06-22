@@ -392,21 +392,11 @@ async def handle_user_private_media(event):
     file_name      = get_file_name(media)
     caption        = event.message.text or ""
 
-    # 检查：TARGET_GROUP_ID 群组是否已有相同 doc_id
-    try:
-        safe_execute(
-            "SELECT 1 FROM file_records WHERE doc_id = %s AND chat_id = %s AND file_unique_id IS NOT NULL",
-            (doc_id, TARGET_GROUP_ID)
-        )
-    except Exception as e:
-        print(f"272 Error: {e}")
-        
-                    
-    match = re.search(r'\|_forward_\|\@?(-?\d+|[A-Za-z0-9_]+)', caption, re.IGNORECASE)
-    
-    print(f"【Telethon】匹配到的转发模式：{match}",flush=True)
-   
+
+
+    match = re.search(r'\|_forward_\|\@(-?\d+|[a-zA-Z0-9_]+)', caption, re.IGNORECASE)
     if match:
+        print(f"【Telethon】匹配到的转发模式：{match}",flush=True)
         captured_str = match.group(1).strip()  # 捕获到的字符串
         print(f"【Telethon】捕获到的字符串：{captured_str}",flush=True)
 
@@ -419,8 +409,6 @@ async def handle_user_private_media(event):
             print(f"【Telethon】捕获到的字符串不是数字：{captured_str}",flush=True)
             destination_chat_id = str(captured_str)
         
-
-
         try:
             ret = await user_client.send_file(destination_chat_id, msg.media)
             print(f"【Telethon】已转发到目标群组：{destination_chat_id}，消息 ID：{ret.id}",flush=True)
@@ -432,6 +420,15 @@ async def handle_user_private_media(event):
             print(f"❌ 其他发送失败：{e}", flush=True)
             return
 
+    # 检查：TARGET_GROUP_ID 群组是否已有相同 doc_id
+    try:
+        safe_execute(
+            "SELECT 1 FROM file_records WHERE doc_id = %s AND chat_id = %s AND file_unique_id IS NOT NULL",
+            (doc_id, TARGET_GROUP_ID)
+        )
+    except Exception as e:
+        print(f"272 Error: {e}")
+        
     if cursor.fetchone():
         await event.delete()
         return
@@ -496,6 +493,32 @@ async def process_private_media_msg(msg):
     file_size = getattr(media, 'size', None)
     file_name = get_file_name(media)
     caption = msg.text or ""
+
+    match = re.search(r'\|_forward_\|\@(-?\d+|[a-zA-Z0-9_]+)', caption, re.IGNORECASE)
+    if match:
+        print(f"【Telethon】匹配到的转发模式：{match}",flush=True)
+        captured_str = match.group(1).strip()  # 捕获到的字符串
+        print(f"【Telethon】捕获到的字符串：{captured_str}",flush=True)
+
+        if captured_str.startswith('-100') and captured_str[4:].isdigit():
+            destination_chat_id = int(captured_str)  # 正确做法，保留 -100
+        elif captured_str.isdigit():
+            print(f"【Telethon】捕获到的字符串是数字：{captured_str}",flush=True)
+            destination_chat_id = int(captured_str)
+        else:
+            print(f"【Telethon】捕获到的字符串不是数字：{captured_str}",flush=True)
+            destination_chat_id = str(captured_str)
+        
+        try:
+            ret = await user_client.send_file(destination_chat_id, msg.media)
+            print(f"【Telethon】已转发到目标群组：{destination_chat_id}，消息 ID：{ret.id}",flush=True)
+            print(f"{ret}",flush=True)
+        except ChatForwardsRestrictedError:
+            print(f"⚠️ 该媒体来自受保护频道，无法转发，已跳过。msg.id = {msg.id}", flush=True)
+            return  # ⚠️ 不处理，直接跳出
+        except Exception as e:
+            print(f"❌ 其他发送失败：{e}", flush=True)
+            return
 
     # 检查是否已处理
     safe_execute(
