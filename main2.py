@@ -30,7 +30,7 @@ import os
 
 
 # 常量
-MAX_PROCESS_TIME = 15 * 60  # 最大运行时间 20 分钟
+MAX_PROCESS_TIME = 20 * 60  # 最大运行时间 20 分钟
 
 
 # ================= 1. 载入 .env 中的环境变量 =================
@@ -1078,12 +1078,12 @@ async def main():
 
 
     # Aiogram 任务
-   
+    start_time = time.time()
     aiogram_task = asyncio.create_task(dp.start_polling(bot_client))
 
     # Telethon 循环任务
     async def telethon_loop():
-        start_time = time.time()
+       
         while (time.time() - start_time) < MAX_PROCESS_TIME:
             try:
                 await asyncio.wait_for(man_bot_loop(), timeout=600)
@@ -1096,6 +1096,7 @@ async def main():
         print("🛑 Telethon 循环结束，准备取消 Aiogram...", flush=True)
         aiogram_task.cancel()
 
+    
     try:
         await asyncio.gather(aiogram_task, telethon_loop())
     except asyncio.CancelledError:
