@@ -4,3 +4,5 @@
 user.session
 bk_24530779session_name.session
 .game.env
+*.env
+*.session
