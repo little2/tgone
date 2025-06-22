@@ -9,10 +9,10 @@ import aiohttp
 from telethon.errors import ChatForwardsRestrictedError
 from telethon.sessions import StringSession
 from telethon import TelegramClient, events
-from telethon.tl.types import InputDocument
+from telethon.tl.types import InputDocument,MessageMediaDocument
 from telethon import events
 from telethon.tl.types import InputMessagesFilterEmpty
-
+from telethon.tl.types import PeerUser
 from datetime import datetime
 
 # Aiogram 相关
@@ -38,7 +38,8 @@ MAX_PROCESS_TIME = 15 * 60  # 最大运行时间 20 分钟
 # 加载环境变量
 if not os.getenv('GITHUB_ACTIONS'):
     from dotenv import load_dotenv
-    load_dotenv(dotenv_path='.24690454.queue.env')
+    # load_dotenv(dotenv_path='.24690454.queue.env')
+    load_dotenv(dotenv_path='.28817994.luzai.env')
 
 
 config = {}
@@ -311,14 +312,21 @@ else:
 @user_client.on(events.NewMessage(incoming=True))
 async def handle_user_private_text(event):
     msg = event.message
-    if not msg.is_private or msg.media:
+    if not msg.is_private or msg.media or not msg.text:
         return
 
-    print(f"【Telethon】收到私聊文本：来自 {event.message.from_id}",flush=True)
-
-    text = msg.text.strip()
     to_user_id = msg.from_id
 
+    
+    # if isinstance(msg.from_id, PeerUser) and msg.from_id.user_id:
+    #     to_user_id = msg.from_id.user_id
+    # else:
+    #     print("⚠️ 无效的 from_id，跳过")
+    #     await msg.delete()
+    #     return
+
+    print(f"【Telethon】收到私聊文本：来自 {to_user_id}",flush=True)
+    text = msg.text.strip()
 
     if text:
         try:
@@ -358,8 +366,10 @@ async def handle_user_private_text(event):
 async def handle_user_private_media(event):
     msg = event.message
     if not msg.is_private or not (msg.document or msg.photo or msg.video):
+        print(f"【Telethon】收到私聊媒体，但不处理：，来自 {event.message.from_id}",flush=True)
         return
     print(f"【Telethon】收到私聊媒体：{event.message.media}，来自 {event.message.from_id}",flush=True)
+    exit(0)  # ⚠️ 直接退出，避免处理私聊媒体
     print(f"{msg}",flush=True)
     print(f"{event.message.text}",flush=True)
     
@@ -461,9 +471,11 @@ async def handle_user_private_media(event):
 async def process_private_media_msg(msg):
     
     # ✅ 没有媒体，直接跳过
-    if not (msg.document or msg.photo or msg.video):
+    if not (msg.document or msg.photo or msg.video or msg.text):
+        msg.delete()
         return
-
+   
+    print(f"【Telethon】来自私聊媒体回溯处理：{msg.media}，chat_id={msg.chat_id}", flush=True)
     
 
 
@@ -987,7 +999,9 @@ async def man_bot_loop():
                 ):
                    
                     # 先处理文字
-                    if message.text and not (message.document or message.photo or message.video):
+                    if message.document or message.photo or message.video:
+                        await process_private_media_msg(message)
+                    elif message.text:
                         # 构造临时 event 对象调用现有 handler
                         class TempEvent:
                             pass
@@ -996,8 +1010,13 @@ async def man_bot_loop():
                         await handle_user_private_text(temp_event)
                         continue
                     # 再处理媒体
-                    if message.document or message.photo or message.video:
-                        await process_private_media_msg(message)
+                    elif isinstance(message.media, MessageMediaDocument):
+                        # print(f"🗑️ 删除 MessageMediaDocument 消息 {message.id} from {entity.id}", flush=True)
+                        await message.delete()
+                        continue
+                    else:
+                        # print(f"【Telethon】跳过非媒体消息：{message} ", flush=True)
+                        continue
                                     
             # ✅ 群组媒体补充处理
             elif dialog.is_group and dialog.entity.id == TARGET_GROUP_ID:
