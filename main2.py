@@ -990,10 +990,10 @@ async def man_bot_loop():
             first_name = getattr(entity, 'first_name', '') or ''
             last_name = getattr(entity, 'last_name', '') or ''
             entity_title = f"{first_name} {last_name}".strip() or getattr(entity, 'title', f"Unknown entity {entity.id}")
-
+        await asyncio.sleep(1)
         if dialog.unread_count >= 0:
             if dialog.is_user:
-                print(f"当前对话: {entity_title} ({entity.id})", flush=True)
+                # print(f"当前对话: {entity_title} ({entity.id})", flush=True)
                 async for message in user_client.iter_messages(
                     entity,  limit=100, reverse=True, filter=InputMessagesFilterEmpty()
                 ):
@@ -1021,7 +1021,7 @@ async def man_bot_loop():
             # ✅ 群组媒体补充处理
             elif dialog.is_group and dialog.entity.id == TARGET_GROUP_ID:
                 if dialog.unread_count > 0:
-                    print(f"当前对话: {entity_title} ({entity.id})", flush=True)
+                    # print(f"当前对话: {entity_title} ({entity.id})", flush=True)
                     async for message in user_client.iter_messages(
                         entity,
                         offset_id=dialog.read_marked_id,
@@ -1063,10 +1063,12 @@ async def main():
         start_time = time.time()
         while (time.time() - start_time) < MAX_PROCESS_TIME:
             try:
-                
                 await asyncio.wait_for(man_bot_loop(), timeout=600)
             except asyncio.TimeoutError:
                 print("⚠️ 任务超时，跳过本轮", flush=True)
+            finally:
+                print("🔄 循环等待 30 秒后继续...", flush=True)
+                await asyncio.sleep(30)
            
         print("🛑 Telethon 循环结束，准备取消 Aiogram...", flush=True)
         aiogram_task.cancel()
