@@ -369,7 +369,7 @@ async def handle_user_private_media(event):
         # print(f"【Telethon】收到私聊媒体，但不处理：，来自 {event.message.from_id}",flush=True)
         return
     print(f"【Telethon】收到私聊媒体：{event.message.media}，来自 {event.message.from_id}",flush=True)
-    exit(0)  # ⚠️ 直接退出，避免处理私聊媒体
+   
     print(f"{msg}",flush=True)
     print(f"{event.message.text}",flush=True)
     
@@ -410,14 +410,23 @@ async def handle_user_private_media(event):
             destination_chat_id = str(captured_str)
         
         try:
-            ret = await user_client.send_file(destination_chat_id, msg.media)
+            print(f"📌 获取实体：{destination_chat_id}", flush=True)
+            entity = await user_client.get_entity(destination_chat_id)
+            ret = await user_client.send_file(entity, msg.media)
+        #     print(f"✅ 成功发送到 {destination_chat_id}，消息 ID：{ret.id}", flush=True)
+        # except Exception as e:
+        #     print(f"❌ 无法发送到 {destination_chat_id}：{e}", flush=True)
+
+
+        # try:
+        #     ret = await user_client.send_file(destination_chat_id, msg.media)
             print(f"【Telethon】已转发到目标群组：{destination_chat_id}，消息 ID：{ret.id}",flush=True)
             print(f"{ret}",flush=True)
         except ChatForwardsRestrictedError:
             print(f"⚠️ 该媒体来自受保护频道，无法转发，已跳过。msg.id = {msg.id}", flush=True)
             return  # ⚠️ 不处理，直接跳出
         except Exception as e:
-            print(f"❌ 其他发送失败：{e}", flush=True)
+            print(f"❌ 其他发送失败(429)：{e}", flush=True)
             return
 
     # 检查：TARGET_GROUP_ID 群组是否已有相同 doc_id
@@ -510,15 +519,23 @@ async def process_private_media_msg(msg):
             destination_chat_id = str(captured_str)
         
         try:
-            ret = await user_client.send_file(destination_chat_id, msg.media)
+            print(f"📌 获取实体：{destination_chat_id}", flush=True)
+            entity = await user_client.get_entity(destination_chat_id)
+            ret = await user_client.send_file(entity, msg.media)
+        #     print(f"✅ 成功发送到 {destination_chat_id}，消息 ID：{ret.id}", flush=True)
+        # except Exception as e:
+        #     print(f"❌ 无法发送到 {destination_chat_id}：{e}", flush=True)
+
+        # try:
+        #     ret = await user_client.send_file(destination_chat_id, msg.media)
             print(f"【Telethon】已转发到目标群组：{destination_chat_id}，消息 ID：{ret.id}",flush=True)
             print(f"{ret}",flush=True)
         except ChatForwardsRestrictedError:
             print(f"⚠️ 该媒体来自受保护频道，无法转发，已跳过。msg.id = {msg.id}", flush=True)
             return  # ⚠️ 不处理，直接跳出
         except Exception as e:
-            print(f"❌ 其他发送失败：{e}", flush=True)
-            return
+            print(f"❌ 其他发送失败(529)：{e}", flush=True)
+            
 
     # 检查是否已处理
     safe_execute(
@@ -1057,6 +1074,23 @@ async def man_bot_loop():
             
    
 
+async def run_aiogram_60s():
+    # 创建后台任务
+
+    polling_task = asyncio.create_task(dp.start_polling(bot_client))
+    print("▶️ Aiogram polling 启动", flush=True)
+
+    try:
+        await asyncio.sleep(120)  # 运行 60 秒
+        print("⏱ Aiogram polling 60 秒到，准备终止...", flush=True)
+    finally:
+        polling_task.cancel()
+        await dp.stop_polling()
+        try:
+
+            await polling_task
+        except asyncio.CancelledError:
+            print("✅ Aiogram polling 已取消", flush=True)
 
 
 async def main():
@@ -1079,32 +1113,38 @@ async def main():
 
     # Aiogram 任务
     start_time = time.time()
-    aiogram_task = asyncio.create_task(dp.start_polling(bot_client))
+    # aiogram_task = asyncio.create_task(dp.start_polling(bot_client))
 
     # Telethon 循环任务
-    async def telethon_loop():
+    # async def telethon_loop():
        
-        while (time.time() - start_time) < MAX_PROCESS_TIME:
-            try:
-                await asyncio.wait_for(man_bot_loop(), timeout=600)
-            except asyncio.TimeoutError:
-                print("⚠️ 任务超时，跳过本轮", flush=True)
-            finally:
-                print("🔄 循环等待 30 秒后继续...", flush=True)
-                await asyncio.sleep(30)
-           
-        print("🛑 Telethon 循环结束，准备取消 Aiogram...", flush=True)
-        aiogram_task.cancel()
+    while (time.time() - start_time) < MAX_PROCESS_TIME:
+        try:
+            await asyncio.wait_for(man_bot_loop(), timeout=600)
+        except asyncio.TimeoutError:
+            print("⚠️ man_bot_loop 超时，跳过本轮", flush=True)
+
+        print(f"【Telethon】等待 30 秒后继续...", flush=True)
+        await asyncio.sleep(30)  # 确保有时间间隔
+        
+
+    await run_aiogram_60s()
+    print("🛑 达到运行时间上限，正在清理...", flush=True)
+    await bot_client.session.close()
+    await user_client.disconnect()
+    print("✅ 所有连接关闭，程序结束", flush=True)
+
+        # aiogram_task.cancel()
 
     
-    try:
-        await asyncio.gather(aiogram_task, telethon_loop())
-    except asyncio.CancelledError:
-        print("✅ Aiogram polling 已被取消。", flush=True)
-    finally:
-        print("🧹 清理完成，准备退出程序...", flush=True)
-        await bot_client.session.close()
-        await user_client.disconnect()
+    # try:
+    #     await asyncio.gather(aiogram_task, telethon_loop())
+    # except asyncio.CancelledError:
+    #     print("✅ Aiogram polling 已被取消。", flush=True)
+    # finally:
+    #     print("🧹 清理完成，准备退出程序...", flush=True)
+    #     await bot_client.session.close()
+    #     await user_client.disconnect()
     
 
     
