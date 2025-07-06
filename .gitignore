@@ -7,3 +7,7 @@ bk_24530779session_name.session
 *.env
 *.session
 .game.env
+.schema
+__pycache__/utils.cpython-313.pyc
+25299903session_name.session.enc
+24530779session_name.session.enc
