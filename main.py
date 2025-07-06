@@ -27,9 +27,8 @@ from utils import MediaUtils
 # ================= 1. 载入 .env 中的环境变量 =================
 # 加载环境变量
 if not os.getenv('GITHUB_ACTIONS'):
-    from dotenv import load_dotenv,find_dotenv
-    env_path = find_dotenv('.25299903.warehouse.env', raise_error_if_not_found=True)
-    load_dotenv(env_path, override=True)
+    load_dotenv(dotenv_path='.25299903.warehouse.env', override=True)
+   
     # load_dotenv(dotenv_path='.24690454.queue.env')
     # load_dotenv(dotenv_path='.28817994.luzai.env')
     # load_dotenv(dotenv_path='.a25299903.warehouse.env')
