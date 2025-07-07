@@ -138,7 +138,7 @@ async def handle_user_private_media(event):
 
 # ================= H2-2. 私聊 Media 媒体处理：人类账号 =================
 async def process_private_media_msg(msg):
-    media_utils.process_private_media_msg(msg)
+    await media_utils.process_private_media_msg(msg)
     return
     
 # ================= H3-1. 群组媒体处理：人类账号 =================
@@ -150,7 +150,7 @@ async def handle_user_group_media(event):
 
 # ================= H3-2. 群组媒体处理：人类账号 =================
 async def process_group_media_msg(msg):
-    media_utils.process_group_media_msg(msg)
+    await media_utils.process_group_media_msg(msg)
     return
    
 # ================= B1P. 私聊 Message 文字处理：Aiogram：BOT账号 =================
