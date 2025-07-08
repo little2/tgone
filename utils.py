@@ -774,51 +774,55 @@ class MediaUtils:
             print("D865 process_private_media_msg")
             # print(f"【Telethon】收到私聊媒体，但不处理：，来自 {event.message.from_id}",flush=True)
             return
-        
+        caption = ""
         if(event is None):
             print(f"【Telethon】来自私聊媒体回溯处理：{msg.media}，chat_id={msg.chat_id}", flush=True)
+            caption        = msg.message or ""
+            
         else:
             print(f"【Telethon】收到私聊媒体，来自 {event.message.from_id}",flush=True)
             caption        = event.message.text or ""
-            print(f"caption={caption}",flush=True)
+            
+        print(f"caption={caption}",flush=True)
             
     
         doc_id, access_hash, file_reference, mime_type, file_size, file_name, file_type = await self.extract_video_metadata_from_telethon(msg)  
         
-        match = re.search(r'\|_forward_\|(@[a-zA-Z0-9_]+|-?\d+)', caption, re.IGNORECASE)
-        if match:
-            print(f"【Telethon】匹配到的转发模式：{match}",flush=True)
-            captured_str = match.group(1).strip()  # 捕获到的字符串
-            print(f"【Telethon】捕获到的字符串：{captured_str}",flush=True)
+        if caption !='':
+            match = re.search(r'\|_forward_\|(@[a-zA-Z0-9_]+|-?\d+)', caption, re.IGNORECASE)
+            if match:
+                print(f"【Telethon】匹配到的转发模式：{match}",flush=True)
+                captured_str = match.group(1).strip()  # 捕获到的字符串
+                print(f"【Telethon】捕获到的字符串：{captured_str}",flush=True)
 
-            if captured_str.startswith('-100') and captured_str[4:].isdigit():
-                destination_chat_id = int(captured_str)  # 正确做法，保留 -100
-            elif captured_str.isdigit():
-                print(f"【Telethon】捕获到的字符串是数字：{captured_str}",flush=True)
-                destination_chat_id = int(captured_str)
-            else:
-                print(f"【Telethon】捕获到的字符串不是数字：{captured_str}",flush=True)
-                destination_chat_id = str(captured_str)
-            
-            try:
-                print(f"📌 获取实体：{destination_chat_id}", flush=True)
-                entity = await self.user_client.get_entity(destination_chat_id)
-                ret = await self.user_client.send_file(entity, msg.media)
-            #     print(f"✅ 成功发送到 {destination_chat_id}，消息 ID：{ret.id}", flush=True)
-            # except Exception as e:
-            #     print(f"❌ 无法发送到 {destination_chat_id}：{e}", flush=True)
+                if captured_str.startswith('-100') and captured_str[4:].isdigit():
+                    destination_chat_id = int(captured_str)  # 正确做法，保留 -100
+                elif captured_str.isdigit():
+                    print(f"【Telethon】捕获到的字符串是数字：{captured_str}",flush=True)
+                    destination_chat_id = int(captured_str)
+                else:
+                    print(f"【Telethon】捕获到的字符串不是数字：{captured_str}",flush=True)
+                    destination_chat_id = str(captured_str)
+                
+                try:
+                    print(f"📌 获取实体：{destination_chat_id}", flush=True)
+                    entity = await self.user_client.get_entity(destination_chat_id)
+                    ret = await self.user_client.send_file(entity, msg.media)
+                #     print(f"✅ 成功发送到 {destination_chat_id}，消息 ID：{ret.id}", flush=True)
+                # except Exception as e:
+                #     print(f"❌ 无法发送到 {destination_chat_id}：{e}", flush=True)
 
 
-            # try:
-            #     ret = await user_client.send_file(destination_chat_id, msg.media)
-                print(f"【Telethon】已转发到目标群组：{destination_chat_id}，消息 ID：{ret.id}",flush=True)
-                print(f"{ret}",flush=True)
-            except ChatForwardsRestrictedError:
-                print(f"⚠️ 该媒体来自受保护频道，无法转发，已跳过。msg.id = {msg.id}", flush=True)
-                return  # ⚠️ 不处理，直接跳出
-            except Exception as e:
-                print(f"❌ 其他发送失败(429)：{e}", flush=True)
-                return
+                # try:
+                #     ret = await user_client.send_file(destination_chat_id, msg.media)
+                    print(f"【Telethon】已转发到目标群组：{destination_chat_id}，消息 ID：{ret.id}",flush=True)
+                    print(f"{ret}",flush=True)
+                except ChatForwardsRestrictedError:
+                    print(f"⚠️ 该媒体来自受保护频道，无法转发，已跳过。msg.id = {msg.id}", flush=True)
+                    return  # ⚠️ 不处理，直接跳出
+                except Exception as e:
+                    print(f"❌ 其他发送失败(429)：{e}", flush=True)
+                    return
 
         # 检查：TARGET_GROUP_ID 群组是否已有相同 doc_id
         try:
