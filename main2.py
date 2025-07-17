@@ -38,7 +38,8 @@ MAX_PROCESS_TIME = 40 * 60  # 最大运行时间 20 分钟
 # 加载环境变量
 if not os.getenv('GITHUB_ACTIONS'):
     from dotenv import load_dotenv,find_dotenv
-    env_path = find_dotenv('.25299903.warehouse.env', raise_error_if_not_found=True)
+    # env_path = find_dotenv('.25299903.warehouse.env', raise_error_if_not_found=True)
+    env_path = find_dotenv('.24690454.queue.env', raise_error_if_not_found=True)
     load_dotenv(env_path, override=True)
     # load_dotenv(dotenv_path='.24690454.queue.env')
     # load_dotenv(dotenv_path='.28817994.luzai.env')
