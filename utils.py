@@ -178,7 +178,7 @@ class MediaUtils:
                 )
             
             row = cursor.fetchone()
-            print(f"【2】本机没纪录,查询其他机器人: 结果：{row}",flush=True)
+            print(f"【2】本机查询纪录: 结果：{row}",flush=True)
 
             if not row:
 
