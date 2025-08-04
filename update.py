@@ -15,7 +15,7 @@ DB_CONFIG = {
 
 
 
-BATCH_SIZE = 10
+BATCH_SIZE = 1000
 
 
 def migrate_data():
