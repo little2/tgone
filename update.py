@@ -15,14 +15,15 @@ DB_CONFIG = {
 
 
 
-BATCH_SIZE = 10
+BATCH_SIZE = 1000
 
 
 def migrate_data():
     conn = pymysql.connect(**DB_CONFIG)
     cursor = conn.cursor()
 
-    last_id = 317828  # 从 ID > 0 开始处理
+    # last_id = 317828  # 从 ID > 0 开始处理
+    last_id = 2529531
 
     while True:
         print(f"🚚 Migrating batch where id > {last_id}")
@@ -46,7 +47,7 @@ def migrate_data():
             id, file_type, file_unique_id, file_id, bot, user_id, create_time = row
             try:
                 cursor.execute("""
-                    INSERT IGNORE INTO file_extension_new (
+                    INSERT IGNORE INTO file_extension_new2 (
                         id, file_type, file_unique_id, file_id, bot, user_id, create_time
                     ) VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """, (
