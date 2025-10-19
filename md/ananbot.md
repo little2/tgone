@@ -1,3 +1,5 @@
+
+
 写一个 telegram bot
 使用 python, aiogram , mysql 
 当用户发送消息时，如果是私信，且是媒体，找出这个媒体的file_unqiue_id, 如果是photo,则是使用尺寸最大的为ffile_unqiue_idd
