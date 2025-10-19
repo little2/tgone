@@ -62,12 +62,60 @@ class MediaUtils:
         self.bot_username = bot_info.username
 
 
+    def safe_execute(self, sql, params=None, *, commit=None):
+        """
+        commit: True 强制提交；False 不提交；None 自动判断 (INSERT/UPDATE/DELETE/REPLACE 则提交)
+        """
+        try:
+            self.db.ping(reconnect=True)
+            cursor = self.db.cursor()
 
-    def safe_execute(self, sql, params=None):
+            # 打印完整 SQL（含参数展开）
+            try:
+                full_sql = cursor.mogrify(sql, params or ())
+                print(f"🧩 执行 SQL:\n{full_sql.decode() if isinstance(full_sql, bytes) else full_sql}\n", flush=True)
+            except Exception as e:
+                # 兜底：至少把原 SQL 与参数打出来
+                print(f"⚠️ mogrify 失败：{e}", flush=True)
+                print(f"🧩 原始 SQL: {sql}", flush=True)
+                if params:
+                    print(f"🧩 参数: {params}", flush=True)
+
+            cursor.execute(sql, params or ())
+
+            # 是否提交
+            if commit is None:
+                stmt = sql.lstrip().split(None, 1)[0].upper() if sql else ""
+                auto_commit = stmt in {"INSERT", "UPDATE", "DELETE", "REPLACE", "ALTER", "CREATE", "DROP"}
+            else:
+                auto_commit = bool(commit)
+            if auto_commit:
+                self.db.commit()
+
+            return cursor
+
+        except Exception as e:
+            # 出错时也把 SQL 和参数打出来便于排查
+            print(f"❌ 数据库执行出错: {e}", flush=True)
+            print(f"🔹 SQL: {sql}", flush=True)
+            if params:
+                print(f"🔹 Params: {params}", flush=True)
+            try:
+                self.db.rollback()
+            except Exception:
+                pass
+            return None
+
+
+
+    def safe_execute2(self, sql, params=None):
         try:
             self.db.ping(reconnect=True)  # 使用 self.db
+
+
             cursor = self.db.cursor()     # 正确获取 cursor
             cursor.execute(sql, params or ())
+           
             return cursor
         except Exception as e:
             print(f"⚠️ 数据库执行出错: {e}")
@@ -97,6 +145,10 @@ class MediaUtils:
         """
         values = list(fields.values())
         try:
+
+
+
+
             self.safe_execute(sql, values)
         except Exception as e:
             print(f"110 Error: {e}")
@@ -180,7 +232,7 @@ class MediaUtils:
             row = cursor.fetchone()
             print(f"【2】本机查询纪录: 结果：{row}",flush=True)
 
-            if not row:
+            if not row: # if row = None
 
                 ext_row = await self.fetch_file_by_source_id(file_unique_id)
                 print(f"【3】扩展查询结果：{ext_row}",flush=True)
@@ -780,7 +832,7 @@ class MediaUtils:
             caption        = msg.message or ""
             
         else:
-            print(f"【Telethon】收到私聊媒体，来自 {event.message.from_id}",flush=True)
+            print(f"【Telethon】收到私聊媒体，来自 {event.message.from_id} \r\n\r\n{event.message}\r\n\r\n{msg}",flush=True)
             caption        = event.message.text or ""
             
         print(f"caption={caption}",flush=True)
@@ -845,6 +897,7 @@ class MediaUtils:
             # 这里直接发送 msg.media，如果受保护会被阻止
             print(f"👉 【Telethon】准备发送到目标群组：{TARGET_GROUP_ID}", flush=True)
             ret = await self.user_client.send_file(TARGET_GROUP_ID, msg.media)
+            print(f"ret={ret}", flush=True)
         except ChatForwardsRestrictedError:
             print(f"🚫 跳过：该媒体来自受保护频道 msg.id = {msg.id}", flush=True)
             return
