@@ -225,7 +225,7 @@ class MediaUtils:
                 )
             else:
                 cursor = self.safe_execute(
-                    "SELECT chat_id, message_id, doc_id, access_hash, file_reference, file_id, file_unique_id,file_type FROM file_records WHERE file_reference IS NOT NULL AND file_unique_id = %s AND man_id = %s",
+                    "SELECT chat_id, message_id, doc_id, access_hash, file_reference, file_id, file_unique_id,file_type FROM file_records WHERE  file_unique_id = %s AND man_id = %s",
                     (file_unique_id,self.man_id)
                 )
             
@@ -745,7 +745,7 @@ class MediaUtils:
 
         to_user_id = msg.from_id
 
-        print(f"【Telethon】收到{msg}",flush=True)
+        print(f"【Telethon】收到msg",flush=True)
         
         # 获取发信人 ID
         try:
