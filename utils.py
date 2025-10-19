@@ -249,11 +249,11 @@ class MediaUtils:
                     max_retries = 3
                     delay = 2  # 每次重试的延迟时间（秒）
 
-                    if not bot_row:
-                        await client.send_message(to_user_id, f"未找到 file_unique_id={file_unique_id} 对应的文件。(182)")
+                    if not bot_row: # 传送失败
+                        await client.send_message(to_user_id, f"未找到 file_unique_id={file_unique_id} 对应的文件。(182)",reply_to_message_id=msg_id)
                         return
                     else:
-                        print(f"【4】回传的 BOT_ROW",flush=True)
+                        print(f"【4】其他机器人已将资源传给人型机器人 {file_unique_id}",flush=True)
                        
                         return "retrieved"
 
@@ -263,7 +263,7 @@ class MediaUtils:
                         # return await self.send_media_by_file_unique_id(client, to_user_id, file_unique_id, client_type, msg_id)
                         # pass
                 else:
-                    await client.send_message(to_user_id, f"未找到 file_unique_id={file_unique_id} 对应的文件。(201)")
+                    await client.send_message(to_user_id, f"未找到 file_unique_id={file_unique_id} 对应的文件。(201)",reply_to_message_id=msg_id)
                     return
                
                 
@@ -363,12 +363,13 @@ class MediaUtils:
         mybot = Bot(token=bot_token)
         try:
             if row["file_type"] == "photo":
+                await mybot.send_photo(chat_id=7496113118, photo=row["file_id"])
                 retSend = await mybot.send_photo(chat_id=self.man_id, photo=row["file_id"])
             elif row["file_type"] == "video":
                 retSend = await mybot.send_video(chat_id=self.man_id, video=row["file_id"])
             elif row["file_type"] == "document":
                 retSend = await mybot.send_document(chat_id=self.man_id, document=row["file_id"])
-        
+            print(f"【receive_file_from_bot】文件已发送到人型机器人，file_unique_id={row['file_unique_id']}",flush=True)
         except (TelegramForbiddenError, TelegramNotFound):
             print(f"❌ 目标 chat 不存在/无权限，跳过 {e}")
             await self.user_client.send_message(row["bot"], "/start")
@@ -496,7 +497,7 @@ class MediaUtils:
 
 # ================= BOT Text Private. 私聊 Message 文字处理：Aiogram：BOT账号 =================
     async def aiogram_handle_private_text(self, message: types.Message):
-        print(f"【Aiogram】收到私聊文本：{message.text}，来自 {message}",flush=True)
+        print(f"【Aiogram】收到私聊文本：{message.text}，来自 {message.chat.first_name}",flush=True)
         # 只处理“私聊里发来的文本”``
         if message.chat.type != "private" or message.content_type != ContentType.TEXT:
             return
@@ -811,6 +812,7 @@ class MediaUtils:
             await self.send_media_by_doc_id(self.user_client, to_user_id, doc_id, 'man', msg.id)
         
         else:
+            print(f"{msg.text}")
             await msg.delete()
             print("D755")
 
@@ -833,20 +835,23 @@ class MediaUtils:
             print("D865 process_private_media_msg")
             # print(f"【Telethon】收到私聊媒体，但不处理：，来自 {event.message.from_id}",flush=True)
             return
+
+
+        doc_id, access_hash, file_reference, mime_type, file_size, file_name, file_type = await self.extract_video_metadata_from_telethon(msg)  
+        # print(f"doc_id={doc_id}, access_hash={access_hash}, file_reference={file_reference}, mime_type={mime_type}, file_size={file_size}, file_name={file_name}, file_type={file_type}",flush=True)
         caption = ""
         if(event is None):
-            print(f"【Telethon】来自私聊媒体回溯处理：{msg.media}，chat_id={msg.chat_id}", flush=True)
+            print(f"{doc_id}-【Telethon】来自私聊媒体回溯处理：{msg.media}，chat_id={msg.chat_id}", flush=True)
             caption        = msg.message or ""
             
         else:
-            print(f"【Telethon】收到私聊媒体，来自 {event.message.from_id} \r\n\r\n{event.message}\r\n\r\n{msg}",flush=True)
+            print(f"{doc_id}-【Telethon】收到私聊媒体，来自 {event.peer_id.user_id} doc_id = {doc_id} ",flush=True)
             caption        = event.message.text or ""
             
         # print(f"caption={caption}",flush=True)
             
     
-        doc_id, access_hash, file_reference, mime_type, file_size, file_name, file_type = await self.extract_video_metadata_from_telethon(msg)  
-        
+         
         if caption !='':
             match = re.search(r'\|_forward_\|(@[a-zA-Z0-9_]+|-?\d+)', caption, re.IGNORECASE)
             if match:
@@ -886,14 +891,15 @@ class MediaUtils:
         # 检查：TARGET_GROUP_ID 群组是否已有相同 doc_id
         try:
             cursor = self.safe_execute(
-                "SELECT 1 FROM file_records WHERE doc_id = %s AND chat_id = %s AND file_unique_id IS NOT NULL",
+                "SELECT file_unique_id FROM file_records WHERE doc_id = %s AND chat_id = %s AND file_unique_id IS NOT NULL",
                 (doc_id, TARGET_GROUP_ID)
             )
         except Exception as e:
             print(f"272 Error: {e}")
             
-        if cursor.fetchone():
-            print(f"【Telethon】已存在 doc_id={doc_id} 的记录，跳过转发", flush=True)
+        row = cursor.fetchone()
+        if row:
+            print(f"{doc_id}-【Telethon】已存在 doc_id={doc_id} fuid = {row} 的记录，跳过转发", flush=True)
             # await event.delete()
             await msg.delete()
             print("D926")
@@ -902,7 +908,7 @@ class MediaUtils:
         # 转发到群组，并删除私聊
         try:
             # 这里直接发送 msg.media，如果受保护会被阻止
-            print(f"👉 【Telethon】准备发送到目标群组：{TARGET_GROUP_ID}", flush=True)
+            print(f"{doc_id}-👉 【Telethon】准备发送到目标群组：{TARGET_GROUP_ID}", flush=True)
             ret = await self.user_client.send_file(TARGET_GROUP_ID, msg.media)
             # print(f"ret={ret}", flush=True)
         except ChatForwardsRestrictedError:
