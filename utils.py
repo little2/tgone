@@ -173,7 +173,7 @@ class MediaUtils:
                 )
             else:
                 cursor = self.safe_execute(
-                    "SELECT chat_id, message_id, doc_id, access_hash, file_reference, file_id, file_unique_id,file_type FROM file_records WHERE file_unique_id = %s AND man_id = %s",
+                    "SELECT chat_id, message_id, doc_id, access_hash, file_reference, file_id, file_unique_id,file_type FROM file_records WHERE file_reference IS NOT NULL AND file_unique_id = %s AND man_id = %s",
                     (file_unique_id,self.man_id)
                 )
             
@@ -760,7 +760,7 @@ class MediaUtils:
 
     # ================= Human Private Meddia 私聊 Media 媒体处理：人类账号 =================
     async def handle_user_private_media(self,event):
-        TARGET_GROUP_ID = self.config.get('target_group_id')
+        
         msg = event.message
         await self.process_private_media_msg(msg, event)
         return
