@@ -508,18 +508,18 @@ class MediaUtils:
                 
                 print(f">>>>>【Telethon】已从 Bot 获取文件，准备发送到 {to_user_id}，file_unique_id={file_unique_id}",flush=True)
                 async def delayed_resend():
-                    # for _ in range(6):  # 最多重试 6 次
-                    #     try:
-                    #         # 尝试发送文件(机器人)
-                    #         print(f"【Telethon】第 {_+1} 次尝试发送文件：{file_unique_id} 到 {to_user_id} {self.receive_file_unique_id}",flush=True)
-                    #         if self.receive_file_unique_id == file_unique_id:
-                    #             # 显示第几次
-                    #             await self.send_media_by_file_unique_id(self.bot_client, to_user_id, text, 'bot', reply_to_message)
-                    #             return
-                    #         else:
-                    #             await asyncio.sleep(0.5)
-                    #     except Exception as e:
-                    #         print(f"【Telethon】发送失败，重试中：{e}", flush=True)
+                    for _ in range(6):  # 最多重试 6 次
+                        try:
+                            # 尝试发送文件(机器人)
+                            print(f"【Telethon】第 {_+1} 次尝试发送文件：{file_unique_id} 到 {to_user_id} {self.receive_file_unique_id}",flush=True)
+                            if self.receive_file_unique_id == file_unique_id:
+                                # 显示第几次
+                                await self.send_media_by_file_unique_id(self.bot_client, to_user_id, text, 'bot', reply_to_message)
+                                return
+                            else:
+                                await asyncio.sleep(0.5)
+                        except Exception as e:
+                            print(f"【Telethon】发送失败，重试中：{e}", flush=True)
                     await self.send_media_by_file_unique_id(self.bot_client, to_user_id, text, 'bot', reply_to_message)
 
                 asyncio.create_task(delayed_resend())
@@ -781,20 +781,18 @@ class MediaUtils:
             if(ret=='retrieved'):
                 print(f">>>>>【Telethon】已从 Bot 获取文件，准备发送到 {to_user_id}，file_unique_id={file_unique_id}",flush=True)
                 async def delayed_resend():
-                    # for _ in range(6):  # 最多重试 6 次
-                    #     try:
-                    #         # 尝试发送文件 (人型机器人)
-                    #         print(f"【Telethon】第 {_+1} 次尝试发送文件：{file_unique_id} 到 {to_user_id} {self.receive_file_unique_id}",flush=True)
-                    #         if self.receive_file_unique_id == file_unique_id:
-                    #             # 显示第几次
-                                
-                                
-                    #             await self.send_media_by_file_unique_id(self.user_client, to_user_id, file_unique_id, 'man', msg.id)
-                    #             return
-                    #         else:
-                    #             await asyncio.sleep(0.5)
-                    #     except Exception as e:
-                    #         print(f"【Telethon】发送失败，重试中：{e}", flush=True)
+                    for _ in range(6):  # 最多重试 6 次
+                        try:
+                            # 尝试发送文件 (人型机器人)
+                            print(f"【Telethon】第 {_+1} 次尝试发送文件：{file_unique_id} 到 {to_user_id} {self.receive_file_unique_id}",flush=True)
+                            if self.receive_file_unique_id == file_unique_id:
+                                # 显示第几次
+                                await self.send_media_by_file_unique_id(self.user_client, to_user_id, file_unique_id, 'man', msg.id)
+                                return
+                            else:
+                                await asyncio.sleep(0.5)
+                        except Exception as e:
+                            print(f"【Telethon】发送失败，重试中：{e}", flush=True)
                     await self.send_media_by_file_unique_id(self.user_client, to_user_id, file_unique_id, 'man', msg.id)
 
                 asyncio.create_task(delayed_resend())
