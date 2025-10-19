@@ -9,6 +9,11 @@ from telethon.tl.types import InputDocument, MessageMediaDocument, PeerUser
 import time
 from aiohttp import web
 from telethon.errors import ChatForwardsRestrictedError
+from aiogram.exceptions import (
+    TelegramNetworkError, TelegramRetryAfter, TelegramBadRequest,
+    TelegramForbiddenError, TelegramNotFound
+)
+
 
 """
 telegram_media_utils.py
@@ -62,7 +67,7 @@ class MediaUtils:
         self.bot_username = bot_info.username
 
 
-    def safe_execute(self, sql, params=None, *, commit=None):
+    def safe_execute_bk(self, sql, params=None, *, commit=None):
         """
         commit: True 强制提交；False 不提交；None 自动判断 (INSERT/UPDATE/DELETE/REPLACE 则提交)
         """
@@ -108,7 +113,7 @@ class MediaUtils:
 
 
 
-    def safe_execute2(self, sql, params=None):
+    def safe_execute(self, sql, params=None):
         try:
             self.db.ping(reconnect=True)  # 使用 self.db
 
@@ -363,14 +368,16 @@ class MediaUtils:
                 retSend = await mybot.send_video(chat_id=self.man_id, video=row["file_id"])
             elif row["file_type"] == "document":
                 retSend = await mybot.send_document(chat_id=self.man_id, document=row["file_id"])
-        except Exception as e:
+        
+        except (TelegramForbiddenError, TelegramNotFound):
+            print(f"❌ 目标 chat 不存在/无权限，跳过 {e}")
             await self.user_client.send_message(row["bot"], "/start")
             await self.user_client.send_message(row["bot"], "[~bot~]")
-            print(f"❌ 目标 chat 不存在或无法访问: {e}")
-
+        except Exception as e:
+            # 不要在所有异常里就发 /start；只在你需要唤醒对话时再做
+            print(f"❌ 发送失败: {e}")
         finally:
             await mybot.session.close()
-            
             return retSend
             
 
@@ -489,8 +496,8 @@ class MediaUtils:
 
 # ================= BOT Text Private. 私聊 Message 文字处理：Aiogram：BOT账号 =================
     async def aiogram_handle_private_text(self, message: types.Message):
-        print(f"【Aiogram】收到私聊文本：{message.text}，来自 {message.from_user.id}",flush=True)
-        # 只处理“私聊里发来的文本”
+        print(f"【Aiogram】收到私聊文本：{message.text}，来自 {message}",flush=True)
+        # 只处理“私聊里发来的文本”``
         if message.chat.type != "private" or message.content_type != ContentType.TEXT:
             return
         text = message.text.strip()
@@ -503,9 +510,9 @@ class MediaUtils:
             
             file_unique_id = text
             ret = await self.send_media_by_file_unique_id(self.bot_client, to_user_id, text, 'bot', reply_to_message)
-            print(f">>>【Telethon】发送文件：{file_unique_id} 到 {to_user_id}，返回结果：{ret}",flush=True)
+            
             if(ret=='retrieved'):
-                
+               
                 print(f">>>>>【Telethon】已从 Bot 获取文件，准备发送到 {to_user_id}，file_unique_id={file_unique_id}",flush=True)
                 async def delayed_resend():
                     for _ in range(6):  # 最多重试 6 次
@@ -523,6 +530,8 @@ class MediaUtils:
                     await self.send_media_by_file_unique_id(self.bot_client, to_user_id, text, 'bot', reply_to_message)
 
                 asyncio.create_task(delayed_resend())
+            else:
+                print(f">>>>>【Aiogram】文件已发送到 {to_user_id}，file_unique_id={file_unique_id}",flush=True)
 
 
         elif len(text)<40 and self.doc_id_pattern.fullmatch(text):
@@ -833,7 +842,7 @@ class MediaUtils:
             print(f"【Telethon】收到私聊媒体，来自 {event.message.from_id} \r\n\r\n{event.message}\r\n\r\n{msg}",flush=True)
             caption        = event.message.text or ""
             
-        print(f"caption={caption}",flush=True)
+        # print(f"caption={caption}",flush=True)
             
     
         doc_id, access_hash, file_reference, mime_type, file_size, file_name, file_type = await self.extract_video_metadata_from_telethon(msg)  
