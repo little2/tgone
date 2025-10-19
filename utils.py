@@ -692,7 +692,7 @@ class MediaUtils:
 
         to_user_id = msg.from_id
 
-        print(f"【Telethon】{msg}",flush=True)
+        print(f"【Telethon】收到{msg}",flush=True)
         
         # 获取发信人 ID
         try:
