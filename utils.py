@@ -777,14 +777,14 @@ class MediaUtils:
         if len(text)<40 and self.file_unique_id_pattern.fullmatch(text):
             file_unique_id = text
             ret = await self.send_media_by_file_unique_id(self.user_client, to_user_id, file_unique_id, 'man', msg.id)
-            print(f">>>【Telethon】发送文件：{file_unique_id} 到 {to_user_id}，返回结果：{ret}",flush=True)
+            print(f">>>【Telethon】将文件：{file_unique_id} 回覆给 {to_user_id}，返回结果：{ret}",flush=True)
             if(ret=='retrieved'):
-                print(f">>>>>【Telethon】已从 Bot 获取文件，准备发送到 {to_user_id}，file_unique_id={file_unique_id}",flush=True)
+                print(f">>>>>【Telethon】已从 Bot 获取文件{file_unique_id}，准备回覆给 {to_user_id}",flush=True)
                 async def delayed_resend():
                     for _ in range(6):  # 最多重试 6 次
                         try:
                             # 尝试发送文件 (人型机器人)
-                            print(f"【Telethon】第 {_+1} 次尝试发送文件：{file_unique_id} 到 {to_user_id} {self.receive_file_unique_id}",flush=True)
+                            print(f"【Telethon】第 {_+1} 次尝试回覆文件：{file_unique_id} 给 {to_user_id} {self.receive_file_unique_id}",flush=True)
                             if self.receive_file_unique_id == file_unique_id:
                                 # 显示第几次
                                 await self.send_media_by_file_unique_id(self.user_client, to_user_id, file_unique_id, 'man', msg.id)
@@ -866,7 +866,7 @@ class MediaUtils:
                 # try:
                 #     ret = await user_client.send_file(destination_chat_id, msg.media)
                     print(f"【Telethon】已转发到目标群组：{destination_chat_id}，消息 ID：{ret.id}",flush=True)
-                    print(f"{ret}",flush=True)
+                    # print(f"{ret}",flush=True)
                 except ChatForwardsRestrictedError:
                     print(f"⚠️ 该媒体来自受保护频道，无法转发，已跳过。msg.id = {msg.id}", flush=True)
                     return  # ⚠️ 不处理，直接跳出
@@ -895,12 +895,12 @@ class MediaUtils:
             # 这里直接发送 msg.media，如果受保护会被阻止
             print(f"👉 【Telethon】准备发送到目标群组：{TARGET_GROUP_ID}", flush=True)
             ret = await self.user_client.send_file(TARGET_GROUP_ID, msg.media)
-            print(f"ret={ret}", flush=True)
+            # print(f"ret={ret}", flush=True)
         except ChatForwardsRestrictedError:
             print(f"🚫 跳过：该媒体来自受保护频道 msg.id = {msg.id}", flush=True)
             return
         except Exception as e:
-            print(f"❌ 其他错误：{e}", flush=True)
+            print(f"❌ 其他错误：{e} TARGET_GROUP_ID={TARGET_GROUP_ID}", flush=True)
             return
 
         
