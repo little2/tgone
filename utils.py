@@ -71,15 +71,15 @@ class MediaUtils:
             cursor = self.db.cursor()
 
             # 打印完整 SQL（含参数展开）
-            try:
-                full_sql = cursor.mogrify(sql, params or ())
-                print(f"🧩 执行 SQL:\n{full_sql.decode() if isinstance(full_sql, bytes) else full_sql}\n", flush=True)
-            except Exception as e:
-                # 兜底：至少把原 SQL 与参数打出来
-                print(f"⚠️ mogrify 失败：{e}", flush=True)
-                print(f"🧩 原始 SQL: {sql}", flush=True)
-                if params:
-                    print(f"🧩 参数: {params}", flush=True)
+            # try:
+            #     full_sql = cursor.mogrify(sql, params or ())
+            #     print(f"🧩 执行 SQL:\n{full_sql.decode() if isinstance(full_sql, bytes) else full_sql}\n", flush=True)
+            # except Exception as e:
+            #     # 兜底：至少把原 SQL 与参数打出来
+            #     print(f"⚠️ mogrify 失败：{e}", flush=True)
+            #     print(f"🧩 原始 SQL: {sql}", flush=True)
+            #     if params:
+            #         print(f"🧩 参数: {params}", flush=True)
 
             cursor.execute(sql, params or ())
 
@@ -656,7 +656,7 @@ class MediaUtils:
         try:
             # 检查是否已存在相同 file_unique_id 的记录
             cursor =self.safe_execute(
-                "SELECT chat_id, message_id FROM file_records WHERE file_unique_id = %s AND bot_id = %s",
+                "SELECT chat_id, message_id,file_reference FROM file_records WHERE file_unique_id = %s AND bot_id = %s",
                 (file_unique_id,self.bot_id)
             )
         except Exception as e:
@@ -664,7 +664,7 @@ class MediaUtils:
     
         row = cursor.fetchone()
         if row:
-            existing_chat_id, existing_msg_id = row
+            existing_chat_id, existing_msg_id, file_reference = row
             if not (existing_chat_id == chat_id and existing_msg_id == message_id):
                 self.upsert_file_record({
                     'file_unique_id': file_unique_id,
@@ -678,8 +678,9 @@ class MediaUtils:
                     'message_id'    : message_id,
                     'bot_id'        : self.bot_id
                 })
-                print(f"【Aiogram】删除重覆 {message_id} by file_unique_id",flush=True)
-                await self.bot_client.delete_message(chat_id, message_id)
+                if file_reference != None:
+                    print(f"【Aiogram】删除重覆 {message_id} by file_unique_id",flush=True)
+                    await self.bot_client.delete_message(chat_id, message_id)
                 print("D631")
             else:
                 print(f"【Aiogram】新增 {message_id} by file_unique_idd",flush=True)
