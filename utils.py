@@ -545,7 +545,7 @@ class MediaUtils:
     async def aiogram_handle_private_media(self, message: types.Message):
         TARGET_GROUP_ID = self.config.get('target_group_id')
         if message.chat.type != "private" or message.content_type not in {
-            ContentType.PHOTO, ContentType.DOCUMENT, ContentType.VIDEO
+            ContentType.PHOTO, ContentType.DOCUMENT, ContentType.VIDEO, ContentType.ANIMATION
         }:
             return
 
@@ -567,6 +567,8 @@ class MediaUtils:
                 ret = await self.bot_client.send_photo(TARGET_GROUP_ID, file_id)
             elif message.document:
                 ret = await self.bot_client.send_document(TARGET_GROUP_ID, file_id)
+            elif message.animation:
+                ret = await self.bot_client.send_animation(TARGET_GROUP_ID, file_id)
             else:
                 ret = await self.bot_client.send_video(TARGET_GROUP_ID, file_id)
 
@@ -586,7 +588,13 @@ class MediaUtils:
                 mime_type = ret.document.mime_type
                 file_size = ret.document.file_size
                 file_name = ret.document.file_name
-
+            elif ret.animation:
+                file_unique_id = ret.animation.file_unique_id
+                file_id = ret.animation.file_id
+                file_type = 'animation'
+                mime_type = ret.animation.mime_type
+                file_size = ret.animation.file_size
+                file_name = ret.animation.file_name
             else:  # msg.video
                 file_unique_id = ret.video.file_unique_id
                 file_id = ret.video.file_id
@@ -622,7 +630,7 @@ class MediaUtils:
         TARGET_GROUP_ID = self.config.get('target_group_id')
         # 只处理“指定群组里发来的媒体”
         if message.chat.id != TARGET_GROUP_ID or message.content_type not in {
-            ContentType.PHOTO, ContentType.DOCUMENT, ContentType.VIDEO
+            ContentType.PHOTO, ContentType.DOCUMENT, ContentType.VIDEO, ContentType.ANIMATION
         }:
             return
 
@@ -648,6 +656,14 @@ class MediaUtils:
             mime_type = msg.document.mime_type
             file_size = msg.document.file_size
             file_name = msg.document.file_name
+
+        elif msg.animation:
+            file_unique_id = msg.animation.file_unique_id
+            file_id = msg.animation.file_id
+            file_type = 'animation'
+            mime_type = msg.animation.mime_type
+            file_size = msg.animation.file_size
+            file_name = msg.animation.file_name
 
         else:  # msg.video
             file_unique_id = msg.video.file_unique_id

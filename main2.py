@@ -160,13 +160,13 @@ async def aiogram_handle_private_text(message: types.Message):
     await media_utils.aiogram_handle_private_text(message)
 
 # ================= B2P. 私聊 Message 媒体处理：Aiogram：BOT账号 =================
-@dp.message(F.chat.type == "private", F.content_type.in_({ContentType.PHOTO, ContentType.DOCUMENT, ContentType.VIDEO}))
+@dp.message(F.chat.type == "private", F.content_type.in_({ContentType.PHOTO, ContentType.DOCUMENT, ContentType.VIDEO, ContentType.ANIMATION}))
 async def aiogram_handle_private_media(message: types.Message):
     await media_utils.aiogram_handle_private_media(message)
     return
 
 # ================= B3G. 群聊 Message 图片/文档/视频处理：Aiogram：BOT账号 =================
-@dp.message(F.chat.id == TARGET_GROUP_ID, F.content_type.in_({ContentType.PHOTO, ContentType.DOCUMENT, ContentType.VIDEO}))
+@dp.message(F.chat.id == TARGET_GROUP_ID, F.content_type.in_({ContentType.PHOTO, ContentType.DOCUMENT, ContentType.VIDEO, ContentType.ANIMATION}))
 async def aiogram_handle_group_media(message: types.Message):
     await media_utils.aiogram_handle_group_media(message)
     return
