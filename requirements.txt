@@ -1,5 +1,5 @@
 # Telegram 客户端与 Bot
-telethon==1.34.0
+telethon==1.38.0
 aiogram==3.20.0.post0
 
 # 数据库
