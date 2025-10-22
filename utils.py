@@ -369,6 +369,8 @@ class MediaUtils:
                 retSend = await mybot.send_video(chat_id=self.man_id, video=row["file_id"])
             elif row["file_type"] == "document":
                 retSend = await mybot.send_document(chat_id=self.man_id, document=row["file_id"])
+            elif row["file_type"] == "animation":
+                retSend = await mybot.send_animation(chat_id=self.man_id, animation=row["file_id"])
             print(f"【receive_file_from_bot】文件已发送到人型机器人，file_unique_id={row['file_unique_id']}",flush=True)
         except (TelegramForbiddenError, TelegramNotFound):
             print(f"❌ 目标 chat 不存在/无权限，跳过 {e}")
@@ -463,7 +465,9 @@ class MediaUtils:
             elif file_type == "document":
                 # 其他一律当文件发
                 await bot_client.send_document(to_user_id, file_id, reply_to_message_id=reply_to_message_id)
-
+            elif file_type == "animation":
+                # 动图
+                await bot_client.send_animation(to_user_id, file_id, reply_to_message_id=reply_to_message_id)
         except Exception as e:
             await bot_client.send_message(to_user_id, f"⚠️ 发送文件失败：{e}")
     
@@ -846,7 +850,7 @@ class MediaUtils:
 
     async def process_private_media_msg(self,msg,event=None):
         TARGET_GROUP_ID = self.config.get('target_group_id')
-        if not msg.is_private or not (msg.document or msg.photo or msg.video):  
+        if not msg.is_private or not (msg.document or msg.photo or msg.video or msg.animation):  
             # await msg.delete()
             print("D865 process_private_media_msg")
             # print(f"【Telethon】收到私聊媒体，但不处理：，来自 {event.message.from_id}",flush=True)
@@ -857,11 +861,11 @@ class MediaUtils:
         # print(f"doc_id={doc_id}, access_hash={access_hash}, file_reference={file_reference}, mime_type={mime_type}, file_size={file_size}, file_name={file_name}, file_type={file_type}",flush=True)
         caption = ""
         if(event is None):
-            print(f"{doc_id}-【Telethon】来自私聊媒体回溯处理：{msg.media}，chat_id={msg.chat_id}", flush=True)
+            print(f"{doc_id}-【Telethon】来自私聊媒体回溯处理：{msg.media} {file_type}，chat_id={msg.chat_id}", flush=True)
             caption        = msg.message or ""
             
         else:
-            print(f"{doc_id}-【Telethon】收到私聊媒体，来自 {event.peer_id.user_id} doc_id = {doc_id} ",flush=True)
+            print(f"{doc_id}-【Telethon】收到私聊媒体，来自 {event.peer_id.user_id} doc_id = {doc_id} {file_type}",flush=True)
             caption        = event.message.text or ""
             
         # print(f"caption={caption}",flush=True)
@@ -964,10 +968,13 @@ class MediaUtils:
 
     async def process_group_media_msg(self,msg):
         
-        if not (msg.document or msg.photo or msg.video):
+        if not (msg.document or msg.photo or msg.video or msg.animation):
             return
 
-        if msg.document:
+        if msg.animation:
+            media = msg.animation
+            file_type = 'animation'
+        elif msg.document:
             media = msg.document
             file_type = 'document'
         elif msg.video:
