@@ -865,14 +865,18 @@ class MediaUtils:
     
         
 
-    async def process_private_media_msg(self,msg,event=None):
+    async def process_private_media_msg(self, msg, event=None):
         TARGET_GROUP_ID = self.config.get('target_group_id')
-        if not msg.is_private or not (msg.document or msg.photo or msg.video or msg.animation):  
-            # await msg.delete()
-            print("D865 process_private_media_msg")
-            # print(f"【Telethon】收到私聊媒体，但不处理：，来自 {event.message.from_id}",flush=True)
+
+        # 确认是私聊
+        if not msg.is_private:
+            print("D865 process_private_media_msg - not private")
             return
 
+        # 检查是否包含媒体
+        if not (msg.document or msg.photo or msg.video or getattr(msg, 'media', None)):
+            print("D865 process_private_media_msg - no media content")
+            return
 
         doc_id, access_hash, file_reference, mime_type, file_size, file_name, file_type = await self.extract_video_metadata_from_telethon(msg)  
         # print(f"doc_id={doc_id}, access_hash={access_hash}, file_reference={file_reference}, mime_type={mime_type}, file_size={file_size}, file_name={file_name}, file_type={file_type}",flush=True)
