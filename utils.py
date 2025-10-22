@@ -263,7 +263,24 @@ class MediaUtils:
                         # return await self.send_media_by_file_unique_id(client, to_user_id, file_unique_id, client_type, msg_id)
                         # pass
                 else:
+                    # row['file_type']
                     await client.send_message(to_user_id, f"未找到 file_unique_id={file_unique_id} 对应的文件。(201)",reply_to_message_id=msg_id)
+                    # 完全没有
+
+                   
+                    sql = f"""
+                        UPDATE sora_content
+                        SET valid_state = 0, stage = 'pending'  
+                        WHERE file_unique_id = %s;
+                    """
+                    self.safe_execute(sql, [file_unique_id])
+                   
+                    
+                    
+
+                    
+                   
+                    
                     return
                
                 

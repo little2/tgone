@@ -1,3 +1,6 @@
+import tracemalloc
+tracemalloc.start()
+
 import os
 import base64
 import pymysql
