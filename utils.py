@@ -250,7 +250,7 @@ class MediaUtils:
                     delay = 2  # 每次重试的延迟时间（秒）
 
                     if not bot_row: # 传送失败
-                        await client.send_message(to_user_id, f"未找到 file_unique_id={file_unique_id} 对应的文件。(182)",reply_to_message_id=msg_id)
+                        await client.send_message(to_user_id, f"未找到 file_unique_id={file_unique_id} 对应的文件。(182)",reply_to=msg_id)
                         return
                     else:
                         print(f"【4】其他机器人已将资源传给人型机器人 {file_unique_id}",flush=True)
@@ -264,7 +264,7 @@ class MediaUtils:
                         # pass
                 else:
                     # row['file_type']
-                    await client.send_message(to_user_id, f"未找到 file_unique_id={file_unique_id} 对应的文件。(201)",reply_to_message_id=msg_id)
+                    await client.send_message(to_user_id, f"未找到 file_unique_id={file_unique_id} 对应的文件。(201)",reply_to=msg_id)
                     # 完全没有
 
                    
