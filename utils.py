@@ -63,14 +63,7 @@ class MediaUtils:
         """
         self.safe_execute(sql, [vaild_state, file_unique_id])
 
-        if file_type == 'v':
-            file_type = 'video'
-        elif file_type == 'd':
-            file_type = 'document'
-        elif file_type == 'p':
-            file_type = 'photo'
-        elif file_type == 'n':
-            file_type = 'animation'
+
 
           
 
@@ -303,6 +296,7 @@ class MediaUtils:
             await self.send_media_via_man(client, to_user_id, row, reply_to_message_id=msg_id)
 
     async def extract_video_metadata_from_telethon(self,msg):
+        file_type = ''
         if msg.document:
             media = msg.document
             file_type = 'document'
@@ -986,7 +980,7 @@ class MediaUtils:
         
         if not (msg.document or msg.photo or msg.video or msg.animation):
             return
-
+        file_type = ''
         if msg.animation:
             media = msg.animation
             file_type = 'animation'
