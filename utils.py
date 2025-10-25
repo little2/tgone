@@ -54,8 +54,25 @@ class MediaUtils:
 
         self.receive_file_unique_id = None
 
-        
 
+    async def set_file_vaild_state(self,file_unique_id: str, vaild_state: int = 1):
+        sql = f"""
+            UPDATE sora_content
+            SET valid_state = %s, stage = 'pending'  
+            WHERE source_id = %s;
+        """
+        self.safe_execute(sql, [vaild_state, file_unique_id])
+
+        if file_type == 'v':
+            file_type = 'video'
+        elif file_type == 'd':
+            file_type = 'document'
+        elif file_type == 'p':
+            file_type = 'photo'
+        elif file_type == 'n':
+            file_type = 'animation'
+
+          
 
     async def set_bot_info(self):
         man_info = await self.user_client.get_me()
@@ -266,22 +283,10 @@ class MediaUtils:
                     # row['file_type']
                     await client.send_message(to_user_id, f"未找到 file_unique_id={file_unique_id} 对应的文件。(201)",reply_to=msg_id)
                     # 完全没有
-
-                   
-                    sql = f"""
-                        UPDATE sora_content
-                        SET valid_state = 0, stage = 'pending'  
-                        WHERE file_unique_id = %s;
-                    """
-                    self.safe_execute(sql, [file_unique_id])
-                   
-                    
-                    
-
-                    
-                   
-                    
+                    await self.set_file_vaild_state(file_unique_id, vaild_state=4)                    
                     return
+            else:
+                await self.set_file_vaild_state(file_unique_id, vaild_state=9)     
                
                 
         
@@ -399,10 +404,7 @@ class MediaUtils:
         finally:
             await mybot.session.close()
             return retSend
-            
-
-        
-        
+             
     # send_media_via_man 函数 
     async def send_media_via_man(self, client, to_user_id, row, reply_to_message_id=None):
         # to_user_entity = await client.get_input_entity(to_user_id)
@@ -461,8 +463,6 @@ class MediaUtils:
                 print(f"发送文件时出错：{e}",flush=True)
                 await client.send_message(to_user_id, f"发送文件时出错：{e}")
 
-
-
     # send_media_via_bot 函数
     async def send_media_via_bot(self, bot_client, to_user_id, row, reply_to_message_id=None):
         """
@@ -488,8 +488,6 @@ class MediaUtils:
         except Exception as e:
             await bot_client.send_message(to_user_id, f"⚠️ 发送文件失败：{e}")
     
-
-
     async def check_file_exists_by_unique_id(self, file_unique_id: str) -> bool:
         try:
             cursor = self.safe_execute(
@@ -511,10 +509,6 @@ class MediaUtils:
             except Exception as e:
                 print(f"⚠️ Keep-alive ping failed: {e}")
             await asyncio.sleep(300)  # 每 5 分鐘 ping 一次
-
-
-
-
 
 # ================= BOT Text Private. 私聊 Message 文字处理：Aiogram：BOT账号 =================
     async def aiogram_handle_private_text(self, message: types.Message):
@@ -853,9 +847,6 @@ class MediaUtils:
             await msg.delete()
             print("D755")
 
-
-
-
     # ================= Human Private Meddia 私聊 Media 媒体处理：人类账号 =================
     async def handle_user_private_media(self,event):
         
@@ -863,8 +854,6 @@ class MediaUtils:
         await self.process_private_media_msg(msg, event)
         return
     
-        
-
     async def process_private_media_msg(self, msg, event=None):
         TARGET_GROUP_ID = self.config.get('target_group_id')
 
@@ -980,7 +969,6 @@ class MediaUtils:
         })
         print("D952 process_private_media_msg")
         await msg.delete() 
-
             
     # ================= Human Group Media 3-1. 群组媒体处理：人类账号 =================
     async def handle_user_group_media(self,event):
