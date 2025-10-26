@@ -390,24 +390,26 @@ class MediaUtils:
             elif row["file_type"] == "animation":
                 retSend = await mybot.send_animation(chat_id=self.man_id, animation=row["file_id"])
 
-            print(f"4️⃣【receive_file_from_bot】文件已发送到人型机器人，file_unique_id={row['file_unique_id']}",flush=True)
+            print(f"4️⃣{row['file_unique_id']}【receive_file_from_bot】文件已发送到人型机器人，file_unique_id={row['file_unique_id']}",flush=True)
         except TelegramForbiddenError as e:
         # 私聊未 /start、被拉黑、群权限不足等
-            print(f"4️⃣发送被拒绝（Forbidden）: {e}", flush=True)
+            print(f"4️⃣{row['file_unique_id']} 发送被拒绝（Forbidden）: {e}", flush=True)
         except TelegramNotFound:
-            print(f"4️⃣chat not found: {self.man_id}. 可能原因：ID 错、bot 未入群、或用户未对该 bot /start", flush=True)
+            print(f"4️⃣{row['file_unique_id']} chat not found: {self.man_id}. 可能原因：ID 错、bot 未入群、或用户未对该 bot /start", flush=True)
                 # 机器人根本不认识这个 chat（不在群里/用户未 start/ID 错）
             await self.user_client.send_message(row["bot"], "/start")
             await self.user_client.send_message(row["bot"], "[~bot~]")
             
         except TelegramBadRequest as e:
             # 这里能准确看到 “chat not found”“message thread not found”等具体文本
-            print(f"4️⃣发送失败（BadRequest）: {e}", flush=True)
+            await self.user_client.send_message(row["bot"], "/start")
+            await self.user_client.send_message(row["bot"], "[~bot~]")           
+            print(f"4️⃣{row['file_unique_id']} 发送失败（BadRequest）: {e}", flush=True)
         except Exception as e:
             # 不要在所有异常里就发 /start；只在你需要唤醒对话时再做
-            print(f"4️⃣❌ 发送失败: {e}", flush=True)
+            print(f"4️⃣{row['file_unique_id']} ❌ 发送失败: {e}", flush=True)
         finally:
-            print(f"4️⃣结束")
+            print(f"4️⃣{row['file_unique_id']} 结束")
             await mybot.session.close()
             return retSend
              
