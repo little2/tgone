@@ -375,34 +375,39 @@ class MediaUtils:
         bot_token = f"{row['bot_id']}:{row['bot_token']}"
     
         from aiogram import Bot
-        # print(f"【receive_file_from_bot】开始处理 file_unique_id={row['file_unique_id']}，bot_id={row['bot_id']}",flush=True)
+        print(f"4️⃣【receive_file_from_bot】开始处理 file_unique_id={row['file_unique_id']}，bot_id={row['bot_id']}",flush=True)
         mybot = Bot(token=bot_token)
         try:
+            print(f"4️⃣【receive_file_from_bot】准备让机器人{row['bot_id']}发送文件file_unique_id={row['file_unique_id']}给{self.man_id}",flush=True)
             if row["file_type"] == "photo":
                 # await mybot.send_photo(chat_id=7496113118, photo=row["file_id"])
                 retSend = await mybot.send_photo(chat_id=self.man_id, photo=row["file_id"])
             elif row["file_type"] == "video":
                 retSend = await mybot.send_video(chat_id=self.man_id, video=row["file_id"])
+
             elif row["file_type"] == "document":
                 retSend = await mybot.send_document(chat_id=self.man_id, document=row["file_id"])
             elif row["file_type"] == "animation":
                 retSend = await mybot.send_animation(chat_id=self.man_id, animation=row["file_id"])
-            print(f"【receive_file_from_bot】文件已发送到人型机器人，file_unique_id={row['file_unique_id']}",flush=True)
+
+            print(f"4️⃣【receive_file_from_bot】文件已发送到人型机器人，file_unique_id={row['file_unique_id']}",flush=True)
         except TelegramForbiddenError as e:
         # 私聊未 /start、被拉黑、群权限不足等
-            print(f"发送被拒绝（Forbidden）: {e}", flush=True)
+            print(f"4️⃣发送被拒绝（Forbidden）: {e}", flush=True)
         except TelegramNotFound:
+            print(f"4️⃣chat not found: {self.man_id}. 可能原因：ID 错、bot 未入群、或用户未对该 bot /start", flush=True)
                 # 机器人根本不认识这个 chat（不在群里/用户未 start/ID 错）
             await self.user_client.send_message(row["bot"], "/start")
             await self.user_client.send_message(row["bot"], "[~bot~]")
-            print(f"chat not found: {self.man_id}. 可能原因：ID 错、bot 未入群、或用户未对该 bot /start", flush=True)
+            
         except TelegramBadRequest as e:
             # 这里能准确看到 “chat not found”“message thread not found”等具体文本
-            print(f"发送失败（BadRequest）: {e}", flush=True)
+            print(f"4️⃣发送失败（BadRequest）: {e}", flush=True)
         except Exception as e:
             # 不要在所有异常里就发 /start；只在你需要唤醒对话时再做
-            print(f"❌ 发送失败: {e}", flush=True)
+            print(f"4️⃣❌ 发送失败: {e}", flush=True)
         finally:
+            print(f"4️⃣结束")
             await mybot.session.close()
             return retSend
              
