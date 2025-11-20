@@ -267,10 +267,10 @@ async def main():
 
     # Aiogram 任务
     start_time = time.time()
-    # aiogram_task = asyncio.create_task(dp.start_polling(bot_client))
-    await run_aiogram_60s()
+   
+    # await run_aiogram_60s()
     # Telethon 循环任务
-    # async def telethon_loop():
+   
        
     while (time.time() - start_time) < MAX_PROCESS_TIME:
         try:

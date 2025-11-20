@@ -391,6 +391,7 @@ class MediaUtils:
                 retSend = await mybot.send_animation(chat_id=self.man_id, animation=row["file_id"])
 
             print(f"4️⃣{row['file_unique_id']}【receive_file_from_bot】文件已发送到人型机器人，file_unique_id={row['file_unique_id']}",flush=True)
+            print(f"\n4️⃣retSend=>{retSend}\n",flush=True)
         except TelegramForbiddenError as e:
         # 私聊未 /start、被拉黑、群权限不足等
             print(f"4️⃣{row['file_unique_id']} 发送被拒绝（Forbidden）: {e}", flush=True)
@@ -409,7 +410,7 @@ class MediaUtils:
             # 不要在所有异常里就发 /start；只在你需要唤醒对话时再做
             print(f"4️⃣{row['file_unique_id']} ❌ 发送失败: {e}", flush=True)
         finally:
-            print(f"4️⃣{row['file_unique_id']} 结束")
+            print(f"4️⃣{row['file_unique_id']} 正常结束")
             await mybot.session.close()
             return retSend
              
@@ -863,51 +864,53 @@ class MediaUtils:
         return
     
     async def process_private_media_msg(self, msg, event=None):
+        print("PPMM-receive")
         TARGET_GROUP_ID = self.config.get('target_group_id')
 
         # 确认是私聊
         if not msg.is_private:
-            print("D865 process_private_media_msg - not private")
+            print("PPMM-871 process_private_media_msg - not private")
             return
 
         # 检查是否包含媒体
         if not (msg.document or msg.photo or msg.video or getattr(msg, 'media', None)):
-            print("D865 process_private_media_msg - no media content")
+            print("PPMM-876 process_private_media_msg - no media content")
             return
 
         doc_id, access_hash, file_reference, mime_type, file_size, file_name, file_type = await self.extract_video_metadata_from_telethon(msg)  
         # print(f"doc_id={doc_id}, access_hash={access_hash}, file_reference={file_reference}, mime_type={mime_type}, file_size={file_size}, file_name={file_name}, file_type={file_type}",flush=True)
         caption = ""
         if(event is None):
-            print(f"{doc_id}-【Telethon】来自私聊媒体回溯处理：{msg.media} {file_type}，chat_id={msg.chat_id}", flush=True)
+            print(f"PPMM-{doc_id}-【Telethon】来自私聊媒体回溯处理：{msg.media} {file_type}，chat_id={msg.chat_id}", flush=True)
             caption        = msg.message or ""
             
         else:
-            print(f"{doc_id}-【Telethon】收到私聊媒体，来自 {event.peer_id.user_id} doc_id = {doc_id} {file_type}",flush=True)
+            print(f"PPMM-{doc_id}-【Telethon】收到私聊媒体，来自 {event.peer_id.user_id} doc_id = {doc_id} {file_type}",flush=True)
             caption        = event.message.text or ""
             
         # print(f"caption={caption}",flush=True)
             
-    
-         
+
+        
         if caption !='':
+            print(f"PPMM")
             match = re.search(r'\|_forward_\|(@[a-zA-Z0-9_]+|-?\d+)', caption, re.IGNORECASE)
             if match:
-                print(f"【Telethon】匹配到的转发模式：{match}",flush=True)
+                print(f"PPMM-【Telethon】匹配到的转发模式：{match}",flush=True)
                 captured_str = match.group(1).strip()  # 捕获到的字符串
-                print(f"【Telethon】捕获到的字符串：{captured_str}",flush=True)
+                print(f"PPMM-【Telethon】捕获到的字符串：{captured_str}",flush=True)
 
                 if captured_str.startswith('-100') and captured_str[4:].isdigit():
                     destination_chat_id = int(captured_str)  # 正确做法，保留 -100
                 elif captured_str.isdigit():
-                    print(f"【Telethon】捕获到的字符串是数字：{captured_str}",flush=True)
+                    print(f"PPMM-【Telethon】捕获到的字符串是数字：{captured_str}",flush=True)
                     destination_chat_id = int(captured_str)
                 else:
-                    print(f"【Telethon】捕获到的字符串不是数字：{captured_str}",flush=True)
+                    print(f"PPMM-【Telethon】捕获到的字符串不是数字：{captured_str}",flush=True)
                     destination_chat_id = str(captured_str)
                 
                 try:
-                    print(f"📌 获取实体：{destination_chat_id}", flush=True)
+                    print(f"PPMM-📌 获取实体：{destination_chat_id}", flush=True)
                     entity = await self.user_client.get_entity(destination_chat_id)
                     ret = await self.user_client.send_file(entity, msg.media)
                 #     print(f"✅ 成功发送到 {destination_chat_id}，消息 ID：{ret.id}", flush=True)
@@ -917,17 +920,18 @@ class MediaUtils:
 
                 # try:
                 #     ret = await user_client.send_file(destination_chat_id, msg.media)
-                    print(f"【Telethon】已转发到目标群组：{destination_chat_id}，消息 ID：{ret.id}",flush=True)
+                    print(f"PPMM-【Telethon】已转发到目标群组：{destination_chat_id}，消息 ID：{ret.id}",flush=True)
                     # print(f"{ret}",flush=True)
                 except ChatForwardsRestrictedError:
-                    print(f"⚠️ 该媒体来自受保护频道，无法转发，已跳过。msg.id = {msg.id}", flush=True)
+                    print(f"PPMM-⚠️ 该媒体来自受保护频道，无法转发，已跳过。msg.id = {msg.id}", flush=True)
                     return  # ⚠️ 不处理，直接跳出
                 except Exception as e:
-                    print(f"❌ 其他发送失败(429)：{e}", flush=True)
+                    print(f"PPMM-❌ 其他发送失败(429)：{e}", flush=True)
                     return
 
         # 检查：TARGET_GROUP_ID 群组是否已有相同 doc_id
         try:
+            print(f"PPMM-Check Exists")
             cursor = self.safe_execute(
                 "SELECT file_unique_id FROM file_records WHERE doc_id = %s AND chat_id = %s AND file_unique_id IS NOT NULL",
                 (doc_id, TARGET_GROUP_ID)
@@ -937,16 +941,16 @@ class MediaUtils:
             
         row = cursor.fetchone()
         if row:
-            print(f"{doc_id}-【Telethon】已存在 doc_id={doc_id} fuid = {row} 的记录，跳过转发", flush=True)
+            print(f"PPMM-{doc_id}-【Telethon】已存在 doc_id={doc_id} fuid = {row} 的记录，跳过转发", flush=True)
             # await event.delete()
             await msg.delete()
-            print("D926")
+            print("PPMM")
             return
 
         # 转发到群组，并删除私聊
         try:
             # 这里直接发送 msg.media，如果受保护会被阻止
-            print(f"{doc_id}-👉 【Telethon】准备发送到目标群组：{TARGET_GROUP_ID}", flush=True)
+            print(f"PPMM-{doc_id}-👉 【Telethon】准备发送到目标群组：{TARGET_GROUP_ID}", flush=True)
             ret = await self.user_client.send_file(TARGET_GROUP_ID, msg.media)
             # print(f"ret={ret}", flush=True)
         except ChatForwardsRestrictedError:
@@ -975,7 +979,7 @@ class MediaUtils:
             'man_id'        : self.man_id
             
         })
-        print("D952 process_private_media_msg")
+        print("PPMM- process_private_media_msg")
         await msg.delete() 
             
     # ================= Human Group Media 3-1. 群组媒体处理：人类账号 =================
