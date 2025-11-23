@@ -260,7 +260,8 @@ class MediaUtils:
                     delay = 2  # 每次重试的延迟时间（秒）
 
                     if not bot_row: # 传送失败
-                        await client.send_message(to_user_id, f"未找到 file_unique_id={file_unique_id} 对应的文件。(182)",reply_to=msg_id)
+                        print(f"263【4】从机器人获取文件失败，file_unique_id={file_unique_id}",flush=True)
+                        await client.send_message(to_user_id, f"未找到 file_unique_id={file_unique_id} 对应的文件。(182)",reply_to_message_id=msg_id)
                         return
                     else:
                         print(f"【4】其他机器人已将资源传给人型机器人 {file_unique_id}",flush=True)
@@ -276,7 +277,9 @@ class MediaUtils:
                     # row['file_type']
                     await client.send_message(to_user_id, f"未找到 file_unique_id={file_unique_id} 对应的文件。(201)",reply_to=msg_id)
                     # 完全没有
-                    await self.set_file_vaild_state(file_unique_id, vaild_state=4)                    
+                    # 如果 file_unqiue_id 的开头不是 X_
+                    if not file_unique_id.startswith('X_'):
+                        await self.set_file_vaild_state(file_unique_id, vaild_state=4)                    
                     return
             else:
                 await self.set_file_vaild_state(file_unique_id, vaild_state=9)     
@@ -874,7 +877,8 @@ class MediaUtils:
 
         # 检查是否包含媒体
         if not (msg.document or msg.photo or msg.video or getattr(msg, 'media', None)):
-            print("PPMM-876 process_private_media_msg - no media content")
+            # print("PPMM-876 process_private_media_msg - no media content")
+            # print(f"msg {msg}")
             return
 
         doc_id, access_hash, file_reference, mime_type, file_size, file_name, file_type = await self.extract_video_metadata_from_telethon(msg)  

@@ -149,6 +149,15 @@ async def handle_user_private_text(event):
     await media_utils.handle_user_private_text(event)
     return
 
+#
+'''
+TODO
+目前奇怪的点是在于 AQADnAtrGzk56FR- 传给人型机器人后，再转 file_unqiuee_id 就变成 AQADnAtrGzk56FR9
+需要还原一下整个流程 
+'''
+#
+
+
 @user_client.on(events.NewMessage(incoming=True))
 async def handle_user_private_media(event):
     await media_utils.handle_user_private_media(event)
