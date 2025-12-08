@@ -168,6 +168,198 @@ class MediaUtils:
         except Exception as e:
             print(f"110 Error: {e}")
 
+
+    def upsert_file_extension(self, data: dict):
+        """
+        data = {
+            'file_unique_id': "...",
+            'file_id': "...",
+            'file_type': "...",
+            optional:
+                'bot': "...",
+                'user_id': 123,
+        }
+        """
+
+        if not data:
+            return None
+
+        # 1) 自动补 bot 默认值
+        if "bot" not in data or not data.get("bot"):
+            data["bot"] = self.bot_username
+
+        # 2) 自动补 user_id 缺省→NULL，不用填
+        if "user_id" not in data:
+            data["user_id"] = None
+
+        # 3) 生成 UPSERT SQL
+        cols = list(data.keys())
+        placeholders = ["%s"] * len(cols)
+
+        # create_time 只在第一次插入写入，不在 update 里覆盖
+        update_cols = [
+            f"{col}=VALUES({col})"
+            for col in cols
+            if col not in ("create_time",)
+        ]
+
+        sql = f"""
+            INSERT INTO file_extension (
+                {",".join(cols)}, create_time
+            )
+            VALUES (
+                {",".join(placeholders)}, NOW()
+            )
+            ON DUPLICATE KEY UPDATE
+                {",".join(update_cols)}
+        """
+
+        params = list(data.values())
+        return self.safe_execute(sql, params)
+
+
+    def upsert_media_content(self, file_type: str, data: dict):
+        """
+        根据 file_type 将媒体写入 animation / photo / document / video 对应的数据表。
+        
+        参数:
+            file_type: 'animation' | 'photo' | 'document' | 'video'
+            data: dict，键为字段名，至少要包含:
+                - 所有表共同必备: file_unique_id
+                - 各表 NOT NULL 字段，例如:
+                  * document: file_size
+                  * animation: file_size
+                  * video: file_size
+                  * photo: file_size, width, height
+                其它字段如 caption、kc_id、kc_status 等为可选。
+        
+        说明:
+            - create_time 只在首次 INSERT 时写入 NOW()
+            - update_time 每次 UPDATE 时会更新为 NOW()
+            - 未出现在 allowed_cols 里的字段会被忽略（避免 SQL 报错）
+        """
+
+        if not data or not file_type:
+            return None
+
+        # 不同类型对应的表名与允许写入的字段
+        table_map = {
+            "document": {
+                "table": "document",
+                "cols": [
+                    "file_unique_id",
+                    "file_size",
+                    "file_name",
+                    "mime_type",
+                    "caption",
+                    "files_drive",
+                    "file_password",
+                    "kc_id",
+                    "kc_status",
+                ],
+            },
+            "animation": {
+                "table": "animation",
+                "cols": [
+                    "file_unique_id",
+                    "file_size",
+                    "duration",
+                    "width",
+                    "height",
+                    "file_name",
+                    "mime_type",
+                    "caption",
+                    "tag_count",
+                    "kind",
+                    "credit",
+                    "files_drive",
+                    "root",
+                    "kc_id",
+                    "kc_status",
+                ],
+            },
+            "photo": {
+                "table": "photo",
+                "cols": [
+                    "file_unique_id",
+                    "file_size",
+                    "width",
+                    "height",
+                    "file_name",
+                    "caption",
+                    "root_unique_id",
+                    "files_drive",
+                    "hash",
+                    "same_fuid",
+                    "kc_id",
+                    "kc_status",
+                ],
+            },
+            "video": {
+                "table": "video",
+                "cols": [
+                    "file_unique_id",
+                    "file_size",
+                    "duration",
+                    "width",
+                    "height",
+                    "file_name",
+                    "mime_type",
+                    "caption",
+                    "tag_count",
+                    "kind",
+                    "credit",
+                    "files_drive",
+                    "root",
+                    "kc_id",
+                    "kc_status",
+                ],
+            },
+        }
+
+        if file_type not in table_map:
+            raise ValueError(f"unsupported file_type: {file_type}")
+
+        meta = table_map[file_type]
+        table_name = meta["table"]
+        allowed_cols = meta["cols"]
+
+        # 只保留表结构里允许的字段
+        cols = [col for col in allowed_cols if col in data]
+
+        if "file_unique_id" not in cols:
+            raise ValueError("`data` 必须至少包含 file_unique_id")
+
+        # INSERT 部分
+        placeholders = ["%s"] * len(cols)
+        insert_cols_sql = ",".join(cols + ["create_time"])
+        values_sql = ",".join(placeholders + ["NOW()"])
+
+        # UPDATE 部分: 不更新 file_unique_id、create_time
+        update_cols = [
+            col for col in cols
+            if col not in ("file_unique_id", "create_time")
+        ]
+        update_clauses = [f"{col}=VALUES({col})" for col in update_cols]
+        # 统一维护 update_time
+        update_clauses.append("update_time = NOW()")
+
+        sql = f"""
+            INSERT INTO {table_name} (
+                {insert_cols_sql}
+            )
+            VALUES (
+                {values_sql}
+            )
+            ON DUPLICATE KEY UPDATE
+                {",".join(update_clauses)}
+        """
+
+        params = [data[col] for col in cols]
+        return self.safe_execute(sql, params)
+
+
+
     async def heartbeat(self, ):
         while True:
             print("💓 Alive (Aiogram polling still running)")
@@ -319,7 +511,6 @@ class MediaUtils:
 
         return doc_id, access_hash, file_reference, mime_type, file_size, file_name, file_type
        
-
     async def extract_video_metadata_from_aiogram(self,message):
         if message.photo:
             largest = message.photo[-1]
@@ -350,6 +541,109 @@ class MediaUtils:
             file_name = getattr(message.video, 'file_name', None)
         
         return file_id, file_unique_id, mime_type, file_type, file_size, file_name
+
+    async def build_media_dict_from_aiogram(self, message):
+        """
+        根据 aiogram.Message 解析媒体信息，产生适用于 upsert_media_content 的 data dict。
+
+        返回:
+            (file_type, data_dict)
+
+        file_type:
+            'photo' | 'animation' | 'document' | 'video'
+
+        data_dict:
+            按照你 animation/photo/document/video 四张表的字段准备，
+            至少包含 file_unique_id + file_size 等必填字段。
+        """
+        caption = message.caption or None
+
+        # 1) Photo
+        if message.photo:
+            largest = message.photo[-1]
+            file_type = "photo"
+            data = {
+                "file_unique_id": largest.file_unique_id,
+                "file_size": largest.file_size,
+                "width": largest.width,
+                "height": largest.height,
+                "file_name": None,          # photo 表允许为 NULL
+                "caption": caption,
+                # 可视需求补充:
+                # "root_unique_id": None,
+                # "files_drive": None,
+                # "hash": None,
+                # "same_fuid": None,
+                # "kc_id": None,
+                # "kc_status": None,
+            }
+            return file_type, data
+
+        # 2) Animation (Telegram 动图 / GIF MP4)
+        if message.animation:
+            a = message.animation
+            file_type = "animation"
+            data = {
+                "file_unique_id": a.file_unique_id,
+                "file_size": a.file_size,
+                "duration": a.duration,
+                "width": a.width,
+                "height": a.height,
+                "file_name": a.file_name,
+                "mime_type": a.mime_type or "video/mp4",
+                "caption": caption,
+                # "tag_count": 0,
+                # "kind": None,
+                # "credit": 0,
+                # "files_drive": None,
+                # "root": None,
+                # "kc_id": None,
+                # "kc_status": None,
+            }
+            return file_type, data
+
+        # 3) Document
+        if message.document:
+            d = message.document
+            file_type = "document"
+            data = {
+                "file_unique_id": d.file_unique_id,
+                "file_size": d.file_size,
+                "file_name": d.file_name,
+                "mime_type": d.mime_type,
+                "caption": caption,
+                # "files_drive": None,
+                # "file_password": None,
+                # "kc_id": None,
+                # "kc_status": None,
+            }
+            return file_type, data
+
+        # 4) Video
+        if message.video:
+            v = message.video
+            file_type = "video"
+            data = {
+                "file_unique_id": v.file_unique_id,
+                "file_size": v.file_size,
+                "duration": v.duration,
+                "width": v.width,
+                "height": v.height,
+                "file_name": getattr(v, "file_name", None),
+                "mime_type": v.mime_type or "video/mp4",
+                "caption": caption,
+                # "tag_count": 0,
+                # "kind": None,
+                # "credit": 0,
+                # "files_drive": None,
+                # "root": None,
+                # "kc_id": None,
+                # "kc_status": None,
+            }
+            return file_type, data
+
+        raise ValueError("message 不包含可识别的媒体: photo/document/video/animation")
+
 
     async def fetch_file_by_source_id(self, source_id: str):
         cursor = self.safe_execute("""
@@ -645,12 +939,23 @@ class MediaUtils:
                     'bot_id'       : self.bot_id
                 })
 
+            self.upsert_file_extension({
+                "file_unique_id": file_unique_id,
+                "file_id": file_id,
+                "file_type": file_type
+            })
+
+            # 新增：写入 photo 表/ document 表/ video 表/ animation 表
+            file_type, data = await self.build_media_dict_from_aiogram(message)
+            self.upsert_media_content(file_type, data)
+
+
+
+
         # print(f"{ret} 已发送到目标群组：{TARGET_GROUP_ID}")
    
         await message.delete()
         print("D555 aiogram_handle_private_media")
-
-
 
 # ================= BOT Media Group. 群聊 Message 图片/文档/视频处理：Aiogram：BOT账号 =================
     async def aiogram_handle_group_media(self, message: types.Message):
@@ -730,6 +1035,17 @@ class MediaUtils:
                     'message_id'    : message_id,
                     'bot_id'        : self.bot_id
                 })
+                self.upsert_file_extension({
+                    "file_unique_id": file_unique_id,
+                    "file_id": file_id,
+                    "file_type": file_type
+                })
+
+                # 新增：写入 photo 表/ document 表/ video 表/ animation 表
+                file_type, data = await self.build_media_dict_from_aiogram(message)
+                self.upsert_media_content(file_type, data)
+
+
                 if file_reference != None:
                     print(f"【Aiogram】删除重覆 {message_id} by file_unique_id",flush=True)
                     await self.bot_client.delete_message(chat_id, message_id)
@@ -771,6 +1087,10 @@ class MediaUtils:
                 'uploader_type' : 'bot',
                 'bot_id'        : self.bot_id
             })
+
+
+
+
         else:
             print(f"【Aiogram】新增 {message_id} by chat_id+message_id",flush=True)
             self.upsert_file_record({
@@ -785,8 +1105,17 @@ class MediaUtils:
                 'uploader_type' : 'bot',
                 'bot_id'        : self.bot_id
             })
+            
 
+        self.upsert_file_extension({
+            "file_unique_id": file_unique_id,
+            "file_id": file_id,
+            "file_type": file_type
+        })
 
+        # 新增：写入 photo 表/ document 表/ video 表/ animation 表
+        file_type, data = await self.build_media_dict_from_aiogram(message)
+        self.upsert_media_content(file_type, data)
 
     # ================= Human Private Text  私聊 Message 文字处理：人类账号 =================
     async def handle_user_private_text(self,event):
@@ -984,6 +1313,9 @@ class MediaUtils:
             
         })
         print("PPMM- process_private_media_msg")
+
+
+
         await msg.delete() 
             
     # ================= Human Group Media 3-1. 群组媒体处理：人类账号 =================
