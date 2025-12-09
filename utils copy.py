@@ -1,21 +1,19 @@
 import re
 import asyncio
-
-
+import aiomysql
+import aiohttp
+from typing import Union
 from aiogram import types, Bot
-
+from telethon import events
 from aiogram.types import ContentType
-from telethon.tl.types import InputDocument
+from telethon.tl.types import InputDocument, MessageMediaDocument, PeerUser
 import time
 from aiohttp import web
 from telethon.errors import ChatForwardsRestrictedError
 from aiogram.exceptions import (
-    TelegramBadRequest,
+    TelegramNetworkError, TelegramRetryAfter, TelegramBadRequest,
     TelegramForbiddenError, TelegramNotFound
 )
-
-from tgone_mysql import MySQLPool
-
 
 
 """
@@ -37,19 +35,20 @@ telegram_media_utils.py
 
 
 
-
-
 class MediaUtils:
 
-    # def __init__(self, pool: aiomysql.Pool, bot_client, user_client, lz_var_start_time, config):
-    def __init__(self, bot_client, user_client, lz_var_start_time, config):
+    def __init__(self, pool: aiomysql.Pool, bot_client, user_client, lz_var_start_time, config):
+    
+    # def __init__(self, db, bot_client, user_client, lz_var_start_time, config):
+        self.pool = pool
+        # self.db = db
         self.bot_client = bot_client
         self.user_client = user_client
         self.lz_var_start_time = lz_var_start_time
 
         self.file_unique_id_pattern = re.compile(r'^[A-Za-z0-9_-]{14,}$')
         self.doc_id_pattern = re.compile(r'^\d+$')
-       
+        self.bot_id = 0
         self.man_username = None
         self.man_id = 0
         self.bot_username = None
@@ -63,20 +62,19 @@ class MediaUtils:
         self.webhook_path = config.get("webhook_path")
         self.bot_mode = config.get("bot_mode", "polling")
 
-  
 
 
     async def set_file_vaild_state(self,file_unique_id: str, vaild_state: int = 1):
-        sql = """
+        sql = f"""
             UPDATE sora_content
             SET valid_state = %s, stage = 'pending'  
             WHERE source_id = %s;
         """
+        self.safe_execute(sql, [vaild_state, file_unique_id])
 
-        await MySQLPool.execute(
-            sql,
-            [vaild_state, file_unique_id]
-        )
+
+
+          
 
     async def set_bot_info(self):
         man_info = await self.user_client.get_me()
@@ -89,6 +87,21 @@ class MediaUtils:
 
 
 
+
+    def safe_execute(self, sql, params=None):
+        try:
+            
+
+
+            cursor = self.db.cursor()     # 正确获取 cursor
+            cursor.execute(sql, params or ())
+           
+            return cursor
+        except Exception as e:
+            print(f"⚠️ 数据库执行出错: {e}")
+            return None
+        finally:
+            cursor.close()
 
     def get_file_name(self, media):
         from telethon.tl.types import DocumentAttributeFilename
@@ -115,16 +128,19 @@ class MediaUtils:
             "p": "p",
             "d": "d",
         }
-        return mapping.get(file_type)
+        return mapping.get(file_type, "v")
 
 
-    async def upsert_sora_content(self, data: dict):
+
+    def upsert_sora_content(self, data: dict):
         """
         新增或更新 sora_content 记录，并回传该记录的 id。
         """
+
         if not data:
             raise ValueError("upsert_sora_content: data 不可为空")
 
+        # ==== 你要求的逻辑 ====
         if "source_id" not in data or not data.get("source_id"):
             file_uid = data.get("file_unique_id")
             if file_uid:
@@ -132,11 +148,13 @@ class MediaUtils:
             else:
                 raise ValueError("upsert_sora_content: data 需要 source_id 或 file_unique_id")
 
+        # ==== file_type 规范化 ====
         if "file_type" in data:
             file_type = data.get("file_type")
             if file_type:
                 data["file_type"] = self.map_sora_file_type(file_type)
 
+        # ==== 允许写入的字段 ====
         allowed_cols = {
             "source_id",
             "file_type",
@@ -160,7 +178,11 @@ class MediaUtils:
             return None
 
         placeholders = ["%s"] * len(cols)
-        update_cols = [c for c in cols if c not in ("id", "source_id")]
+
+        update_cols = [
+            c for c in cols
+            if c not in ("id", "source_id")
+        ]
         update_clause = ",".join(f"{c}=VALUES({c})" for c in update_cols) or "source_id=source_id"
 
         sql = f"""
@@ -173,18 +195,24 @@ class MediaUtils:
             ON DUPLICATE KEY UPDATE
                 {update_clause}
         """
+
         params = [data[c] for c in cols]
+        
+        # ==== 执行 UPSERT ====
+        self.safe_execute(sql, params)
 
-        await MySQLPool.execute(sql, params)
-
-        row = await MySQLPool.fetchone(
-            "SELECT id FROM sora_content WHERE source_id=%s LIMIT 1",
-            (data["source_id"],),
+        # ==== 取得并回传最终 id ====
+        # 因 source_id UNIQUE KEY，可安全获取 id
+        cursor2 = self.safe_execute(
+            "SELECT id FROM sora_content WHERE source_id=%s",
+            (data["source_id"],)
         )
+        row = cursor2.fetchone()
+        
         return row["id"] if row else None
 
 
-    async def upsert_file_record(self, fields: dict):
+    def upsert_file_record(self, fields: dict):
         """
         fields: dict, 键是列名, 值是要写入的内容。
         自动生成 INSERT ... ON DUPLICATE KEY UPDATE 语句。
@@ -200,10 +228,17 @@ class MediaUtils:
             ON DUPLICATE KEY UPDATE {','.join(update_clauses)}
         """
         values = list(fields.values())
-        await MySQLPool.execute(sql, values)
+        try:
 
 
-    async def upsert_file_extension(self, data: dict):
+
+
+            self.safe_execute(sql, values)
+        except Exception as e:
+            print(f"110 Error: {e}")
+
+
+    def upsert_file_extension(self, data: dict):
         """
         data = {
             'file_unique_id': "...",
@@ -249,10 +284,10 @@ class MediaUtils:
         """
 
         params = list(data.values())
-        return await MySQLPool.execute(sql, params)
+        return self.safe_execute(sql, params)
 
 
-    async def upsert_media_content(self, data: dict):
+    def upsert_media_content(self, data: dict):
         """
         根据 file_type 将媒体写入 animation / photo / document / video 对应的数据表。
         
@@ -392,32 +427,29 @@ class MediaUtils:
         """
 
         params = [data[col] for col in cols]
-        return await MySQLPool.execute(sql, params)
+        return self.safe_execute(sql, params)
 
 
-    async def upsert_media(self, data: dict):
-        sora_id = await self.upsert_sora_content(data)
-        await self.upsert_media_content(data)
-        await self.upsert_file_extension(data)
-        return sora_id
+    def upsert_media(self, data: dict):
+        id = self.upsert_sora_content(data)
+        self.upsert_media_content(data)
+        self.upsert_file_extension(data)
         
 
 
-    async def heartbeat(self):
+    async def heartbeat(self, ):
         while True:
             print("💓 Alive (Aiogram polling still running)")
             try:
-                await MySQLPool.execute("SELECT 1")
+                self.db.ping(reconnect=True)
                 print("✅ MySQL 连接正常")
             except Exception as e:
                 print(f"⚠️ MySQL 保活失败：{e}")
             await asyncio.sleep(600)
 
-
-
     async def health(self, request):
         uptime = time.time() - self.lz_var_start_time
-        if self.cold_start or uptime < 10:
+        if self.lz_var_cold_start_flag or uptime < 10:
             return web.Response(text="⏳ Bot 正在唤醒，请稍候...", status=503)
         return web.Response(text="✅ Bot 正常运行", status=200)
 
@@ -426,7 +458,7 @@ class MediaUtils:
         print(f"🔗 設定 Telegram webhook 為：{webhook_url}")
         await bot.delete_webhook(drop_pending_updates=True)
         await bot.set_webhook(webhook_url)
-        self.cold_start = False  # 启动完成
+        lz_var_cold_start_flag = False  # 启动完成
 
     
     # send_media_by_doc_id 函数 
@@ -434,11 +466,13 @@ class MediaUtils:
         print(f"【send_media_by_doc_id】开始处理 doc_id={doc_id}，目标用户：{to_user_id}",flush=True)
 
         try:
-            sql="""
-                SELECT chat_id, message_id, doc_id, access_hash, file_reference, file_id, file_unique_id,file_type 
-                FROM file_records WHERE doc_id = %s
-            """
-            row = await MySQLPool.fetchone(sql, (doc_id,))
+            cursor = self.safe_execute(
+                "SELECT chat_id, message_id, doc_id, access_hash, file_reference, file_id, file_unique_id,file_type "
+                "FROM file_records WHERE doc_id = %s",
+                (doc_id,)
+            )
+           
+            row = cursor.fetchone()
         except Exception as e:
             print(f"121 Error: {e}")
             return
@@ -469,22 +503,17 @@ class MediaUtils:
         try:
             if client_type == 'bot':
                 # 机器人账号发送
-
-                sql = """
-                    SELECT chat_id, message_id, doc_id, access_hash, file_reference, file_id, file_unique_id,file_type 
-                    FROM file_records WHERE file_unique_id = %s AND bot_id = %s
-                """
-                row = await MySQLPool.fetchone(sql, (file_unique_id,self.bot_id,))
+                cursor = self.safe_execute(
+                    "SELECT chat_id, message_id, doc_id, access_hash, file_reference, file_id, file_unique_id,file_type FROM file_records WHERE file_unique_id = %s AND bot_id = %s",
+                    (file_unique_id,self.bot_id,)
+                )
             else:
-                
-     
-                sql = """
-                    SELECT chat_id, message_id, doc_id, access_hash, file_reference, file_id, file_unique_id,file_type 
-                    FROM file_records WHERE file_unique_id = %s AND man_id = %s
-                    """
-                row = await MySQLPool.fetchone(sql, (file_unique_id,self.man_id,))
+                cursor = self.safe_execute(
+                    "SELECT chat_id, message_id, doc_id, access_hash, file_reference, file_id, file_unique_id,file_type FROM file_records WHERE  file_unique_id = %s AND man_id = %s",
+                    (file_unique_id,self.man_id)
+                )
             
-          
+            row = cursor.fetchone()
             print(f"【2】本机查询纪录: 结果：{row}",flush=True)
 
             if not row: # if row = None
@@ -617,9 +646,7 @@ class MediaUtils:
             largest = message.photo[-1]
             file_type = "photo"
             data = {
-                "file_type": "photo",
                 "file_unique_id": largest.file_unique_id,
-                "file_id": largest.file_id,
                 "file_size": largest.file_size,
                 "width": largest.width,
                 "height": largest.height,
@@ -640,9 +667,7 @@ class MediaUtils:
             a = message.animation
             file_type = "animation"
             data = {
-                "file_type": "animation",
                 "file_unique_id": a.file_unique_id,
-                "file_id": a.file_id,
                 "file_size": a.file_size,
                 "duration": a.duration,
                 "width": a.width,
@@ -665,9 +690,7 @@ class MediaUtils:
             d = message.document
             file_type = "document"
             data = {
-                "file_type": "document",
                 "file_unique_id": d.file_unique_id,
-                "file_id": d.file_id,
                 "file_size": d.file_size,
                 "file_name": d.file_name,
                 "mime_type": d.mime_type,
@@ -684,9 +707,7 @@ class MediaUtils:
             v = message.video
             file_type = "video"
             data = {
-                "file_type": "video",
                 "file_unique_id": v.file_unique_id,
-                "file_id": v.file_id,
                 "file_size": v.file_size,
                 "duration": v.duration,
                 "width": v.width,
@@ -708,26 +729,25 @@ class MediaUtils:
 
 
     async def fetch_file_by_source_id(self, source_id: str):
-        sql = """
+        cursor = self.safe_execute("""
                 SELECT f.file_type, f.file_id, f.bot, b.bot_id, b.bot_token, f.file_unique_id
                 FROM file_extension f
                 LEFT JOIN bot b ON f.bot = b.bot_name
                 WHERE f.file_unique_id = %s
                 LIMIT 0, 1
-            """
-        row = await MySQLPool.fetchone(sql, (source_id,))
-       
+            """, (source_id,))
+        row = cursor.fetchone()
         if not row:
             return None
         else:
             print(f"【fetch_file_by_source_id】找到对应记录：{row}",flush=True)
             return {
-                "file_type": row["file_type"],
-                "file_id": row["file_id"],
-                "bot": row["bot"],
-                "bot_id": row["bot_id"],
-                "bot_token": row["bot_token"],
-                "file_unique_id": row["file_unique_id"],
+                "file_type": row[0],
+                "file_id": row[1],
+                "bot": row[2],
+                "bot_id": row[3],
+                "bot_token": row[4],
+                "file_unique_id": row[5],
             }
     
     async def receive_file_from_bot(self, row):
@@ -757,7 +777,7 @@ class MediaUtils:
             print(f"4️⃣{row['file_unique_id']} 发送被拒绝（Forbidden）: {e}", flush=True)
         except TelegramNotFound:
             print(f"4️⃣{row['file_unique_id']} chat not found: {self.man_id}. 可能原因：ID 错、bot 未入群、或用户未对该 bot /start", flush=True)
-            # 机器人根本不认识这个 chat（不在群里/用户未 start/ID 错）
+                # 机器人根本不认识这个 chat（不在群里/用户未 start/ID 错）
             await self.user_client.send_message(row["bot"], "/start")
             await self.user_client.send_message(row["bot"], "[~bot~]")
             
@@ -777,17 +797,7 @@ class MediaUtils:
     # send_media_via_man 函数 
     async def send_media_via_man(self, client, to_user_id, row, reply_to_message_id=None):
         # to_user_entity = await client.get_input_entity(to_user_id)
-        
-
-        chat_id        = row["chat_id"]
-        message_id     = row["message_id"]
-        doc_id         = row["doc_id"]
-        access_hash    = row["access_hash"]
-        file_reference_hex = row["file_reference"]
-        file_id        = row["file_id"]
-        file_unique_id = row["file_unique_id"]
-        file_type      = row["file_type"]
-
+        chat_id, message_id, doc_id, access_hash, file_reference_hex, file_id, file_unique_id, file_type = row
         print(f"send_media_via_man",flush=True)
         try:
             file_reference = bytes.fromhex(file_reference_hex)
@@ -848,10 +858,7 @@ class MediaUtils:
         bot_client: Aiogram Bot 实例
         row: (chat_id, message_id, doc_id, access_hash, file_reference_hex, file_id, file_unique_id)
         """
-        
-
-        file_type = row["file_type"]
-        file_id   = row["file_id"]
+        chat_id, message_id, doc_id, access_hash, file_reference_hex, file_id, file_unique_id, file_type = row
 
         try:
             if file_type== "photo":
@@ -871,21 +878,15 @@ class MediaUtils:
             await bot_client.send_message(to_user_id, f"⚠️ 发送文件失败：{e}")
     
     async def check_file_exists_by_unique_id(self, file_unique_id: str) -> bool:
-        sql = """
-            SELECT 1
-            FROM file_records
-            WHERE file_unique_id = %s
-              AND bot_id = %s
-              AND doc_id IS NOT NULL
-            LIMIT 1
-        """
         try:
-            row = await MySQLPool.fetchone(sql, (file_unique_id, self.bot_id))
-            return row is not None
+            cursor = self.safe_execute(
+                "SELECT 1 FROM file_records WHERE file_unique_id = %s AND bot_id = %s AND doc_id IS NOT NULL LIMIT 1",
+                (file_unique_id,self.bot_id)
+            )
+            return cursor.fetchone() is not None if cursor else False
         except Exception as e:
             print(f"528 Error: {e}")
             return False
-
 
 
 
@@ -999,7 +1000,7 @@ class MediaUtils:
 
             chat_id = ret.chat.id
             message_id = ret.message_id
-            await self.upsert_file_record({
+            self.upsert_file_record({
                     'file_unique_id': file_unique_id,
                     'file_id'       : file_id,
                     'file_type'     : file_type,
@@ -1015,8 +1016,8 @@ class MediaUtils:
 
 
             # 新增：写入 photo 表/ document 表/ video 表/ animation 表
-            data = await self.build_media_dict_from_aiogram(ret)
-            await self.upsert_media(data)
+            data = await self.build_media_dict_from_aiogram(message)
+            self.upsert_media(data)
 
 
 
@@ -1081,25 +1082,18 @@ class MediaUtils:
 
         try:
             # 检查是否已存在相同 file_unique_id 的记录
-
-
-            sql = '''
-                SELECT chat_id, message_id,file_reference FROM file_records 
-                WHERE file_unique_id = %s AND bot_id = %s
-                '''
-            row = await MySQLPool.fetchone(sql, (file_unique_id,self.bot_id))
-
+            cursor =self.safe_execute(
+                "SELECT chat_id, message_id,file_reference FROM file_records WHERE file_unique_id = %s AND bot_id = %s",
+                (file_unique_id,self.bot_id)
+            )
         except Exception as e:
             print(f"578 Error: {e}")
     
-
+        row = cursor.fetchone()
         if row:
-            
-            existing_chat_id = row["chat_id"]
-            existing_msg_id  = row["message_id"]
-            file_reference   = row["file_reference"]   # 对应 SELECT 的字段
+            existing_chat_id, existing_msg_id, file_reference = row
             if not (existing_chat_id == chat_id and existing_msg_id == message_id):
-                await self.upsert_file_record({
+                self.upsert_file_record({
                     'file_unique_id': file_unique_id,
                     'file_id'       : file_id,
                     'file_type'     : file_type,
@@ -1111,11 +1105,15 @@ class MediaUtils:
                     'message_id'    : message_id,
                     'bot_id'        : self.bot_id
                 })
-
+                self.upsert_file_extension({
+                    "file_unique_id": file_unique_id,
+                    "file_id": file_id,
+                    "file_type": file_type
+                })
 
                 # 新增：写入 photo 表/ document 表/ video 表/ animation 表
                 data = await self.build_media_dict_from_aiogram(message)
-                await self.upsert_media(data)
+                self.upsert_media_content(data)
 
 
                 if file_reference != None:
@@ -1124,7 +1122,7 @@ class MediaUtils:
                 print("D631")
             else:
                 print(f"【Aiogram】新增 {message_id} by file_unique_idd",flush=True)
-                await self.upsert_file_record({
+                self.upsert_file_record({
                     'chat_id'       : chat_id,
                     'message_id'    : message_id,
                     'file_unique_id': file_unique_id,
@@ -1139,16 +1137,15 @@ class MediaUtils:
             return
 
         try:
-            
-            sql = """
-                SELECT id FROM file_records WHERE chat_id = %s AND message_id = %s
-                """
-            row = await MySQLPool.fetchone(sql, (chat_id, message_id))
+            cursor = self.safe_execute(
+                "SELECT id FROM file_records WHERE chat_id = %s AND message_id = %s",
+                (chat_id, message_id)
+            )
         except Exception as e:
             print(f"614 Error: {e}")
 
-        if row:
-            await self.upsert_file_record({
+        if cursor.fetchone():
+            self.upsert_file_record({
                 'chat_id'       : chat_id,
                 'message_id'    : message_id,
                 'file_unique_id': file_unique_id,
@@ -1166,7 +1163,7 @@ class MediaUtils:
 
         else:
             print(f"【Aiogram】新增 {message_id} by chat_id+message_id",flush=True)
-            await self.upsert_file_record({
+            self.upsert_file_record({
                 'chat_id'       : chat_id,
                 'message_id'    : message_id,
                 'file_unique_id': file_unique_id,
@@ -1184,7 +1181,7 @@ class MediaUtils:
 
         # 新增：写入 photo 表/ document 表/ video 表/ animation 表
         data = await self.build_media_dict_from_aiogram(message)
-        await self.upsert_media(data)
+        self.upsert_media(data)
 
     # ================= Human Private Text  私聊 Message 文字处理：人类账号 =================
     async def handle_user_private_text(self,event):
@@ -1334,15 +1331,14 @@ class MediaUtils:
         # 检查：TARGET_GROUP_ID 群组是否已有相同 doc_id
         try:
             print(f"PPMM-Check Exists")
-     
-            sql = """
-                SELECT file_unique_id FROM file_records WHERE doc_id = %s AND chat_id = %s AND file_unique_id IS NOT NULL
-                """
-            row = await MySQLPool.fetchone(sql, (doc_id, TARGET_GROUP_ID))
+            cursor = self.safe_execute(
+                "SELECT file_unique_id FROM file_records WHERE doc_id = %s AND chat_id = %s AND file_unique_id IS NOT NULL",
+                (doc_id, TARGET_GROUP_ID)
+            )
         except Exception as e:
             print(f"272 Error: {e}")
             
-       
+        row = cursor.fetchone()
         if row:
             print(f"PPMM-{doc_id}-【Telethon】已存在 doc_id={doc_id} fuid = {row} 的记录，跳过转发", flush=True)
             # await event.delete()
@@ -1368,7 +1364,7 @@ class MediaUtils:
 
 
         # 插入或更新 placeholder 记录 (message_id 自动留空，由群组回调补全)
-        await self.upsert_file_record({
+        self.upsert_file_record({
             'chat_id'       : ret.chat_id,
             'message_id'    : ret.id,
             'doc_id'        : doc_id,
@@ -1423,25 +1419,21 @@ class MediaUtils:
         # —— 步骤 A：先按 doc_id 查库 —— 
         try:
             # 检查是否已存在相同 doc_id 的记录
-
-            sql = '''
-                SELECT chat_id, message_id FROM file_records WHERE doc_id = %s AND man_id = %s
-                '''
-            row = await MySQLPool.fetchone(sql, (doc_id,self.man_id))
-
+            cursor= self.safe_execute(
+                "SELECT chat_id, message_id FROM file_records WHERE doc_id = %s AND man_id = %s",
+                (doc_id,self.man_id)
+            )
         except Exception as e:
             print(f"[process_group_media_msg] doc_id 查库失败: {e}", flush=True)
     
-        
+        row = cursor.fetchone()
         if row:
-            
-            existing_chat_id = row["chat_id"]
-            existing_msg_id  = row["message_id"]
+            existing_chat_id, existing_msg_id = row
             if not (existing_chat_id == chat_id and existing_msg_id == message_id):
                 print(f"【Telethon】在指定群组，收到群组媒体：来自 {msg.chat_id}",flush=True)
     
                 # 重复上传到不同消息 → 更新并删除新消息
-                await self.upsert_file_record({
+                self.upsert_file_record({
                     'doc_id'        : doc_id,
                     'access_hash'   : access_hash,
                     'file_reference': file_reference,
@@ -1458,7 +1450,7 @@ class MediaUtils:
                 await msg.delete()
             else:
                 # 同一条消息重复触发 → 仅更新，不删除
-                await self.upsert_file_record({
+                self.upsert_file_record({
                     'chat_id'       : chat_id,
                     'message_id'    : message_id,
                     'access_hash'   : access_hash,
@@ -1474,17 +1466,16 @@ class MediaUtils:
 
         # —— 步骤 B：若 A 中没找到，再按 (chat_id, message_id) 查库 ——
         try:
-           
-            sql = '''
-                SELECT id FROM file_records WHERE chat_id = %s AND message_id = %s
-                '''
-            row = await  MySQLPool.fetchone(sql, (chat_id, message_id))
+            self.safe_execute(
+                "SELECT id FROM file_records WHERE chat_id = %s AND message_id = %s",
+                (chat_id, message_id)
+            )
         except Exception as e:
             print(f"372 Error: {e}")
-      
+        row = cursor.fetchone()
         if row:
             # 已存在同条消息 → 更新并保留
-            await self.upsert_file_record({
+            self.upsert_file_record({
                 'chat_id'       : chat_id,
                 'message_id'    : message_id,
                 'doc_id'        : doc_id,
@@ -1499,7 +1490,7 @@ class MediaUtils:
             })
         else:
             # 全新媒体 → 插入并保留
-            await self.upsert_file_record({
+            self.upsert_file_record({
                 'chat_id'       : chat_id,
                 'message_id'    : message_id,
                 'doc_id'        : doc_id,

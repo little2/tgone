@@ -1,0 +1,194 @@
+import aiomysql
+import time
+from tgone_config import MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB, MYSQL_DB_PORT
+from typing import Optional, Dict, Any, List, Tuple
+from lz_memory_cache import MemoryCache
+import asyncio
+from functools import wraps
+from inspect import stack
+
+def _caller_info():
+    frames = stack()
+    if len(frames) > 2:
+        frame = frames[2]
+        return f"{frame.filename.split('/')[-1]}:{frame.function}:{frame.lineno}"
+    return "unknown"
+
+
+def reconnecting(func):
+    """
+    通用断线重连装饰器：
+    - 只针对 aiomysql.OperationalError
+    - 若错误码为 2006 / 2013 → 认为是断线，重建连接池 + 自动重试一次
+    - 第二次仍失败 / 其它错误 → 直接抛出
+    """
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        cls = args[0] if args else None
+        for attempt in (1, 2):
+            try:
+                return await func(*args, **kwargs)
+            except aiomysql.OperationalError as e:
+                code = e.args[0] if e.args else None
+                msg = e.args[1] if len(e.args) > 1 else ""
+
+                if not cls or code not in (2006, 2013) or attempt == 2:
+                    print(f"❌ [MySQLPool] OperationalError {code}: {msg}", flush=True)
+                    raise
+
+                print(f"⚠️ [MySQLPool] 检测到断线 {code}: {msg} → 重建连接池并重试一次", flush=True)
+                try:
+                    await cls._rebuild_pool()
+                except Exception as e2:
+                    print(f"❌ [MySQLPool] 重建连接池失败: {e2}", flush=True)
+                    raise
+    return wrapper
+
+
+class MySQLPool:
+    _pool = None
+    _lock = asyncio.Lock()
+    _cache_ready = False
+    cache = None
+
+    @classmethod
+    async def init_pool(cls):
+        if cls._pool is not None:
+            if not cls._cache_ready:
+                cls.cache = MemoryCache()
+                cls._cache_ready = True
+            return cls._pool
+
+        async with cls._lock:
+            if cls._pool is None:
+                cls._pool = await aiomysql.create_pool(
+                    host=MYSQL_HOST,
+                    user=MYSQL_USER,
+                    password=MYSQL_PASSWORD,
+                    db=MYSQL_DB,
+                    port=MYSQL_DB_PORT,
+                    charset="utf8mb4",
+                    autocommit=True,
+                    minsize=2,
+                    maxsize=32,
+                    pool_recycle=1800,
+                    connect_timeout=10,
+                )
+                print("✅ MySQL 连接池初始化完成")
+
+            if not cls._cache_ready:
+                cls.cache = MemoryCache()
+                cls._cache_ready = True
+        return cls._pool
+
+    @classmethod
+    async def ensure_pool(cls):
+        if cls._pool is None:
+            await cls.init_pool()
+        return cls._pool
+
+    @classmethod
+    async def get_conn_cursor(cls):
+        await cls.ensure_pool()
+        conn = await cls._pool.acquire()
+        cursor = await conn.cursor(aiomysql.DictCursor)
+        return conn, cursor
+
+    @classmethod
+    async def release(cls, conn, cursor):
+        try:
+            if cursor:
+                await cursor.close()
+        finally:
+            if conn and cls._pool:
+                cls._pool.release(conn)
+
+    @classmethod
+    async def close(cls):
+        async with cls._lock:
+            if cls._pool:
+                cls._pool.close()
+                await cls._pool.wait_closed()
+                cls._pool = None
+                print("🛑 MySQL 连接池已关闭")
+
+    @classmethod
+    async def _rebuild_pool(cls):
+        async with cls._lock:
+            if cls._pool:
+                try:
+                    cls._pool.close()
+                    await cls._pool.wait_closed()
+                except Exception as e:
+                    print(f"⚠️ [MySQLPool] 关闭旧连接池出错: {e}", flush=True)
+
+            cls._pool = None
+            print("🔄 [MySQLPool] 正在重建 MySQL 连接池…", flush=True)
+            await cls.init_pool()
+
+    # ==================================================
+    #   ✨ 统一 SQL helper：execute / fetchone / fetchall
+    # ==================================================
+
+    @classmethod
+    @reconnecting
+    async def execute(cls, sql: str, params=None, error_tag: str = "") -> bool:
+        conn, cur = await cls.get_conn_cursor()
+        try:
+            await cur.execute(sql, params or ())
+            return True
+        except Exception as e:
+            if error_tag:
+                tag = error_tag
+            else:
+                tag = _caller_info()   # 自动提取调用来源
+            
+            print(
+                f"⚠️ [{tag}] SQL 执行出错: {e} | sql={sql} | params={params}",
+                flush=True,
+            )
+            return False
+        finally:
+            await cls.release(conn, cur)
+
+    @classmethod
+    @reconnecting
+    async def fetchone(cls, sql: str, params=None, error_tag: str = "") -> Optional[Dict[str, Any]]:
+        conn, cur = await cls.get_conn_cursor()
+        try:
+            await cur.execute(sql, params or ())
+            return await cur.fetchone()
+        except Exception as e:
+            if error_tag:
+                tag = error_tag
+            else:
+                tag = _caller_info()   # 自动提取调用来源
+            
+            print(
+                f"⚠️ [{tag}] SQL 执行出错: {e} | sql={sql} | params={params}",
+                flush=True,
+            )
+            return None
+        finally:
+            await cls.release(conn, cur)
+
+    @classmethod
+    @reconnecting
+    async def fetchall(cls, sql: str, params=None, error_tag: str = "") -> List[Dict[str, Any]]:
+        conn, cur = await cls.get_conn_cursor()
+        try:
+            await cur.execute(sql, params or ())
+            return await cur.fetchall()
+        except Exception as e:
+            if error_tag:
+                tag = error_tag
+            else:
+                tag = _caller_info()   # 自动提取调用来源
+            
+            print(
+                f"⚠️ [{tag}] SQL 执行出错: {e} | sql={sql} | params={params}",
+                flush=True,
+            )
+            return []
+        finally:
+            await cls.release(conn, cur)
