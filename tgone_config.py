@@ -2,15 +2,21 @@ import os
 from dotenv import load_dotenv
 import json
 
-load_dotenv(dotenv_path='.ly.env')
 
+load_dotenv(dotenv_path='.24690454.queue.env')
 BOT_MODE = os.getenv("BOT_MODE", "webhook").lower()
 WEBHOOK_HOST = os.getenv("WEBHOOK_HOST")
 WEBHOOK_PATH = os.getenv("WEBHOOK_PATH")
 WEBAPP_HOST = os.getenv("WEBAPP_HOST")
 WEBAPP_PORT = int(os.getenv("WEBAPP_PORT", 10000))
 
+
+
+
 AES_KEY = os.getenv("AES_KEY", "")
+
+
+
 
 ENVIRONMENT = os.getenv("ENVIRONMENT", "prd").lower()
 
@@ -38,6 +44,9 @@ MYSQL_USER      = config.get('db_user', os.getenv('MYSQL_DB_USER', ''))
 MYSQL_PASSWORD  = config.get('db_password', os.getenv('MYSQL_DB_PASSWORD', ''))
 MYSQL_DB        = config.get('db_name', os.getenv('MYSQL_DB_NAME', ''))
 MYSQL_DB_PORT   = int(config.get('db_port', os.getenv('MYSQL_DB_PORT', 3306)))
+
+BOT_TOKEN       = config.get('bot_token', os.getenv('BOT_TOKEN', ''))
+TARGET_GROUP_ID = int(config.get('target_group_id', os.getenv('TARGET_GROUP_ID', 0)))
 
 META_BOT       = config.get('meta_bot', os.getenv('META_BOT', ''))
 

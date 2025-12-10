@@ -2,16 +2,12 @@
 
 import os
 import aiohttp
-import pymysql
 import asyncio
 import json
 import time
 from dotenv import load_dotenv
-
 from telethon.sessions import StringSession
 from telethon import TelegramClient, events
-
-
 
 # Aiogram 相关
 from aiogram import F, Bot, Dispatcher, types
@@ -19,60 +15,44 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.types import ContentType
 from aiohttp import web
-
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
-
-
-
 from utils import MediaUtils
 
 # ================= 1. 载入 .env 中的环境变量 =================
-# 加载环境变量
-if not os.getenv('GITHUB_ACTIONS'):
-    # load_dotenv(dotenv_path='.25299903.warehouse.env', override=True)
+# # 加载环境变量
+# if not os.getenv('GITHUB_ACTIONS'):
+#     # load_dotenv(dotenv_path='.25299903.warehouse.env', override=True)
    
-    load_dotenv(dotenv_path='.24690454.queue.env')
-    # load_dotenv(dotenv_path='.28817994.luzai.env')
-    # load_dotenv(dotenv_path='.a25299903.warehouse.env')
-    # print("✅ 成功加载 .env 文件", flush=True)
+#     load_dotenv(dotenv_path='.24690454.queue.env')
+#     # load_dotenv(dotenv_path='.28817994.luzai.env')
+#     # load_dotenv(dotenv_path='.a25299903.warehouse.env')
+#     # print("✅ 成功加载 .env 文件", flush=True)
 
-config = {}
-# 嘗試載入 JSON 並合併參數
-try:
-    configuration_json = json.loads(os.getenv('CONFIGURATION', '') or '{}')
-    if isinstance(configuration_json, dict):
-        config.update(configuration_json)  # 將 JSON 鍵值對合併到 config 中
-except Exception as e:
-    print(f"⚠️ 無法解析 CONFIGURATION：{e}")
+# config = {}
+# # 嘗試載入 JSON 並合併參數
+# try:
+#     configuration_json = json.loads(os.getenv('CONFIGURATION', '') or '{}')
+#     if isinstance(configuration_json, dict):
+#         config.update(configuration_json)  # 將 JSON 鍵值對合併到 config 中
+# except Exception as e:
+#     print(f"⚠️ 無法解析 CONFIGURATION：{e}")
 
-API_ID          = int(config.get('api_id', os.getenv('API_ID', 0)))
-API_HASH        = config.get('api_hash', os.getenv('API_HASH', ''))
-PHONE_NUMBER    = config.get('phone_number', os.getenv('PHONE_NUMBER', ''))
-BOT_TOKEN       = config.get('bot_token', os.getenv('BOT_TOKEN', ''))
-TARGET_GROUP_ID = int(config.get('target_group_id', os.getenv('TARGET_GROUP_ID', 0)))
-MYSQL_HOST      = config.get('db_host', os.getenv('MYSQL_DB_HOST', 'localhost'))
-MYSQL_USER      = config.get('db_user', os.getenv('MYSQL_DB_USER', ''))
-MYSQL_PASSWORD  = config.get('db_password', os.getenv('MYSQL_DB_PASSWORD', ''))
-MYSQL_DB        = config.get('db_name', os.getenv('MYSQL_DB_NAME', ''))
-MYSQL_DB_PORT   = int(config.get('db_port', os.getenv('MYSQL_DB_PORT', 3306)))
-SESSION_STRING  = os.getenv("USER_SESSION_STRING")
-BOT_MODE        = os.getenv("BOT_MODE", "polling").lower()
-WEBHOOK_SECRET  = os.getenv("WEBHOOK_SECRET", "")  
-WEBHOOK_PATH    = os.getenv("WEBHOOK_PATH", "/")       
-WEBHOOK_HOST    = os.getenv("WEBHOOK_HOST")  # 确保设置为你的域名或 IP                                   
-USER_SESSION    = str(API_ID) + 'session_name'  # 确保与上传的会话文件名匹配
+# API_ID          = int(config.get('api_id', os.getenv('API_ID', 0)))
+# API_HASH        = config.get('api_hash', os.getenv('API_HASH', ''))
+# PHONE_NUMBER    = config.get('phone_number', os.getenv('PHONE_NUMBER', ''))
+# BOT_TOKEN       = config.get('bot_token', os.getenv('BOT_TOKEN', ''))
+# TARGET_GROUP_ID = int(config.get('target_group_id', os.getenv('TARGET_GROUP_ID', 0)))
 
-# ================= 2. 初始化 MySQL 连接 =================
-mysql_config = {
-    'host'      : MYSQL_HOST,
-    'user'      : MYSQL_USER,
-    'password'  : MYSQL_PASSWORD,
-    'database'  : MYSQL_DB,
-    "port"      : MYSQL_DB_PORT,
-    'charset'   : 'utf8mb4',
-    'autocommit': True
-}
-db = pymysql.connect(**mysql_config)
+# SESSION_STRING  = os.getenv("USER_SESSION_STRING")
+# BOT_MODE        = os.getenv("BOT_MODE", "polling").lower()
+# WEBHOOK_SECRET  = os.getenv("WEBHOOK_SECRET", "")  
+# WEBHOOK_PATH    = os.getenv("WEBHOOK_PATH", "/")       
+# WEBHOOK_HOST    = os.getenv("WEBHOOK_HOST")  # 确保设置为你的域名或 IP                                   
+# USER_SESSION    = str(API_ID) + 'session_name'  # 确保与上传的会话文件名匹配
+
+from tgone_config import API_ID, API_HASH, BOT_TOKEN, TARGET_GROUP_ID, PHONE_NUMBER,  BOT_MODE, WEBHOOK_HOST, WEBHOOK_PATH, SESSION_STRING, config
+
+
 
 
 lz_var_start_time = time.time()
@@ -96,7 +76,7 @@ if SESSION_STRING:
     user_client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
     print("【Telethon】使用 StringSession 登录。",flush=True)
 else:
-    user_client = TelegramClient(USER_SESSION, API_ID, API_HASH)
+    exit("❌ 请在环境变量中设置 USER_SESSION_STRING 以使用 StringSession 登录。")
 
 
 bot_client = Bot(
@@ -114,8 +94,8 @@ dp = Dispatcher()
 #     config=config,
 # )
 
-media_utils = await MediaUtils.create(DB_DSN, bot_client, user_client, lz_var_start_time, config)
 
+media_utils = MediaUtils(bot_client, user_client, lz_var_start_time, config)
 
 
 
@@ -204,10 +184,15 @@ async def main():
         port = int(os.environ.get("PORT", 8080))
         await web._run_app(app, host="0.0.0.0", port=port)
     else:
-        await asyncio.gather(
-            run_telethon(),
-            run_aiogram_polling(),
-        )
+        t = asyncio.create_task(run_telethon())
+        await run_aiogram_polling()
+        t.cancel()
+
+
+        # await asyncio.gather(
+        #     run_telethon(),
+        #     run_aiogram_polling(),
+        # )
 
     
 

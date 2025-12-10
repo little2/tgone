@@ -111,9 +111,11 @@ class MediaUtils:
             "video": "v",
             "photo": "p",
             "document": "d",
+            "animation": "n",
             "v": "v",
             "p": "p",
             "d": "d",
+            "n":"n"
         }
         return mapping.get(file_type)
 
@@ -585,14 +587,26 @@ class MediaUtils:
             file_size = message.document.file_size
             file_name = message.document.file_name
        
+        elif message.animation:
+            a = message.animation
+            file_id = a.file_id
+            file_unique_id = a.file_unique_id
+            mime_type = a.mime_type or "video/mp4"
+            file_type = "animation"
+            file_size = a.file_size
+            file_name = a.file_name
+        elif message.video:
+            v = message.video
+            file_id = v.file_id
+            file_unique_id = v.file_unique_id
+            mime_type = v.mime_type or "video/mp4"
+            file_type = "video"
+            file_size = v.file_size
+            file_name = getattr(v, "file_name", None)
+        else:
+            raise ValueError("message 不包含可识别的媒体: photo/document/video/animation")
 
-        else:  # 视频
-            file_id = message.video.file_id
-            file_unique_id = message.video.file_unique_id
-            mime_type = message.video.mime_type or 'video/mp4'
-            file_type = 'video'
-            file_size = message.video.file_size
-            file_name = getattr(message.video, 'file_name', None)
+       
         
         return file_id, file_unique_id, mime_type, file_type, file_size, file_name
 
