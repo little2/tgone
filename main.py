@@ -3,7 +3,6 @@
 import os
 import aiohttp
 import asyncio
-import json
 import time
 from dotenv import load_dotenv
 from telethon.sessions import StringSession
@@ -14,43 +13,13 @@ from aiogram import F, Bot, Dispatcher, types
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.types import ContentType
+from aiogram.filters import Command
 from aiohttp import web
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from utils import MediaUtils
 
-# ================= 1. 载入 .env 中的环境变量 =================
-# # 加载环境变量
-# if not os.getenv('GITHUB_ACTIONS'):
-#     # load_dotenv(dotenv_path='.25299903.warehouse.env', override=True)
-   
-#     load_dotenv(dotenv_path='.24690454.queue.env')
-#     # load_dotenv(dotenv_path='.28817994.luzai.env')
-#     # load_dotenv(dotenv_path='.a25299903.warehouse.env')
-#     # print("✅ 成功加载 .env 文件", flush=True)
 
-# config = {}
-# # 嘗試載入 JSON 並合併參數
-# try:
-#     configuration_json = json.loads(os.getenv('CONFIGURATION', '') or '{}')
-#     if isinstance(configuration_json, dict):
-#         config.update(configuration_json)  # 將 JSON 鍵值對合併到 config 中
-# except Exception as e:
-#     print(f"⚠️ 無法解析 CONFIGURATION：{e}")
-
-# API_ID          = int(config.get('api_id', os.getenv('API_ID', 0)))
-# API_HASH        = config.get('api_hash', os.getenv('API_HASH', ''))
-# PHONE_NUMBER    = config.get('phone_number', os.getenv('PHONE_NUMBER', ''))
-# BOT_TOKEN       = config.get('bot_token', os.getenv('BOT_TOKEN', ''))
-# TARGET_GROUP_ID = int(config.get('target_group_id', os.getenv('TARGET_GROUP_ID', 0)))
-
-# SESSION_STRING  = os.getenv("USER_SESSION_STRING")
-# BOT_MODE        = os.getenv("BOT_MODE", "polling").lower()
-# WEBHOOK_SECRET  = os.getenv("WEBHOOK_SECRET", "")  
-# WEBHOOK_PATH    = os.getenv("WEBHOOK_PATH", "/")       
-# WEBHOOK_HOST    = os.getenv("WEBHOOK_HOST")  # 确保设置为你的域名或 IP                                   
-# USER_SESSION    = str(API_ID) + 'session_name'  # 确保与上传的会话文件名匹配
-
-from tgone_config import API_ID, API_HASH, BOT_TOKEN, TARGET_GROUP_ID, PHONE_NUMBER,  BOT_MODE, WEBHOOK_HOST, WEBHOOK_PATH, SESSION_STRING, config
+from config import API_ID, API_HASH, BOT_TOKEN, TARGET_GROUP_ID, PHONE_NUMBER,  BOT_MODE, WEBHOOK_HOST, WEBHOOK_PATH, SESSION_STRING, config
 
 
 
@@ -86,20 +55,20 @@ bot_client = Bot(
 
 dp = Dispatcher()
 
-# media_utils = MediaUtils(
-#     db=db,
-#     bot_client=bot_client,
-#     user_client=user_client,
-#     lz_var_start_time=lz_var_start_time,
-#     config=config,
-# )
-
-
 media_utils = MediaUtils(bot_client, user_client, lz_var_start_time, config)
 
 
 
-
+async def join(invite_hash):
+    from telethon.tl.functions.messages import ImportChatInviteRequest
+    try:
+        await user_client(ImportChatInviteRequest(invite_hash))
+        print("已成功加入群组",flush=True)
+    except Exception as e:
+        if 'InviteRequestSentError' in str(e):
+            print("加入请求已发送，等待审批",flush=True)
+        else:
+            print(f"失败-加入群组: {invite_hash} {e}", flush=True)
 
 
 
@@ -107,7 +76,18 @@ media_utils = MediaUtils(bot_client, user_client, lz_var_start_time, config)
 # @user_client.on(events.NewMessage(incoming=True))
 @user_client.on(events.NewMessage(incoming=True, func=lambda e: e.is_private and not e.message.media))
 async def handle_user_private_text(event):
-    await media_utils.handle_user_private_text(event)
+    text = event.raw_text.strip()
+    parts = text.split(maxsplit=1)
+    if text.startswith("/join"):
+        invite_hash = parts[1]
+        # 执行加入群组
+        await join(invite_hash)
+    if text.startswith("/hello"):
+        hello_param = parts[1]
+        # 执行加入群组
+        await event.reply(f"已处理 join 指令：{hello_param}")
+    else:    
+        await media_utils.handle_user_private_text(event)
     return
 
 
@@ -154,6 +134,7 @@ async def run_telethon():
     await media_utils.set_bot_info()
     print(f'你的用户名: {media_utils.man_username} / {media_utils.bot_username}', flush=True)
     print(f'你的ID: {media_utils.man_id} / {media_utils.bot_id}', flush=True)
+    await user_client.send_message(media_utils.bot_username, '/start')
     await user_client.run_until_disconnected()
 
 
@@ -187,16 +168,6 @@ async def main():
         t = asyncio.create_task(run_telethon())
         await run_aiogram_polling()
         t.cancel()
-
-
-        # await asyncio.gather(
-        #     run_telethon(),
-        #     run_aiogram_polling(),
-        # )
-
-    
-
-
 
 if __name__ == "__main__":
     asyncio.run(main())

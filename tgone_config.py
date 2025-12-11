@@ -9,17 +9,8 @@ WEBHOOK_HOST = os.getenv("WEBHOOK_HOST")
 WEBHOOK_PATH = os.getenv("WEBHOOK_PATH")
 WEBAPP_HOST = os.getenv("WEBAPP_HOST")
 WEBAPP_PORT = int(os.getenv("WEBAPP_PORT", 10000))
-
-
-
-
 AES_KEY = os.getenv("AES_KEY", "")
-
-
-
-
 ENVIRONMENT = os.getenv("ENVIRONMENT", "prd").lower()
-
 RESULTS_PER_PAGE = 6
 
 config = {}

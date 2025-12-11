@@ -2,8 +2,8 @@ import os
 from dotenv import load_dotenv
 import json
 
-load_dotenv(dotenv_path='.lzbot_test.env')
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+load_dotenv(dotenv_path='rely.env')
+
 POSTGRES_DSN = os.getenv("POSTGRES_DSN")
 
 BOT_MODE = os.getenv("BOT_MODE", "polling").lower()
@@ -29,9 +29,12 @@ except Exception as e:
 
 API_ID          = int(config.get('api_id', os.getenv('API_ID', 0)))
 API_HASH        = config.get('api_hash', os.getenv('API_HASH', ''))
-SESSION_STRING  = config.get('session_string', os.getenv('SESSION_STRING', ''))
+SESSION_STRING  = os.getenv("USER_SESSION_STRING")
+# SESSION_STRING  = config.get('session_string', os.getenv('SESSION_STRING', ''))
 PHONE_NUMBER    = config.get('phone_number', os.getenv('PHONE_NUMBER', ''))
-USER_SESSION    = str(API_ID) + 'session_name'  # 确保与上传的会话文件名匹配
+
+
+
 
 MYSQL_HOST      = config.get('db_host', os.getenv('MYSQL_DB_HOST', 'localhost'))
 MYSQL_USER      = config.get('db_user', os.getenv('MYSQL_DB_USER', ''))
@@ -39,4 +42,6 @@ MYSQL_PASSWORD  = config.get('db_password', os.getenv('MYSQL_DB_PASSWORD', ''))
 MYSQL_DB        = config.get('db_name', os.getenv('MYSQL_DB_NAME', ''))
 MYSQL_DB_PORT   = int(config.get('db_port', os.getenv('MYSQL_DB_PORT', 3306)))
 
-META_BOT       = config.get('meta_bot', os.getenv('META_BOT', ''))
+META_BOT        = config.get('meta_bot', os.getenv('META_BOT', ''))
+BOT_TOKEN       = config.get('bot_token', os.getenv('BOT_TOKEN', ''))
+TARGET_GROUP_ID = int(config.get('target_group_id', os.getenv('TARGET_GROUP_ID', 0)))

@@ -5,7 +5,7 @@ import asyncio
 from aiogram import types, Bot
 
 from aiogram.types import ContentType
-from telethon.tl.types import InputDocument
+
 import time
 from aiohttp import web
 from telethon.errors import ChatForwardsRestrictedError
@@ -13,9 +13,11 @@ from aiogram.exceptions import (
     TelegramBadRequest,
     TelegramForbiddenError, TelegramNotFound
 )
+from telethon.tl.types import InputDocument, DocumentAttributeVideo,DocumentAttributeAnimated
 
 from tgone_mysql import MySQLPool
 
+from config import  TARGET_GROUP_ID
 
 
 """
@@ -543,20 +545,31 @@ class MediaUtils:
             # 机器人账号发送
             await self.send_media_via_bot(client, to_user_id, row, reply_to_message_id=msg_id)
         else:
-
             await self.send_media_via_man(client, to_user_id, row, reply_to_message_id=msg_id)
 
     async def extract_video_metadata_from_telethon(self,msg):
         file_type = ''
         if msg.document:
             media = msg.document
-            file_type = 'document'
+
+            # 检查 attributes 判定是否属于视频
+            is_video = any(isinstance(attr, DocumentAttributeVideo) for attr in media.attributes)
+
+            if is_video:
+                file_type = "video"      # document 但类型是 video
+            else:
+                file_type = "document"   # 普通 document 比如 zip、pdf
+
+
+            
         elif msg.video:
             media = msg.video
             file_type = 'video'
-        else:
+        elif msg.photo:
             media = msg.photo
             file_type = 'photo'
+        else:
+            raise ValueError("message 不包含可识别的媒体: photo/document/video")
 
         doc_id         = media.id
         access_hash    = media.access_hash
@@ -827,6 +840,15 @@ class MediaUtils:
                 msg = await client.get_messages(chat_id, ids=message_id)
                 if not msg:
                     print(f"历史消息中未找到对应消息，可能已被删除。(286)",flush=True)
+                    
+                    row = {'file_type': file_type,
+                           'file_id': file_id}
+                    # 将媒体以bot再次寄送给人型机器人，以重新获取 file_reference
+                    await self.send_media_via_bot(
+                        self.bot_client, 
+                        self.man_id,
+                        row
+                    )
                 else:
                     media = msg.document or msg.photo or msg.video
                     if not media:
@@ -884,17 +906,18 @@ class MediaUtils:
         except Exception as e:
             await bot_client.send_message(to_user_id, f"⚠️ 发送文件失败：{e}")
     
-    async def check_file_exists_by_unique_id(self, file_unique_id: str) -> bool:
+    async def check_file_exists_by_unique_id(self, file_unique_id: str, chat_id: int) -> bool:
         sql = """
             SELECT 1
             FROM file_records
             WHERE file_unique_id = %s
               AND bot_id = %s
+              AND chat_id = %s 
               AND doc_id IS NOT NULL
             LIMIT 1
         """
         try:
-            row = await MySQLPool.fetchone(sql, (file_unique_id, self.bot_id))
+            row = await MySQLPool.fetchone(sql, (file_unique_id, self.bot_id, chat_id))
             return row is not None
         except Exception as e:
             print(f"528 Error: {e}")
@@ -951,86 +974,122 @@ class MediaUtils:
 
 # ================= BOT TEXT Private. 私聊 Message 媒体处理：Aiogram：BOT账号 =================
     async def aiogram_handle_private_media(self, message: types.Message):
-        TARGET_GROUP_ID = self.config.get('target_group_id')
+        
+        # 若不是私信 且 不包括媒體，則跳過
         if message.chat.type != "private" or message.content_type not in {
             ContentType.PHOTO, ContentType.DOCUMENT, ContentType.VIDEO, ContentType.ANIMATION
         }:
             return
 
-        print(f"【Aiogram】收到私聊媒体：{message.content_type}，来自 {message.from_user.id}",flush=True)
+
+
+        print(f"【Aiogram】收到私聊媒体：{message.content_type}，来自 user_id = {message.from_user.id}",flush=True)
         # 只处理“私聊里发来的媒体”
+
+        
 
         file_id, file_unique_id, mime_type, file_type, file_size, file_name = await self.extract_video_metadata_from_aiogram(message)
 
         
 
-        # ⬇️ 检查是否已存在
-        if await self.check_file_exists_by_unique_id(file_unique_id):
+        # ⬇️ 检查是否對應的是否已存在  (doc_id IS NOT NULL AND bot_id, chat_id, file_unique_id) )
+        if await self.check_file_exists_by_unique_id(file_unique_id, TARGET_GROUP_ID):
             print(f"已存在：{file_unique_id}，跳过转发",flush=True)
 
         else:
-            ret = None
-            # ⬇️ 发到群组
-            if message.photo:
-                ret = await self.bot_client.send_photo(TARGET_GROUP_ID, file_id)
-            elif message.document:
-                ret = await self.bot_client.send_document(TARGET_GROUP_ID, file_id)
-            elif message.animation:
-                ret = await self.bot_client.send_animation(TARGET_GROUP_ID, file_id)
+            print(f"{TARGET_GROUP_ID} {self.bot_id} | {message.from_user.id} {self.man_id}",flush=True)
+            if TARGET_GROUP_ID == self.bot_id and message.from_user.id == self.man_id:
+
+                sql = """
+                    SELECT * 
+                    FROM file_records 
+                    WHERE file_unique_id IS NULL
+                      AND man_id = %s
+                      AND chat_id = %s
+                      AND file_size = %s
+                      AND mime_type = %s
+                    LIMIT 1
+                
+                """
+                row = await MySQLPool.fetchone(sql, (self.man_id, TARGET_GROUP_ID, file_size, mime_type))
+                if row:  
+                    await self.upsert_file_record({
+                        'chat_id'       : row['chat_id'],
+                        'message_id'    : row['message_id'],
+                        'mime_type'     : mime_type,
+                        'file_type'     : file_type,
+                        'file_name'     : file_name,
+                        'file_size'     : file_size,
+                        'uploader_type' : 'bot',
+                        'bot_id'        : self.bot_id,
+                        'file_unique_id': file_unique_id,
+                        'file_id'       : file_id
+                        
+                    })
             else:
-                ret = await self.bot_client.send_video(TARGET_GROUP_ID, file_id)
 
-            if ret.photo:
-                largest = ret.photo[-1]
-                file_unique_id = largest.file_unique_id
-                file_id = largest.file_id
-                file_type = 'photo'
-                mime_type = 'image/jpeg'
-                file_size = largest.file_size
-                file_name = None
+                ret = None
+                # ⬇️ 发到群组
+                if message.photo:
+                    ret = await self.bot_client.send_photo(TARGET_GROUP_ID, file_id)
+                elif message.document:
+                    ret = await self.bot_client.send_document(TARGET_GROUP_ID, file_id)
+                elif message.animation:
+                    ret = await self.bot_client.send_animation(TARGET_GROUP_ID, file_id)
+                else:
+                    ret = await self.bot_client.send_video(TARGET_GROUP_ID, file_id)
 
-            elif ret.document:
-                file_unique_id = ret.document.file_unique_id
-                file_id = ret.document.file_id
-                file_type = 'document'
-                mime_type = ret.document.mime_type
-                file_size = ret.document.file_size
-                file_name = ret.document.file_name
-            elif ret.animation:
-                file_unique_id = ret.animation.file_unique_id
-                file_id = ret.animation.file_id
-                file_type = 'animation'
-                mime_type = ret.animation.mime_type
-                file_size = ret.animation.file_size
-                file_name = ret.animation.file_name
-            else:  # msg.video
-                file_unique_id = ret.video.file_unique_id
-                file_id = ret.video.file_id
-                file_type = 'video'
-                mime_type = ret.video.mime_type or 'video/mp4'
-                file_size = ret.video.file_size
-                file_name = getattr(ret.video, 'file_name', None)
+                if ret.photo:
+                    largest = ret.photo[-1]
+                    file_unique_id = largest.file_unique_id
+                    file_id = largest.file_id
+                    file_type = 'photo'
+                    mime_type = 'image/jpeg'
+                    file_size = largest.file_size
+                    file_name = None
 
-            chat_id = ret.chat.id
-            message_id = ret.message_id
-            await self.upsert_file_record({
-                    'file_unique_id': file_unique_id,
-                    'file_id'       : file_id,
-                    'file_type'     : file_type,
-                    'mime_type'     : mime_type,
-                    'file_name'     : file_name,
-                    'file_size'     : file_size,
-                    'uploader_type' : 'bot',
-                    'chat_id'       : chat_id,
-                    'message_id'    : message_id,
-                    'bot_id'       : self.bot_id
-                })
+                elif ret.document:
+                    file_unique_id = ret.document.file_unique_id
+                    file_id = ret.document.file_id
+                    file_type = 'document'
+                    mime_type = ret.document.mime_type
+                    file_size = ret.document.file_size
+                    file_name = ret.document.file_name
+                elif ret.animation:
+                    file_unique_id = ret.animation.file_unique_id
+                    file_id = ret.animation.file_id
+                    file_type = 'animation'
+                    mime_type = ret.animation.mime_type
+                    file_size = ret.animation.file_size
+                    file_name = ret.animation.file_name
+                else:  # msg.video
+                    file_unique_id = ret.video.file_unique_id
+                    file_id = ret.video.file_id
+                    file_type = 'video'
+                    mime_type = ret.video.mime_type or 'video/mp4'
+                    file_size = ret.video.file_size
+                    file_name = getattr(ret.video, 'file_name', None)
+
+                chat_id = ret.chat.id
+                message_id = ret.message_id
+                await self.upsert_file_record({
+                        'file_unique_id': file_unique_id,
+                        'file_id'       : file_id,
+                        'file_type'     : file_type,
+                        'mime_type'     : mime_type,
+                        'file_name'     : file_name,
+                        'file_size'     : file_size,
+                        'uploader_type' : 'bot',
+                        'chat_id'       : chat_id,
+                        'message_id'    : message_id,
+                        'bot_id'       : self.bot_id
+                    })
 
 
 
-            # 新增：写入 photo 表/ document 表/ video 表/ animation 表
-            data = await self.build_media_dict_from_aiogram(ret)
-            await self.upsert_media(data)
+                # 新增：写入 photo 表/ document 表/ video 表/ animation 表
+                data = await self.build_media_dict_from_aiogram(ret)
+                await self.upsert_media(data)
 
 
 
@@ -1282,12 +1341,12 @@ class MediaUtils:
         print("PPMM-receive")
         TARGET_GROUP_ID = self.config.get('target_group_id')
 
-        # 确认是私聊
+        # 若不是私聊,則不處理
         if not msg.is_private:
             print("PPMM-871 process_private_media_msg - not private")
             return
 
-        # 检查是否包含媒体
+        # 若不包括媒体,也不處理
         if not (msg.document or msg.photo or msg.video or getattr(msg, 'media', None)):
             # print("PPMM-876 process_private_media_msg - no media content")
             # print(f"msg {msg}")
@@ -1367,14 +1426,18 @@ class MediaUtils:
         # 转发到群组，并删除私聊
         try:
             # 这里直接发送 msg.media，如果受保护会被阻止
-            print(f"PPMM-{doc_id}-👉 【Telethon】准备发送到目标群组：{TARGET_GROUP_ID}", flush=True)
+            print(f"PPMM-{doc_id}-👉 【Telethon】准备发送到目标群组/機器人：{TARGET_GROUP_ID}", flush=True)
             ret = await self.user_client.send_file(TARGET_GROUP_ID, msg.media)
             # print(f"ret={ret}", flush=True)
         except ChatForwardsRestrictedError:
             print(f"🚫 跳过：该媒体来自受保护频道 msg.id = {msg.id}", flush=True)
             return
         except Exception as e:
-            print(f"❌ 其他错误：{e} TARGET_GROUP_ID={TARGET_GROUP_ID}", flush=True)
+            if "The chat is restricted and cannot be used in that request" in str(e):
+                print(f"PPMM-⚠️ 這個群應該炸了", flush=True)
+                return  # ⚠️ 不处理，直接跳出
+            else:
+                print(f"❌ 其他错误：{e} TARGET_GROUP_ID={TARGET_GROUP_ID}", flush=True)
             return
 
         
@@ -1412,18 +1475,25 @@ class MediaUtils:
         if not (msg.document or msg.photo or msg.video or msg.animation):
             return
         file_type = ''
-        if msg.animation:
-            media = msg.animation
-            file_type = 'animation'
+        if msg.photo:
+            media = msg.photo
+            file_type = "photo"
         elif msg.document:
             media = msg.document
-            file_type = 'document'
-        elif msg.video:
-            media = msg.video
-            file_type = 'video'
+            attrs = media.attributes or []
+
+            # 先判断是不是 video
+            if any(isinstance(a, DocumentAttributeVideo) for a in attrs):
+                file_type = "video"
+            # 再判断是不是 gif / animation
+            elif any(isinstance(a, DocumentAttributeAnimated) for a in attrs):
+                file_type = "animation"
+            else:
+                file_type = "document"
+
         else:
-            media = msg.photo
-            file_type = 'photo'
+            # 理论上不会进到这里（前面已经 return 过非 photo/document）
+            return   
 
         chat_id        = msg.chat_id
         message_id     = msg.id
