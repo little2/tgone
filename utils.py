@@ -846,7 +846,12 @@ class MediaUtils:
                 msg = await client.get_messages(chat_id, ids=message_id)
                 if not msg:
                     print(f"【👦】历史消息中未找到对应消息，可能已被删除。(286)",flush=True)
-                    
+                    sql = """
+                        UPDATE file_records SET  access_hash = NULL, file_reference = NULL
+                        WHERE doc_id = %s
+                    """
+                    await MySQLPool.execute(sql, (row["doc_id"],))
+
                     row = {'file_type': file_type,
                            'file_id': file_id}
                     # 将媒体以bot再次寄送给人型机器人，以重新获取 file_reference
@@ -909,6 +914,8 @@ class MediaUtils:
             elif file_type == "animation":
                 # 动图
                 await bot_client.send_animation(to_user_id, file_id, reply_to_message_id=reply_to_message_id)
+            
+            print(f"✅ 文件已发送到 {to_user_id}，file_id={file_id}",flush=True)
         except Exception as e:
             await bot_client.send_message(to_user_id, f"⚠️ 发送文件失败：{e}")
     
@@ -1453,54 +1460,77 @@ class MediaUtils:
             print(f"【👦】看看是否存在表中且机器人没有收过 ")
      
             sql = """
-                SELECT file_unique_id FROM file_records WHERE doc_id = %s AND chat_id = %s AND file_unique_id IS NOT NULL
+                SELECT * FROM file_records WHERE doc_id = %s AND man_id = %s 
                 """
-            row = await MySQLPool.fetchone(sql, (doc_id, TARGET_GROUP_ID))
+            row = await MySQLPool.fetchone(sql, (doc_id, self.man_id))
         except Exception as e:
             print(f"272 Error: {e}")
             
        
-        if row:
-            print(f"【👦】-{doc_id}-【Telethon】已存在 doc_id={doc_id} fuid = {row} 的记录，跳过转发", flush=True)
+
+                
+        
+        if not row or ( row and (row['file_unique_id'] is None or row['access_hash'] is None or row['file_reference'] is None) ):
+            # 转发到群组，并删除私聊
+            try:
+                # 这里直接发送 msg.media，如果受保护会被阻止
+                
+                ret = await self.user_client.send_file(TARGET_GROUP_ID, msg.media, caption=str(doc_id))
+                # print(f"ret={ret}", flush=True)
+                if row and (row['access_hash'] is None or row['file_reference'] is None):
+                    print(f"【👦】补充座标 {ret.chat_id} {ret.id}", flush=True)
+                    sql = """
+                    UPDATE file_records 
+                    SET chat_id = %s, message_id = %s , access_hash = %s, file_reference = %s
+                    WHERE id = %s 
+                    """
+                    await MySQLPool.execute(sql, (ret.chat_id, ret.id, access_hash, file_reference, row['id']))
+                   
+                else:
+                    print(f"【👦】不存在，所以把 {doc_id} 发送到目标群组/機器人：{TARGET_GROUP_ID}", flush=True)
+                    # 插入或更新 placeholder 记录 (message_id 自动留空，由群组回调补全)
+                    await self.upsert_file_record({
+                        'chat_id'       : ret.chat_id,
+                        'message_id'    : ret.id,
+                        'doc_id'        : doc_id,
+                        'access_hash'   : access_hash,
+                        'file_reference': file_reference,
+                        'mime_type'     : mime_type,
+                        'file_type'     : file_type,
+                        'file_name'     : file_name,
+                        'file_size'     : file_size,
+                        'uploader_type' : 'user',
+                        'man_id'        : self.man_id
+                    })
+                    
+
+
+            except ChatForwardsRestrictedError:
+                print(f"🚫 跳过：该媒体来自受保护频道 msg.id = {msg.id}", flush=True)
+                return
+            except Exception as e:
+                if "The chat is restricted and cannot be used in that request" in str(e):
+                    print(f"PPMM-⚠️ 這個群應該炸了", flush=True)
+                    return  # ⚠️ 不处理，直接跳出
+                else:
+                    print(f"❌ 其他错误：{e} TARGET_GROUP_ID={TARGET_GROUP_ID}", flush=True)
+                return
+
+
+            print(f"【👦】-{doc_id}-已存在：doc_id={doc_id}，file_unique_id={row['file_unique_id']}，跳过转发", flush=True)
             # await event.delete()
             await msg.delete()
             print("【👦】")
             return
-
+        else:
+            print("【👦】万事俱备，跳过")
+            pass
 
         
 
-        # 转发到群组，并删除私聊
-        try:
-            # 这里直接发送 msg.media，如果受保护会被阻止
-            print(f"【👦】不存在，所以把 {doc_id} 发送到目标群组/機器人：{TARGET_GROUP_ID}", flush=True)
-            ret = await self.user_client.send_file(TARGET_GROUP_ID, msg.media, caption=str(doc_id))
-            # print(f"ret={ret}", flush=True)
-        except ChatForwardsRestrictedError:
-            print(f"🚫 跳过：该媒体来自受保护频道 msg.id = {msg.id}", flush=True)
-            return
-        except Exception as e:
-            if "The chat is restricted and cannot be used in that request" in str(e):
-                print(f"PPMM-⚠️ 這個群應該炸了", flush=True)
-                return  # ⚠️ 不处理，直接跳出
-            else:
-                print(f"❌ 其他错误：{e} TARGET_GROUP_ID={TARGET_GROUP_ID}", flush=True)
-            return
+        
 
-        # 插入或更新 placeholder 记录 (message_id 自动留空，由群组回调补全)
-        await self.upsert_file_record({
-            'chat_id'       : ret.chat_id,
-            'message_id'    : ret.id,
-            'doc_id'        : doc_id,
-            'access_hash'   : access_hash,
-            'file_reference': file_reference,
-            'mime_type'     : mime_type,
-            'file_type'     : file_type,
-            'file_name'     : file_name,
-            'file_size'     : file_size,
-            'uploader_type' : 'user',
-            'man_id'        : self.man_id
-        })
+
 
 
 
