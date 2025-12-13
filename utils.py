@@ -1260,7 +1260,7 @@ class MediaUtils:
                 SELECT * FROM file_records 
                 WHERE file_unique_id = %s AND bot_id = %s
                 '''
-            row = await MySQLPool.fetchone(sql, (metadata['file_unique_id'], metadata['bot_id']))
+            row = await MySQLPool.fetchone(sql, (metadata['file_unique_id'], self.bot_id))
 
             if row:
                 if row['chat_id'] != chat_id and row['message_id'] != message_id:
