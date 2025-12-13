@@ -38,6 +38,13 @@ async def keep_alive_ping():
             print(f"⚠️ Keep-alive ping failed: {e}")
         await asyncio.sleep(300)  # 每 5 分鐘 ping 一次
 
+async def on_startup(bot: Bot):
+    webhook_url = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
+    print(f"🔗 設定 Telegram webhook 為：{webhook_url}")
+    await bot.delete_webhook(drop_pending_updates=True)
+    await bot.set_webhook(webhook_url)
+    cold_start = False  # 启动完成
+
 
 # ================= 7. 初始化 Telethon 客户端 =================
 
@@ -150,7 +157,7 @@ async def main():
 
     if BOT_MODE == "webhook":
         asyncio.create_task(run_telethon())
-        dp.startup.register(media_utils.on_startup)
+        dp.startup.register(on_startup)
         print("🚀 啟動 Webhook 模式")
 
         app = web.Application()

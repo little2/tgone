@@ -469,12 +469,7 @@ class MediaUtils:
             return web.Response(text="⏳ Bot 正在唤醒，请稍候...", status=503)
         return web.Response(text="✅ Bot 正常运行", status=200)
 
-    async def on_startup(self, bot: Bot):
-        webhook_url = f"{self.webhook_host}{self.webhook_path}"
-        print(f"🔗 設定 Telegram webhook 為：{webhook_url}")
-        await bot.delete_webhook(drop_pending_updates=True)
-        await bot.set_webhook(webhook_url)
-        self.cold_start = False  # 启动完成
+
 
     
     # send_media_by_doc_id 函数 
