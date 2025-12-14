@@ -519,8 +519,9 @@ class MediaUtils:
             if not row: # if row = None
 
                 ext_row = await self.fetch_file_by_source_id(file_unique_id)
-                print(f"【3】扩展查询结果：{ext_row}",flush=True)
+                
                 if ext_row:
+                    print(f"【3】扩展查询结果：{ext_row}",flush=True)
                     # print(f"【send_media_by_file_unique_id】在 file_extension 中找到对应记录，尝试从 Bot 获取文件",flush=True)
                     # 如果在 file_extension 中找到对应记录，尝试从 Bot 获取文件
                     bot_row = await self.receive_file_from_bot(ext_row)
