@@ -508,7 +508,7 @@ class MediaUtils:
 
     # send_media_by_file_unique_id 函数
     async def send_media_by_file_unique_id(self,client, to_user_id, file_unique_id, client_type, msg_id):
-        
+        ext_row = []
         print(f"【🤖】【1】开始处理 file_unique_id={file_unique_id}，目标用户：{to_user_id}",flush=True)
         try:
 
