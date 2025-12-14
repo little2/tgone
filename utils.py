@@ -519,11 +519,13 @@ class MediaUtils:
             row = await MySQLPool.fetchone(sql, (file_unique_id,self.bot_id,))
             
             if not row: # if row = None
-                ext_row = await self.fetch_file_by_source_id(file_unique_id)
                 print(f"【🤖】【2-2】没有找到本地端的文档，需要扩展查询结果：{ext_row}",flush=True)
+                ext_row = await self.fetch_file_by_source_id(file_unique_id)
+                
                 if ext_row:
                     # print(f"【send_media_by_file_unique_id】在 file_extension 中找到对应记录，尝试从 Bot 获取文件",flush=True)
                     # 如果在 file_extension 中找到对应记录，尝试从 Bot 获取文件
+                    print(f"【🤖】【2-3】",flush=True)
                     bot_row = await self.receive_file_from_bot(ext_row)
                     
                     max_retries = 3
@@ -549,6 +551,7 @@ class MediaUtils:
                         # return await self.send_media_by_file_unique_id(client, to_user_id, file_unique_id, client_type, msg_id)
                         # pass
                 else:
+                    print(f"【🤖】【2-4】",flush=True)
                     # row['file_type']
                     text = f"未找到 file_unique_id={file_unique_id} 对应的文件记录。(194)"
                     if isinstance(client, Bot):
@@ -563,7 +566,7 @@ class MediaUtils:
                         await self.set_file_vaild_state(file_unique_id, vaild_state=4)                    
                     return
             else:
-                print(f"【🤖】【2】从本机可查询到",flush=True)
+                print(f"【🤖】【2-1】从本机可查询到",flush=True)
                 await self.set_file_vaild_state(file_unique_id, vaild_state=9)   
                 if row and row['doc_id'] is None:
                     print(f"【🤖】【3】发现 doc_id 为空，尝试发消息 {row} 给 {TARGET_GROUP_ID_FROM_BOT}",flush=True)
@@ -583,7 +586,7 @@ class MediaUtils:
             print(f"[194] Error: {e}")
             return
         
-        
+        print(f"【🤖】【5】开始传送",flush=True)
         if client_type == 'bot':
             # 机器人账号发送
             await self.send_media_via_bot(client, to_user_id, row, reply_to_message_id=msg_id)
