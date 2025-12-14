@@ -34,9 +34,11 @@ async def keep_alive_ping():
             async with aiohttp.ClientSession() as session:
                 async with session.get(url) as resp:
                     print(f"🌐 Keep-alive ping {url} status {resp.status}")
+                    await user_client.catch_up()
+                    user_client.iter_dialogs(limit=1)
         except Exception as e:
             print(f"⚠️ Keep-alive ping failed: {e}")
-        await asyncio.sleep(300)  # 每 5 分鐘 ping 一次
+        await asyncio.sleep(120)  # 每 5 分鐘 ping 一次
 
 async def on_startup(bot: Bot):
     webhook_url = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
