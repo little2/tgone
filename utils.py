@@ -497,7 +497,7 @@ class MediaUtils:
                     print(f"获取用户实体失败: {e}")
                     await client.send_message('me', f"无法获取用户实体: {to_user_id}")
             else:
-                await client.send_message(to_user_id, f"未找到 doc_id={doc_id} 对应的文件记录。(181)")
+                await client.send_message(to_user_id, f"未找到 doc_id={doc_id} 对应的文件记录。(500)")
             return
 
         if client_type == 'bot':
@@ -532,7 +532,7 @@ class MediaUtils:
                     delay = 2  # 每次重试的延迟时间（秒）
 
                     if not bot_row: # 传送失败
-                        print(f"263【4】从机器人获取文件失败，file_unique_id={file_unique_id}",flush=True)
+                        print(f"【🤖】【4】从机器人获取文件失败，file_unique_id={file_unique_id}",flush=True)
                         text = f"未找到 file_unique_id={file_unique_id} 对应的文件记录。(181)"
                         if isinstance(client, Bot):
                             await client.send_message(to_user_id, text, reply_to_message_id=msg_id)
@@ -846,16 +846,16 @@ class MediaUtils:
         print(f"【🤖】4️⃣【receive_file_from_bot】开始处理 file_unique_id={row['file_unique_id']}，bot_id={row['bot_id']}",flush=True)
         mybot = Bot(token=bot_token)
         try:
-            print(f"【🤖】4️⃣【receive_file_from_bot】准备让机器人{row['bot_id']}发送文件file_unique_id={row['file_unique_id']}给{self.man_id}",flush=True)
-            if row["file_type"] == "photo":
+            print(f"【🤖】4️⃣【receive_file_from_bot】准备让机器人{row['bot_id']}发送文件file_unique_id={row['file_unique_id']}给 【👦】{self.man_id}",flush=True)
+            if row["file_type"] == "photo" or row["file_type"] == "p":
                 # await mybot.send_photo(chat_id=7496113118, photo=row["file_id"])
                 retSend = await mybot.send_photo(chat_id=self.man_id, photo=row["file_id"])
-            elif row["file_type"] == "video":
+            elif row["file_type"] == "video" or row["file_type"] == "v":
                 retSend = await mybot.send_video(chat_id=self.man_id, video=row["file_id"])
 
-            elif row["file_type"] == "document":
+            elif row["file_type"] == "document" or row["file_type"] == "d":
                 retSend = await mybot.send_document(chat_id=self.man_id, document=row["file_id"])
-            elif row["file_type"] == "animation":
+            elif row["file_type"] == "animation" or row["file_type"] == "n":
                 retSend = await mybot.send_animation(chat_id=self.man_id, animation=row["file_id"])
 
             print(f"【🤖】4️⃣{row['file_unique_id']}【receive_file_from_bot】文件已发送到人型机器人，file_unique_id={row['file_unique_id']}",flush=True)
@@ -878,7 +878,7 @@ class MediaUtils:
             # 不要在所有异常里就发 /start；只在你需要唤醒对话时再做
             print(f"【🤖】4️⃣{row['file_unique_id']} ❌ 发送失败: {e}", flush=True)
         finally:
-            print(f"4️⃣{row['file_unique_id']} 正常结束")
+            print(f"4️⃣{row['file_unique_id']} 最终结束")
             await mybot.session.close()
             return retSend
              
