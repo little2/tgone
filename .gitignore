@@ -8,9 +8,11 @@ bk_24530779session_name.session
 *.session
 .game.env
 .schema
-__pycache__/utils.cpython-313.pyc
 25299903session_name.session.enc
 24530779session_name.session.enc
 .DS_Store
 md/ananbot.md
-__pycache__/us.cpython-312.pyc
+__pycache__/*.*
+__pycache__/config.cpython-313.pyc
+__pycache__/tgone_mysql.cpython-313.pyc
+__pycache__/tgone_mysql.cpython-313.pyc

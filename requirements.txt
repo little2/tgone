@@ -7,3 +7,5 @@ pymysql>=1.1.0
 
 # 环境变量加载
 python-dotenv>=1.0.1
+
+aiomysql>=0.1.1

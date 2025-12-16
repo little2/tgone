@@ -4,20 +4,21 @@ import asyncio
 
 from aiogram import types, Bot
 
-from aiogram.types import ContentType
+from aiogram.types import ContentType,Message
 
 import time
 from aiohttp import web
-from telethon.errors import ChatForwardsRestrictedError
+from telethon.errors import ChatForwardsRestrictedError,FileReferenceExpiredError
 from aiogram.exceptions import (
     TelegramBadRequest,
     TelegramForbiddenError, TelegramNotFound
 )
-from telethon.tl.types import InputDocument, DocumentAttributeVideo,DocumentAttributeAnimated
+from telethon.tl.types import InputDocument, DocumentAttributeVideo,DocumentAttributeAnimated,InputPhoto
 
-from tgone_mysql import MySQLPool
 
-from config import  TARGET_GROUP_ID
+from tgone_mysql import MySQLPool, DBIntegrityError, DBOperationalError
+
+from config import  TARGET_GROUP_ID, TARGET_GROUP_ID_FROM_BOT
 
 
 """
@@ -65,9 +66,6 @@ class MediaUtils:
         self.webhook_path = config.get("webhook_path")
         self.bot_mode = config.get("bot_mode", "polling")
 
-  
-
-
     async def set_file_vaild_state(self,file_unique_id: str, vaild_state: int = 1):
         sql = """
             UPDATE sora_content
@@ -89,9 +87,6 @@ class MediaUtils:
         self.bot_id = bot_info.id
         self.bot_username = bot_info.username
 
-
-
-
     def get_file_name(self, media):
         from telethon.tl.types import DocumentAttributeFilename
         for attr in getattr(media, 'attributes', []):
@@ -99,7 +94,7 @@ class MediaUtils:
                 return attr.file_name
         return None
 
-    def map_sora_file_type(self, file_type: str) -> str:
+    def map_sora_file_type(self, file_type: str, mode:str = 'short') -> str:
         """
         将媒体类型映射为 sora_content.file_type 所需的一位字母:
         - video    -> 'v'
@@ -109,18 +104,29 @@ class MediaUtils:
         其他类型（如 animation）若传进来，就先统一当作 'v' 处理，
         你也可以按需求改成 'a' 或直接 return None 跳过。
         """
-        mapping = {
-            "video": "v",
-            "photo": "p",
-            "document": "d",
-            "animation": "n",
-            "v": "v",
-            "p": "p",
-            "d": "d",
-            "n":"n"
-        }
+        if mode == 'short':
+            mapping = {
+                "video": "v",
+                "photo": "p",
+                "document": "d",
+                "animation": "n",
+                "v": "v",
+                "p": "p",
+                "d": "d",
+                "n":"n"
+            }
+        else:
+            mapping = {
+                "video": "video",
+                "photo": "photo",
+                "document": "document",
+                "animation": "animation",
+                "v": "video",
+                "p": "photo",
+                "d": "document",
+                "n":"animation"
+            }
         return mapping.get(file_type)
-
 
     async def upsert_sora_content(self, data: dict):
         """
@@ -137,9 +143,10 @@ class MediaUtils:
                 raise ValueError("upsert_sora_content: data 需要 source_id 或 file_unique_id")
 
         if "file_type" in data:
-            file_type = data.get("file_type")
-            if file_type:
-                data["file_type"] = self.map_sora_file_type(file_type)
+            data["file_type"] = self.map_sora_file_type(data["file_type"],'short')
+
+        data['valid_state'] = 9  # 标记为有效
+        data['stage'] = 'pending'  # 标记为有效
 
         allowed_cols = {
             "source_id",
@@ -187,7 +194,6 @@ class MediaUtils:
         )
         return row["id"] if row else None
 
-
     async def upsert_file_record(self, fields: dict):
         """
         fields: dict, 键是列名, 值是要写入的内容。
@@ -195,7 +201,17 @@ class MediaUtils:
         """
         if not fields:
             return
-        cols = list(fields.keys())
+
+        allowed = {
+            "file_id","file_unique_id","file_type","mime_type","file_size","file_name","uploader_type","created_at","updated_at","man_id","bot_id","chat_id", "message_id", "doc_id","id","doc_id","access_hash", "file_reference"
+        }
+
+        safe_fields = {k: v for k, v in fields.items() if k in allowed}
+
+        if not safe_fields:
+            return       
+
+        cols = list(safe_fields.keys())
         placeholders = ["%s"] * len(cols)
         update_clauses = [f"{col}=VALUES({col})" for col in cols]
         sql = f"""
@@ -203,9 +219,17 @@ class MediaUtils:
             VALUES ({','.join(placeholders)})
             ON DUPLICATE KEY UPDATE {','.join(update_clauses)}
         """
-        values = list(fields.values())
-        await MySQLPool.execute(sql, values)
+        values = list(safe_fields.values())
+       
+  
+        try:
+            await MySQLPool.execute(sql, values, raise_on_error=True)
 
+        except DBIntegrityError as e:                
+            raise
+        except DBOperationalError as e:
+            # 例如断线/超时等（具体是否会被 reconnect 吃掉取决于你的装饰器逻辑）
+            raise
 
     async def upsert_file_extension(self, data: dict):
         """
@@ -230,8 +254,23 @@ class MediaUtils:
         if "user_id" not in data:
             data["user_id"] = None
 
+        if "file_type" in data:
+            data["file_type"] = self.map_sora_file_type(data["file_type"],'full')
+
+
+        allowed = {
+            "id","file_type","file_id","file_unique_id","bot","user_id","create_time"
+        }
+
+        safe_fields = {k: v for k, v in data.items() if k in allowed}
+
+        if not safe_fields:
+            return       
+
+
+
         # 3) 生成 UPSERT SQL
-        cols = list(data.keys())
+        cols = list(safe_fields.keys())
         placeholders = ["%s"] * len(cols)
 
         # create_time 只在第一次插入写入，不在 update 里覆盖
@@ -252,9 +291,8 @@ class MediaUtils:
                 {",".join(update_cols)}
         """
 
-        params = list(data.values())
+        params = list(safe_fields.values())
         return await MySQLPool.execute(sql, params)
-
 
     async def upsert_media_content(self, data: dict):
         """
@@ -281,6 +319,15 @@ class MediaUtils:
             return None
 
         file_type = data.get("file_type")
+
+        if file_type == 'v':
+            file_type = 'video'
+        elif file_type == 'p':
+            file_type = 'photo'
+        elif file_type == 'd':
+            file_type = 'document'
+        elif file_type == 'n':
+            file_type = 'animation'
 
         # 不同类型对应的表名与允许写入的字段
         table_map = {
@@ -398,15 +445,15 @@ class MediaUtils:
         params = [data[col] for col in cols]
         return await MySQLPool.execute(sql, params)
 
-
     async def upsert_media(self, data: dict):
         sora_id = await self.upsert_sora_content(data)
+        data['caption'] = None
+        data['kc_id']= sora_id
+        data['kc_status']= 'pending'
         await self.upsert_media_content(data)
         await self.upsert_file_extension(data)
         return sora_id
-        
-
-
+    
     async def heartbeat(self):
         while True:
             print("💓 Alive (🤖 polling still running)")
@@ -417,20 +464,13 @@ class MediaUtils:
                 print(f"⚠️ MySQL 保活失败：{e}")
             await asyncio.sleep(600)
 
-
-
     async def health(self, request):
         uptime = time.time() - self.lz_var_start_time
         if self.cold_start or uptime < 10:
             return web.Response(text="⏳ Bot 正在唤醒，请稍候...", status=503)
         return web.Response(text="✅ Bot 正常运行", status=200)
 
-    async def on_startup(self, bot: Bot):
-        webhook_url = f"{self.webhook_host}{self.webhook_path}"
-        print(f"🔗 設定 Telegram webhook 為：{webhook_url}")
-        await bot.delete_webhook(drop_pending_updates=True)
-        await bot.set_webhook(webhook_url)
-        self.cold_start = False  # 启动完成
+
 
     
     # send_media_by_doc_id 函数 
@@ -440,9 +480,9 @@ class MediaUtils:
         try:
             sql="""
                 SELECT chat_id, message_id, doc_id, access_hash, file_reference, file_id, file_unique_id,file_type 
-                FROM file_records WHERE doc_id = %s
+                FROM file_records WHERE doc_id = %s AND man_id = %s
             """
-            row = await MySQLPool.fetchone(sql, (doc_id,))
+            row = await MySQLPool.fetchone(sql, (doc_id,self.man_id))
         except Exception as e:
             print(f"121 Error: {e}")
             return
@@ -457,7 +497,7 @@ class MediaUtils:
                     print(f"获取用户实体失败: {e}")
                     await client.send_message('me', f"无法获取用户实体: {to_user_id}")
             else:
-                await client.send_message(to_user_id, f"未找到 doc_id={doc_id} 对应的文件记录。(181)")
+                await client.send_message(to_user_id, f"未找到 doc_id={doc_id} 对应的文件记录。(500)")
             return
 
         if client_type == 'bot':
@@ -468,44 +508,37 @@ class MediaUtils:
 
     # send_media_by_file_unique_id 函数
     async def send_media_by_file_unique_id(self,client, to_user_id, file_unique_id, client_type, msg_id):
-        
-        print(f"【1】开始处理 file_unique_id={file_unique_id}，目标用户：{to_user_id}",flush=True)
+        ext_row = []
+        print(f"【🤖】【1】开始处理 file_unique_id={file_unique_id}，目标用户：{to_user_id}",flush=True)
         try:
-            if client_type == 'bot':
-                # 机器人账号发送
 
-                sql = """
-                    SELECT chat_id, message_id, doc_id, access_hash, file_reference, file_id, file_unique_id,file_type 
-                    FROM file_records WHERE file_unique_id = %s AND bot_id = %s
+            sql = """
+                SELECT chat_id, message_id, doc_id, access_hash, file_reference, file_id, file_unique_id,file_type 
+                FROM file_records WHERE file_unique_id = %s AND bot_id = %s
                 """
-                row = await MySQLPool.fetchone(sql, (file_unique_id,self.bot_id,))
-            else:
-                
-     
-                sql = """
-                    SELECT chat_id, message_id, doc_id, access_hash, file_reference, file_id, file_unique_id,file_type 
-                    FROM file_records WHERE file_unique_id = %s AND man_id = %s
-                    """
-                row = await MySQLPool.fetchone(sql, (file_unique_id,self.man_id,))
+            row = await MySQLPool.fetchone(sql, (file_unique_id,self.bot_id,))
             
-          
-            print(f"【2】本机查询纪录: 结果：{row}",flush=True)
-
             if not row: # if row = None
-
+                print(f"【🤖】【2-2】没有找到本地端的文档，需要扩展查询结果：{ext_row}",flush=True)
                 ext_row = await self.fetch_file_by_source_id(file_unique_id)
-                print(f"【3】扩展查询结果：{ext_row}",flush=True)
+                
                 if ext_row:
                     # print(f"【send_media_by_file_unique_id】在 file_extension 中找到对应记录，尝试从 Bot 获取文件",flush=True)
                     # 如果在 file_extension 中找到对应记录，尝试从 Bot 获取文件
+                    print(f"【🤖】【2-3】",flush=True)
                     bot_row = await self.receive_file_from_bot(ext_row)
                     
                     max_retries = 3
                     delay = 2  # 每次重试的延迟时间（秒）
 
                     if not bot_row: # 传送失败
-                        print(f"263【4】从机器人获取文件失败，file_unique_id={file_unique_id}",flush=True)
-                        await client.send_message(to_user_id, f"未找到 file_unique_id={file_unique_id} 对应的文件。(182)",reply_to_message_id=msg_id)
+                        print(f"【🤖】【4】从机器人获取文件失败，file_unique_id={file_unique_id}",flush=True)
+                        text = f"未找到 file_unique_id={file_unique_id} 对应的文件记录。(181)"
+                        if isinstance(client, Bot):
+                            await client.send_message(to_user_id, text, reply_to_message_id=msg_id)
+                        else:
+                            await client.send_message(to_user_id, text, reply_to=msg_id)
+                        
                         return
                     else:
                         print(f"【4】其他机器人已将资源传给人型机器人 {file_unique_id}",flush=True)
@@ -518,6 +551,7 @@ class MediaUtils:
                         # return await self.send_media_by_file_unique_id(client, to_user_id, file_unique_id, client_type, msg_id)
                         # pass
                 else:
+                    print(f"【🤖】【2-4】",flush=True)
                     # row['file_type']
                     text = f"未找到 file_unique_id={file_unique_id} 对应的文件记录。(194)"
                     if isinstance(client, Bot):
@@ -532,7 +566,19 @@ class MediaUtils:
                         await self.set_file_vaild_state(file_unique_id, vaild_state=4)                    
                     return
             else:
-                await self.set_file_vaild_state(file_unique_id, vaild_state=9)     
+                print(f"【🤖】【2-1】从本机可查询到",flush=True)
+                await self.set_file_vaild_state(file_unique_id, vaild_state=9)   
+                if row and row['doc_id'] is None:
+                    print(f"【🤖】【3】发现 doc_id 为空，尝试发消息 {row} 给 {TARGET_GROUP_ID_FROM_BOT}",flush=True)
+                    file_metadata = {
+                        'file_type': row['file_type'],
+                        'file_id': row['file_id'],
+                        'file_unique_id': row['file_unique_id']
+                    }
+                    
+                    await self.bot_send_file(file_metadata, TARGET_GROUP_ID_FROM_BOT)
+                   
+                    
                
                 
         
@@ -540,7 +586,7 @@ class MediaUtils:
             print(f"[194] Error: {e}")
             return
         
-        print(f"【send_media_by_file_unique_id】查询结果：{client_type}",flush=True)
+        print(f"【🤖】【5】开始传送",flush=True)
         if client_type == 'bot':
             # 机器人账号发送
             await self.send_media_via_bot(client, to_user_id, row, reply_to_message_id=msg_id)
@@ -580,54 +626,83 @@ class MediaUtils:
         file_name      = self.get_file_name(media)
 
         return doc_id, access_hash, file_reference, mime_type, file_size, file_name, file_type
-       
-    async def extract_video_metadata_from_aiogram(self,message):
-        caption = message.caption or None  # ✅ caption 永远从 Message 取
-        if message.photo:
-            largest = message.photo[-1]
-            file_id = largest.file_id
-            file_unique_id = largest.file_unique_id
-            mime_type = 'image/jpeg'
-            file_type = 'photo'
-            file_size = largest.file_size
-            file_name = None
-            
-            # 用 Bot API 发到目标群组
-      
 
-        elif message.document:
-            file_id = message.document.file_id
-            
-            file_unique_id = message.document.file_unique_id
-            mime_type = message.document.mime_type
-            file_type = 'document'
-            file_size = message.document.file_size
-            file_name = message.document.file_name
-       
-        elif message.animation:
-            a = message.animation
-            
-            file_id = a.file_id
-            file_unique_id = a.file_unique_id
-            mime_type = a.mime_type or "video/mp4"
-            file_type = "animation"
-            file_size = a.file_size
-            file_name = a.file_name
-        elif message.video:
-            v = message.video
-           
-            file_id = v.file_id
-            file_unique_id = v.file_unique_id
-            mime_type = v.mime_type or "video/mp4"
-            file_type = "video"
-            file_size = v.file_size
-            file_name = getattr(v, "file_name", None)
-        else:
-            raise ValueError("message 不包含可识别的媒体: photo/document/video/animation")
 
-       
-        
-        return file_id, file_unique_id, mime_type, file_type, file_size, file_name, caption
+
+
+    async def build_media_dict_from_telethon(self, msg):
+        """
+        dict 版 extract_video_metadata_from_telethon
+        key 与原 tuple 输出语义完全一致：
+        doc_id, access_hash, file_reference,
+        mime_type, file_size, file_name, file_type
+        """
+        caption = (getattr(msg, "message", None) or getattr(msg, "raw_text", None) or None)
+        # ================== Document / Video ==================
+        if msg.document:
+            media = msg.document
+
+            # 判定是否为 video（document + video attribute）
+            is_video = any(
+                isinstance(attr, DocumentAttributeVideo)
+                for attr in (media.attributes or [])
+            )
+
+            file_type = "video" if is_video else "document"
+
+            return {
+                "doc_id": media.id,
+                "access_hash": media.access_hash,
+                "file_reference": media.file_reference.hex(),
+                "mime_type": media.mime_type,
+                "file_size": media.size,
+                "file_name": self.get_file_name(media),
+                "file_type": file_type,
+                "caption": caption,
+            }
+
+        # ================== Video（理论上不会先于 document，但保留语义） ==================
+        if msg.video:
+            media = msg.video
+
+            return {
+                "doc_id": media.id,
+                "access_hash": media.access_hash,
+                "file_reference": media.file_reference.hex(),
+                "mime_type": media.mime_type or "video/mp4",
+                "file_size": media.size,
+                "file_name": self.get_file_name(media),
+                "file_type": "video",
+                "caption": caption,
+            }
+
+        # ================== Photo（结构与 document 不同，必须单独处理） ==================
+        if msg.photo:
+            p = msg.photo  # telethon.tl.types.Photo，本体才有 access_hash / file_reference
+            
+            # file_size：从 sizes 里取最大那个 size
+            max_size = None
+            sizes = getattr(p, "sizes", None) or []
+            for s in sizes:
+                sz = getattr(s, "size", None)
+                if isinstance(sz, int):
+                    max_size = sz if (max_size is None or sz > max_size) else max_size
+
+            return {
+                "doc_id": p.id,
+                "access_hash": getattr(p, "access_hash", None),
+                "file_reference": (p.file_reference.hex() if getattr(p, "file_reference", None) else None),
+                "mime_type": "image/jpeg",
+                "file_size": max_size,
+                "file_name": None,
+                "file_type": "photo",
+                "caption": caption,
+            }
+
+        raise ValueError("message 不包含可识别的媒体: photo / document / video")
+
+
+
 
     async def build_media_dict_from_aiogram(self, message):
         """
@@ -768,28 +843,28 @@ class MediaUtils:
         bot_token = f"{row['bot_id']}:{row['bot_token']}"
     
         from aiogram import Bot
-        print(f"4️⃣【receive_file_from_bot】开始处理 file_unique_id={row['file_unique_id']}，bot_id={row['bot_id']}",flush=True)
+        print(f"【🤖】4️⃣【receive_file_from_bot】开始处理 file_unique_id={row['file_unique_id']}，bot_id={row['bot_id']}",flush=True)
         mybot = Bot(token=bot_token)
         try:
-            print(f"4️⃣【receive_file_from_bot】准备让机器人{row['bot_id']}发送文件file_unique_id={row['file_unique_id']}给{self.man_id}",flush=True)
-            if row["file_type"] == "photo":
+            print(f"【🤖】4️⃣【receive_file_from_bot】准备让机器人{row['bot_id']}发送文件file_unique_id={row['file_unique_id']}给 【👦】{self.man_id}",flush=True)
+            if row["file_type"] == "photo" or row["file_type"] == "p":
                 # await mybot.send_photo(chat_id=7496113118, photo=row["file_id"])
                 retSend = await mybot.send_photo(chat_id=self.man_id, photo=row["file_id"])
-            elif row["file_type"] == "video":
+            elif row["file_type"] == "video" or row["file_type"] == "v":
                 retSend = await mybot.send_video(chat_id=self.man_id, video=row["file_id"])
 
-            elif row["file_type"] == "document":
+            elif row["file_type"] == "document" or row["file_type"] == "d":
                 retSend = await mybot.send_document(chat_id=self.man_id, document=row["file_id"])
-            elif row["file_type"] == "animation":
+            elif row["file_type"] == "animation" or row["file_type"] == "n":
                 retSend = await mybot.send_animation(chat_id=self.man_id, animation=row["file_id"])
 
-            print(f"4️⃣{row['file_unique_id']}【receive_file_from_bot】文件已发送到人型机器人，file_unique_id={row['file_unique_id']}",flush=True)
-            print(f"\n4️⃣retSend=>{retSend}\n",flush=True)
+            print(f"【🤖】4️⃣{row['file_unique_id']}【receive_file_from_bot】文件已发送到人型机器人，file_unique_id={row['file_unique_id']}",flush=True)
+            # print(f"\n【🤖】4️⃣retSend=>{retSend}\n",flush=True)
         except TelegramForbiddenError as e:
         # 私聊未 /start、被拉黑、群权限不足等
-            print(f"4️⃣{row['file_unique_id']} 发送被拒绝（Forbidden）: {e}", flush=True)
+            print(f"【🤖】4️⃣{row['file_unique_id']} 发送被拒绝（Forbidden）: {e}", flush=True)
         except TelegramNotFound:
-            print(f"4️⃣{row['file_unique_id']} chat not found: {self.man_id}. 可能原因：ID 错、bot 未入群、或用户未对该 bot /start", flush=True)
+            print(f"【🤖】4️⃣{row['file_unique_id']} chat not found: {self.man_id}. 可能原因：ID 错、bot 未入群、或用户未对该 bot /start", flush=True)
             # 机器人根本不认识这个 chat（不在群里/用户未 start/ID 错）
             await self.user_client.send_message(row["bot"], "/start")
             await self.user_client.send_message(row["bot"], "[~bot~]")
@@ -798,17 +873,17 @@ class MediaUtils:
             # 这里能准确看到 “chat not found”“message thread not found”等具体文本
             await self.user_client.send_message(row["bot"], "/start")
             await self.user_client.send_message(row["bot"], "[~bot~]")           
-            print(f"4️⃣{row['file_unique_id']} 发送失败（BadRequest）: {e}", flush=True)
+            print(f"【🤖】4️⃣{row['file_unique_id']} 发送失败（BadRequest）: {e}", flush=True)
         except Exception as e:
             # 不要在所有异常里就发 /start；只在你需要唤醒对话时再做
-            print(f"4️⃣{row['file_unique_id']} ❌ 发送失败: {e}", flush=True)
+            print(f"【🤖】4️⃣{row['file_unique_id']} ❌ 发送失败: {e}", flush=True)
         finally:
-            print(f"4️⃣{row['file_unique_id']} 正常结束")
+            print(f"4️⃣{row['file_unique_id']} 最终结束")
             await mybot.session.close()
             return retSend
              
     # send_media_via_man 函数 
-    async def send_media_via_man(self, client, to_user_id, row, reply_to_message_id=None):
+    async def send_media_via_man_old(self, client, to_user_id, row, reply_to_message_id=None):
         # to_user_entity = await client.get_input_entity(to_user_id)
         
 
@@ -838,7 +913,7 @@ class MediaUtils:
             file_reference=file_reference
         )
         try:
-            print(f"准备发送文件：{input_doc.id}, {input_doc.access_hash}, {input_doc.file_reference.hex()}",flush=True)
+            print(f"【👦】准备发送文件：{input_doc.id}, {input_doc.access_hash}, {input_doc.file_reference.hex()}",flush=True)
             await client.send_file(to_user_id, input_doc, reply_to=reply_to_message_id)
         except Exception:
             # file_reference 过期时，重新从历史消息拉取
@@ -846,7 +921,12 @@ class MediaUtils:
                 msg = await client.get_messages(chat_id, ids=message_id)
                 if not msg:
                     print(f"【👦】历史消息中未找到对应消息，可能已被删除。(286)",flush=True)
-                    
+                    sql = """
+                        UPDATE file_records SET  access_hash = NULL, file_reference = NULL, doc_id = NULL
+                        WHERE doc_id = %s and man_id = %s
+                    """
+                    await MySQLPool.execute(sql, (row["doc_id"], self.man_id))
+
                     row = {'file_type': file_type,
                            'file_id': file_id}
                     # 将媒体以bot再次寄送给人型机器人，以重新获取 file_reference
@@ -876,13 +956,115 @@ class MediaUtils:
                         return
                     
                     
-                    print(f"重新获取文件引用成功，准备发送。",flush=True)
+                    print(f"【👦】重新获取文件引用成功，准备发送。",flush=True)
             
 
                     await client.send_file(to_user_id, new_input, reply_to=reply_to_message_id)
             except Exception as e:
-                print(f"发送文件时出错：{e}",flush=True)
-                await client.send_message(to_user_id, f"发送文件时出错：{e}")
+                print(f"【👦】发送文件时出错：{e}",flush=True)
+                await client.send_message(to_user_id, f"【👦】发送文件时出错：{e}")
+
+    async def send_media_via_man(self, client, to_user_id, row, reply_to_message_id=None):
+        chat_id            = row.get("chat_id")
+        message_id         = row.get("message_id")
+        doc_id             = row.get("doc_id")
+        access_hash        = row.get("access_hash")
+        file_reference_hex = row.get("file_reference")
+        file_type          = row.get("file_type")
+        file_id            = row.get("file_id")
+        file_unique_id     = row.get("file_unique_id")
+
+        def _has_ref_fields() -> bool:
+            return bool(doc_id) and bool(access_hash) and bool(file_reference_hex)
+
+        async def _send_from_history():
+            msg = await client.get_messages(chat_id, ids=message_id)
+            if not msg:
+                raise RuntimeError("history message not found (maybe deleted)")
+            media = msg.document or msg.photo or msg.video
+            if not media:
+                raise RuntimeError("history message has no media")
+            await client.send_file(to_user_id, media, reply_to=reply_to_message_id)
+
+        async def _refresh_by_bot_and_retry():
+            """
+            第三兜底：历史消息没了 & 引用过期时，用 bot 的 file_id 重新投喂给 man，
+            让系统获得新的 doc_id/access_hash/file_reference，再重试发送。
+            """
+            if not (file_id and file_type):
+                raise RuntimeError("no file_id/file_type to refresh by bot")
+
+            sql = """
+                UPDATE file_records SET  access_hash = NULL, file_reference = NULL, doc_id = NULL
+                WHERE file_unique_id = %s and man_id = %s
+            """
+            await MySQLPool.execute(sql, (file_unique_id, self.man_id))
+
+            # 1) 先让 bot 发给 man（你旧版就是这么做的）
+            await self.send_media_via_bot(self.bot_client, self.man_id, {
+                "file_type": file_type,
+                "file_id": file_id,
+            })
+
+            # 2) 关键：此时需要依赖你群组/私聊的回调把新的 ref 写回 file_records
+            #    这里给一个简单轮询重查（最多等 3 秒）
+            for _ in range(6):
+                await asyncio.sleep(0.5)
+                new_row = await MySQLPool.fetchone(
+                    """
+                    SELECT chat_id, message_id, doc_id, access_hash, file_reference, file_id, file_unique_id, file_type
+                    FROM file_records
+                    WHERE file_unique_id=%s AND man_id=%s
+                    ORDER BY id DESC
+                    LIMIT 1
+                    """,
+                    (file_unique_id, self.man_id),
+                )
+                if new_row and new_row.get("file_reference") and new_row.get("doc_id"):
+                    # 用刷新后的 row 再走一次 send_media_via_man（递归一次即可）
+                    return await self.send_media_via_man(client, to_user_id, new_row, reply_to_message_id)
+
+            raise RuntimeError("bot refresh sent, but file_records not updated in time")
+
+        try:
+            # 优先走历史消息（最稳：可自动刷新引用）
+            await _send_from_history()
+            return
+
+        except Exception:
+            # 历史消息拿不到，再尝试 DB ref 直发
+            pass
+
+        try:
+            if file_type == "photo":
+                if not _has_ref_fields():
+                    return await _refresh_by_bot_and_retry()
+                file_reference = bytes.fromhex(file_reference_hex)
+                input_photo = InputPhoto(id=int(doc_id), access_hash=int(access_hash), file_reference=file_reference)
+                await client.send_file(to_user_id, input_photo, reply_to=reply_to_message_id)
+                return
+
+            if file_type in ("document", "video"):
+                if not _has_ref_fields():
+                    return await _refresh_by_bot_and_retry()
+                file_reference = bytes.fromhex(file_reference_hex)
+                input_doc = InputDocument(id=int(doc_id), access_hash=int(access_hash), file_reference=file_reference)
+                await client.send_file(to_user_id, input_doc, reply_to=reply_to_message_id)
+                return
+
+            # 其它类型统一走 bot 刷新
+            return await _refresh_by_bot_and_retry()
+
+        except FileReferenceExpiredError:
+            # 引用过期：直接走 bot 刷新（不要再回拉历史了，历史前面已经失败过）
+            return await _refresh_by_bot_and_retry()
+
+        except Exception as e:
+            # 其它异常：最后也尝试 bot 刷新一次
+            try:
+                return await _refresh_by_bot_and_retry()
+            except Exception as e2:
+                raise RuntimeError(f"send_media_via_man failed: {e} | refresh fallback failed: {e2}") from e2
 
     # send_media_via_bot 函数
     async def send_media_via_bot(self, bot_client, to_user_id, row, reply_to_message_id=None):
@@ -909,6 +1091,8 @@ class MediaUtils:
             elif file_type == "animation":
                 # 动图
                 await bot_client.send_animation(to_user_id, file_id, reply_to_message_id=reply_to_message_id)
+            
+            print(f"【🤖】文件已发送到 {to_user_id}，file_id={file_id}",flush=True)
         except Exception as e:
             await bot_client.send_message(to_user_id, f"⚠️ 发送文件失败：{e}")
     
@@ -978,330 +1162,209 @@ class MediaUtils:
             
             await message.delete()
 
-# ================= BOT TEXT Private. 私聊 Message 媒体处理：Aiogram：BOT账号 =================
+# ================= BOT Media Private. 私聊 Message 媒体处理：Aiogram：BOT账号 =================
     async def aiogram_handle_private_media(self, message: types.Message):
-        
+        doc_id= None
+
         # 若不是私信 且 不包括媒體，則跳過
         if message.chat.type != "private" or message.content_type not in {
             ContentType.PHOTO, ContentType.DOCUMENT, ContentType.VIDEO, ContentType.ANIMATION
         }:
             return
 
-
-
         print(f"【🤖】收到私聊媒体：{message.content_type}，来自 user_id = {message.from_user.id}",flush=True)
         # 只处理“私聊里发来的媒体”
 
-        
 
-        file_id, file_unique_id, mime_type, file_type, file_size, file_name, caption = await self.extract_video_metadata_from_aiogram(message)
+        metadata = await self.build_media_dict_from_aiogram(message)
+        file_unique_id = metadata['file_unique_id']
+        caption = metadata['caption']
 
-        
 
-        # ⬇️ 检查是否對應的是否已存在  (doc_id IS NOT NULL AND bot_id, chat_id, file_unique_id) )
-        if await self.check_file_exists_by_unique_id(file_unique_id, TARGET_GROUP_ID):
-            print(f"【🤖】已存在：{file_unique_id}，跳过转发",flush=True)
+        if message.from_user.id == self.man_id:
+            doc_id = int(caption)
+            
+        if doc_id:
+            sql = """
+                SELECT * FROM file_records WHERE doc_id=%s AND man_id=%s
+                """
+            record =  await MySQLPool.fetchone(sql, (doc_id, self.man_id))
+            print(f"【🤖】通过 doc_id={doc_id} 查询到的记录", flush=True)
 
+        if doc_id is None or record is None:
+            sql = """
+                SELECT * FROM file_records WHERE file_unique_id=%s AND bot_id=%s
+                """
+            record =  await MySQLPool.fetchone(sql, (file_unique_id, self.bot_id))
+            print(f"【🤖】通过 file_unique_id={file_unique_id} 查询到的记录", flush=True)
+
+        if record:
+             if record['doc_id'] is not None and record['file_unique_id'] is not None:
+                print(f"【🤖】已存在：doc_id={doc_id}，file_unique_id={record['file_unique_id']}，跳过转发", flush=True)
+                return   
+             else:
+                print(f"【🤖】记录存在但缺少 doc_id {record['doc_id']} 或 file_unique_id ( {record['file_unique_id']})，继续处理", flush=True)   
         else:
-            print(f"【🤖】这个不存在最新的库中(可能是旧库)，{TARGET_GROUP_ID} {self.bot_id} | {message.from_user.id} {self.man_id}",flush=True)
-            if TARGET_GROUP_ID == self.bot_id and message.from_user.id == self.man_id and caption is not None:
-                print(f"【🤖】目前机器人仓库模式",flush=True)
-                sql = "DELETE FROM file_records WHERE file_unique_id=%s AND doc_id!=%s"
-                await MySQLPool.execute(sql, (file_unique_id, caption))
+            print(f"【🤖】这个doc_id={doc_id}:file_unique_id={file_unique_id} 不存在最新的库中",flush=True)     
 
-                
-                await self.upsert_file_record({
-                    'doc_id'        : caption,    
-                    'mime_type'     : mime_type,
-                    'file_type'     : file_type,
-                    'file_name'     : file_name,
-                    'file_size'     : file_size,
-                    'uploader_type' : 'bot',
-                    'bot_id'        : self.bot_id,
-                    'file_unique_id': file_unique_id,
-                    'file_id'       : file_id
-                })
+        if not record or (record and record['doc_id'] is None):
+            print(f"【🤖】发送给 {TARGET_GROUP_ID_FROM_BOT} 以获取 doc_id ")
+            file_metadata = await self.build_media_dict_from_aiogram(message)
+            metadata =await self.bot_send_file(file_metadata, target_group_id = TARGET_GROUP_ID_FROM_BOT)
+            metadata['bot_id'] = self.bot_id
 
-                # '''
-                # 旧库搬运模式
-                # 1. 先查询旧库有没有这个文件记录 (bot_id,file_unique_id)
-                # 2. 有的话，按这个id更新
-                #     a. 只更新 chat_id, message_id
-                #     b. 不同的话，插入一条新记录
-                # 3. 没有的话，正常发到目标群组
-                # '''
+            #删除 metadata 中的 chat_id 和 message_id，避免插入 file_records 时冲突
+            if TARGET_GROUP_ID_FROM_BOT != TARGET_GROUP_ID:
+                if 'chat_id' in metadata:
+                    del metadata['chat_id']
+                if 'message_id' in metadata:
+                    del metadata['message_id']
+        else:
+            metadata = await self.build_media_dict_from_aiogram(message)
+            metadata['bot_id'] = self.bot_id
 
+        if record and record['id'] is not None:
+            metadata['id'] = record['id']
 
+        try:
+            await self.upsert_media(metadata)
+            await self.upsert_file_record(metadata)
+            
+        except Exception as e:
+            code = e.args[0] if e.args else None
+            msg = e.args[1] if len(e.args) > 1 else str(e)
 
-                # print(f"【🤖】目前机器人仓库模式",flush=True)
-                # sql = """
-                #     SELECT * 
-                #     FROM file_records 
-                #     WHERE man_id = %s
-                #       AND chat_id = %s
-                #       AND file_size = %s
-                #       AND mime_type = %s
-                #       AND file_name = %s
-                #     LIMIT 1
-                
-                # """
-                # row = await MySQLPool.fetchone(sql, (self.man_id, TARGET_GROUP_ID, file_size, mime_type, file_name))
-                # if row:  
-                #     print(f"【🤖】找到旧库记录，准备搬运：{row}",flush=True)
-                #     if row['file_unique_id'] == file_unique_id:
-                #         print(f"【🤖】这个存在旧库中，搬到新库并更新座标，正在更新座标 {message.chat.id} {message.message_id}")
-                #         sql = "Update file_records Set chat_id=%s and message_id=%s Where id=%s"
-                #         await MySQLPool.execute(sql, (message.chat.id, message.message_id, row['id']))
-                       
-                #     else:
-                #         print(f"【🤖】这个存在旧库中，搬到新库，正在更新中 {file_unique_id} {row['file_unique_id']}")
-                #         await self.upsert_file_record({
-                #             'id'            : row['id'],    
-                #             'chat_id'       : message.chat.id,
-                #             'message_id'    : message.message_id,
-                #             'mime_type'     : mime_type,
-                #             'file_type'     : file_type,
-                #             'file_name'     : file_name,
-                #             'file_size'     : file_size,
-                #             'uploader_type' : 'bot',
-                #             'bot_id'        : self.bot_id,
-                #             'file_unique_id': file_unique_id,
-                #             'file_id'       : file_id
-                #         })
-                # else:
-                #     print(f"【🤖】这个不存在旧库中，准备发到目标群组 {TARGET_GROUP_ID}")
-            else:
-
-                ret = None
-                # ⬇️ 发到群组
-                if message.photo:
-                    ret = await self.bot_client.send_photo(TARGET_GROUP_ID, file_id)
-                elif message.document:
-                    ret = await self.bot_client.send_document(TARGET_GROUP_ID, file_id)
-                elif message.animation:
-                    ret = await self.bot_client.send_animation(TARGET_GROUP_ID, file_id)
-                else:
-                    ret = await self.bot_client.send_video(TARGET_GROUP_ID, file_id)
-
-                if ret.photo:
-                    largest = ret.photo[-1]
-                    file_unique_id = largest.file_unique_id
-                    file_id = largest.file_id
-                    file_type = 'photo'
-                    mime_type = 'image/jpeg'
-                    file_size = largest.file_size
-                    file_name = None
-
-                elif ret.document:
-                    file_unique_id = ret.document.file_unique_id
-                    file_id = ret.document.file_id
-                    file_type = 'document'
-                    mime_type = ret.document.mime_type
-                    file_size = ret.document.file_size
-                    file_name = ret.document.file_name
-                elif ret.animation:
-                    file_unique_id = ret.animation.file_unique_id
-                    file_id = ret.animation.file_id
-                    file_type = 'animation'
-                    mime_type = ret.animation.mime_type
-                    file_size = ret.animation.file_size
-                    file_name = ret.animation.file_name
-                else:  # msg.video
-                    file_unique_id = ret.video.file_unique_id
-                    file_id = ret.video.file_id
-                    file_type = 'video'
-                    mime_type = ret.video.mime_type or 'video/mp4'
-                    file_size = ret.video.file_size
-                    file_name = getattr(ret.video, 'file_name', None)
-
-                chat_id = ret.chat.id
-                message_id = ret.message_id
-                await self.upsert_file_record({
-                        'file_unique_id': file_unique_id,
-                        'file_id'       : file_id,
-                        'file_type'     : file_type,
-                        'mime_type'     : mime_type,
-                        'file_name'     : file_name,
-                        'file_size'     : file_size,
-                        'uploader_type' : 'bot',
-                        'chat_id'       : chat_id,
-                        'message_id'    : message_id,
-                        'bot_id'       : self.bot_id
-                    })
+            if code == 1062:
+                # Duplicate entry
+                # msg 里也有 key 名：for key 'uniq_file_uid'
+                if 'uniq_file_uid' in msg:
+                    sql = """
+                        DELETE FROM file_records
+                        WHERE file_unique_id = %s AND bot_id = %s
+                        LIMIT 1
+                    """
+                    await MySQLPool.execute(sql, (metadata['file_unique_id'], metadata['bot_id']))
+                    await self.upsert_file_record(metadata)
 
 
 
-                # 新增：写入 photo 表/ document 表/ video 表/ animation 表
-                data = await self.build_media_dict_from_aiogram(ret)
-                await self.upsert_media(data)
-
-
-
+            
+        # 新增：写入 photo 表/ document 表/ video 表/ animation 表
+        # await self.upsert_media(metadata)
 
         # print(f"{ret} 已发送到目标群组：{TARGET_GROUP_ID}")
    
         await message.delete()
-        print("D555 aiogram_handle_private_media")
+        print(f"【🤖】🔚吃掉媒体，结束流程 ")
+       
+   
+    
+    
+    async def bot_send_file(self, meta_message, target_group_id):
+        ret = None
+        # ⬇️ 发到群组
+        file_id = meta_message['file_id']
+        file_unique_id = meta_message['file_unique_id']   
+
+        if meta_message['file_type'] == "photo":
+            ret = await self.bot_client.send_photo(target_group_id, file_id, caption=file_unique_id)
+        elif meta_message['file_type'] == "document":
+            ret = await self.bot_client.send_document(target_group_id, file_id, caption=file_unique_id)
+        elif meta_message['file_type'] == "animation":
+            ret = await self.bot_client.send_animation(target_group_id, file_id, caption=file_unique_id)
+        else:
+            ret = await self.bot_client.send_video(target_group_id, file_id, caption=file_unique_id)
+
+        metadata = await self.build_media_dict_from_aiogram(ret)
+        metadata['chat_id'] = ret.chat.id
+        metadata['message_id'] = ret.message_id
+        metadata['uploader_type'] = 'bot'
+        return metadata
 
 # ================= BOT Media Group. 群聊 Message 图片/文档/视频处理：Aiogram：BOT账号 =================
     async def aiogram_handle_group_media(self, message: types.Message):
         TARGET_GROUP_ID = self.config.get('target_group_id')
+        row = None
         # 只处理“指定群组里发来的媒体”
         if message.chat.id != TARGET_GROUP_ID or message.content_type not in {
             ContentType.PHOTO, ContentType.DOCUMENT, ContentType.VIDEO, ContentType.ANIMATION
         }:
             return
 
-        print(f"【🤖】收到群聊媒体：{message.content_type}，来自 {message.from_user.id}",flush=True)
 
-        
-        msg = message
-
-        if msg.photo:
-            
-            largest = msg.photo[-1]
-            file_unique_id = largest.file_unique_id
-            file_id = largest.file_id
-            file_type = 'photo'
-            mime_type = 'image/jpeg'
-            file_size = largest.file_size
-            file_name = None
-
-        elif msg.document:
-            file_unique_id = msg.document.file_unique_id
-            file_id = msg.document.file_id
-            file_type = 'document'
-            mime_type = msg.document.mime_type
-            file_size = msg.document.file_size
-            file_name = msg.document.file_name
-
-        elif msg.animation:
-            file_unique_id = msg.animation.file_unique_id
-            file_id = msg.animation.file_id
-            file_type = 'animation'
-            mime_type = msg.animation.mime_type
-            file_size = msg.animation.file_size
-            file_name = msg.animation.file_name
-
-        else:  # msg.video
-            file_unique_id = msg.video.file_unique_id
-            file_id = msg.video.file_id
-            file_type = 'video'
-            mime_type = msg.video.mime_type or 'video/mp4'
-            file_size = msg.video.file_size
-            file_name = getattr(msg.video, 'file_name', None)
-
-        chat_id = msg.chat.id
-        message_id = msg.message_id
-
-        self.receive_file_unique_id = file_unique_id
-
-        try:
-            # 检查是否已存在相同 file_unique_id 的记录
+        metadata = await self.build_media_dict_from_aiogram(message)
+        chat_id = message.chat.id
+        message_id = message.message_id
 
 
-            sql = '''
-                SELECT chat_id, message_id,file_reference FROM file_records 
-                WHERE file_unique_id = %s AND bot_id = %s
-                '''
-            row = await MySQLPool.fetchone(sql, (file_unique_id,self.bot_id))
+        print(f"【🤖】收到群聊媒体：{metadata['file_unique_id']}, 来自UID: {message.from_user.id}",flush=True)
 
-        except Exception as e:
-            print(f"578 Error: {e}")
+
+        self.receive_file_unique_id = metadata['file_unique_id']
+
+        if metadata and metadata['caption']:
+            caption = metadata['caption']
+            if caption and caption.isdigit():
+                doc_id = int(caption)
+                sql = """
+                    SELECT * FROM file_records WHERE doc_id=%s AND man_id=%s
+                    """
+                row =  await MySQLPool.fetchone(sql, (doc_id, self.man_id))
+                print(f"【🤖】通过 doc_id={doc_id} 查询到的记录")
+
+        if not row:
+            try:
+                # 检查是否已存在相同 file_unique_id 的记录
+
+                sql = '''
+                    SELECT * FROM file_records 
+                    WHERE file_unique_id = %s AND bot_id = %s
+                    '''
+                row = await MySQLPool.fetchone(sql, (metadata['file_unique_id'], self.bot_id))
+
+                if row:
+                    if row['chat_id'] != chat_id and row['message_id'] != message_id:
+                        await self.bot_client.delete_message(chat_id, message_id)
+
+            except Exception as e:
+                print(f"578 Error: {e}")
     
+        if not row:
+            sql = """
+                SELECT * FROM file_records WHERE chat_id=%s AND message_id=%s
+                """
+            row =  await MySQLPool.fetchone(sql, (chat_id, message_id))
 
-        if row:
-            
-            existing_chat_id = row["chat_id"]
-            existing_msg_id  = row["message_id"]
-            file_reference   = row["file_reference"]   # 对应 SELECT 的字段
-            if not (existing_chat_id == chat_id and existing_msg_id == message_id):
-                await self.upsert_file_record({
-                    'file_unique_id': file_unique_id,
-                    'file_id'       : file_id,
-                    'file_type'     : file_type,
-                    'mime_type'     : mime_type,
-                    'file_name'     : file_name,
-                    'file_size'     : file_size,
-                    'uploader_type' : 'bot',
-                    'chat_id'       : chat_id,
-                    'message_id'    : message_id,
-                    'bot_id'        : self.bot_id
-                })
-
-                print(f"【🤖】已经存在，更新",flush=True)
-                # 新增：写入 photo 表/ document 表/ video 表/ animation 表
-                data = await self.build_media_dict_from_aiogram(message)
-                await self.upsert_media(data)
-
-
-                if file_reference != None:
-                    print(f"【🤖】删除重覆 {message_id} by file_unique_id",flush=True)
-                    await self.bot_client.delete_message(chat_id, message_id)
-                print("【🤖】D631")
-            else:
-                print(f"【🤖】新增 {message_id} by file_unique_idd",flush=True)
-                await self.upsert_file_record({
-                    'chat_id'       : chat_id,
-                    'message_id'    : message_id,
-                    'file_unique_id': file_unique_id,
-                    'file_id'       : file_id,
-                    'file_type'     : file_type,
-                    'mime_type'     : mime_type,
-                    'file_name'     : file_name,
-                    'file_size'     : file_size,
-                    'uploader_type' : 'bot',
-                    'bot_id'        : self.bot_id
-                })
-            return
+        metadata['bot_id'] = self.bot_id
+        
+        if row and row['id']:
+            metadata['id'] = row['id']    
 
         try:
+            await self.upsert_media(metadata)
+            await self.upsert_file_record(metadata)
             
-            sql = """
-                SELECT id FROM file_records WHERE chat_id = %s AND message_id = %s
-                """
-            row = await MySQLPool.fetchone(sql, (chat_id, message_id))
         except Exception as e:
-            print(f"614 Error: {e}")
-
-        if row:
-            await self.upsert_file_record({
-                'chat_id'       : chat_id,
-                'message_id'    : message_id,
-                'file_unique_id': file_unique_id,
-                'file_id'       : file_id,
-                'file_type'     : file_type,
-                'mime_type'     : mime_type,
-                'file_name'     : file_name,
-                'file_size'     : file_size,
-                'uploader_type' : 'bot',
-                'bot_id'        : self.bot_id
-            })
-
-
-
-
-        else:
-            print(f"【🤖】新增 {message_id} by chat_id+message_id",flush=True)
-            await self.upsert_file_record({
-                'chat_id'       : chat_id,
-                'message_id'    : message_id,
-                'file_unique_id': file_unique_id,
-                'file_id'       : file_id,
-                'file_type'     : file_type,
-                'mime_type'     : mime_type,
-                'file_name'     : file_name,
-                'file_size'     : file_size,
-                'uploader_type' : 'bot',
-                'bot_id'        : self.bot_id
-            })
             
+            code = e.args[0] if e.args else None
+            msg = e.args[1] if len(e.args) > 1 else str(e)
 
-
+            if code == 1062:
+                # Duplicate entry
+                # msg 里也有 key 名：for key 'uniq_file_uid'
+                if 'uniq_file_uid' in msg:
+                    sql = """
+                        DELETE FROM file_records
+                        WHERE file_unique_id = %s AND bot_id = %s AND doc_id != %s
+                        
+                    """
+                    await MySQLPool.execute(sql, (metadata['file_unique_id'], metadata['bot_id'], metadata.get('doc_id')))
+                    await self.upsert_file_record(metadata)
+                    print(f"AIOR-606 Error: {e}")
 
         # 新增：写入 photo 表/ document 表/ video 表/ animation 表
-        data = await self.build_media_dict_from_aiogram(message)
-        await self.upsert_media(data)
+        
+        
 
     # ================= Human Private Text  私聊 Message 文字处理：人类账号 =================
     async def handle_user_private_text(self,event):
@@ -1340,9 +1403,12 @@ class MediaUtils:
             except Exception as e:
                     print(f"Error kicking bot: {e} {botname}", flush=True)
 
-        
+        if len(text)<40 and self.doc_id_pattern.fullmatch(text):
+            doc_id = int(text)
+            await self.send_media_by_doc_id(self.user_client, to_user_id, doc_id, 'man', msg.id)
 
-        if len(text)<40 and self.file_unique_id_pattern.fullmatch(text):
+
+        elif len(text)<40 and self.file_unique_id_pattern.fullmatch(text):
             file_unique_id = text
             ret = await self.send_media_by_file_unique_id(self.user_client, to_user_id, file_unique_id, 'man', msg.id)
             print(f">>>【Telethon】将文件：{file_unique_id} 回覆给 {to_user_id}，返回结果：{ret}",flush=True)
@@ -1365,10 +1431,7 @@ class MediaUtils:
 
                 asyncio.create_task(delayed_resend())
 
-        elif len(text)<40 and self.doc_id_pattern.fullmatch(text):
-            doc_id = int(text)
-            await self.send_media_by_doc_id(self.user_client, to_user_id, doc_id, 'man', msg.id)
-        
+             
         else:
             print(f"{msg.text}")
             await msg.delete()
@@ -1384,6 +1447,9 @@ class MediaUtils:
     async def process_private_media_msg(self, msg, event=None):
         
         TARGET_GROUP_ID = self.config.get('target_group_id')
+        file_unique_id = None
+        record = None
+        upsert_data = {}
 
         # 若不是私聊,則不處理
         if not msg.is_private:
@@ -1396,8 +1462,19 @@ class MediaUtils:
             # print(f"msg {msg}")
             return
 
-        doc_id, access_hash, file_reference, mime_type, file_size, file_name, file_type = await self.extract_video_metadata_from_telethon(msg)  
+        # doc_id, access_hash, file_reference, mime_type, file_size, file_name, file_type = await self.extract_video_metadata_from_telethon(msg)  
         # print(f"doc_id={doc_id}, access_hash={access_hash}, file_reference={file_reference}, mime_type={mime_type}, file_size={file_size}, file_name={file_name}, file_type={file_type}",flush=True)
+        m = await self.build_media_dict_from_telethon(msg)
+
+        doc_id         = m["doc_id"]
+        access_hash    = m["access_hash"]
+        file_reference = m["file_reference"]
+        mime_type      = m["mime_type"]
+        file_size      = m["file_size"]
+        file_name      = m["file_name"]
+        file_type      = m["file_type"]
+        
+        
         caption = ""
         if(event is None):
             print(f"【👦】-{doc_id}-来自私聊媒体回溯处理：{msg.media} {file_type}，chat_id={msg.chat_id}", flush=True)
@@ -1447,71 +1524,87 @@ class MediaUtils:
                 except Exception as e:
                     print(f"PPMM-❌ 其他发送失败(429)：{e}", flush=True)
                     return
+            elif event.peer_id.user_id == self.bot_id:
+                file_unique_id = caption.strip()
 
         # 检查：TARGET_GROUP_ID 群组是否已有相同 doc_id
-        try:
-            print(f"【👦】看看是否存在表中且机器人没有收过 ")
-     
+
+        if file_unique_id:
+            print(f"【👦】私聊媒体带有 file_unique_id：{file_unique_id}", flush=True)
             sql = """
-                SELECT file_unique_id FROM file_records WHERE doc_id = %s AND chat_id = %s AND file_unique_id IS NOT NULL
+                SELECT * FROM file_records WHERE file_unique_id = %s AND bot_id = %s    
                 """
-            row = await MySQLPool.fetchone(sql, (doc_id, TARGET_GROUP_ID))
-        except Exception as e:
-            print(f"272 Error: {e}")
-            
-       
-        if row:
-            print(f"【👦】-{doc_id}-【Telethon】已存在 doc_id={doc_id} fuid = {row} 的记录，跳过转发", flush=True)
-            # await event.delete()
-            await msg.delete()
-            print("【👦】")
-            return
-
-
+            record = await MySQLPool.fetchone(sql, (file_unique_id, self.bot_id))
         
+        if file_unique_id is None or record is None:    # 非机器人转发，或找不到记录
+            try:
+                
+        
+                sql = """
+                    SELECT * FROM file_records WHERE doc_id = %s AND man_id = %s 
+                    """
+                record = await MySQLPool.fetchone(sql, (doc_id, self.man_id))
+            except Exception as e:
+                print(f"272 Error: {e}")
+            
+        if record:
+
+            if record['doc_id'] is not None and record['file_unique_id'] is not None:
+                print(f"【👦】确认已存在：doc_id={doc_id}，file_unique_id={record['file_unique_id']}，跳过转发", flush=True)
+                return
+            else:
+                print(f"【👦】确认记录存在，但缺少 doc_id ({record['doc_id']}) 或 file_unique_id ({record['file_unique_id']}), 准备更新并转发到 {TARGET_GROUP_ID}", flush=True)
+        else:
+            print(f"【👦】1390:这个doc {doc_id} 不存在最新的库中，准备转发到 {TARGET_GROUP_ID}",flush=True)
+
 
         # 转发到群组，并删除私聊
         try:
             # 这里直接发送 msg.media，如果受保护会被阻止
-            print(f"【👦】不存在，所以把 {doc_id} 发送到目标群组/機器人：{TARGET_GROUP_ID}", flush=True)
+            
             ret = await self.user_client.send_file(TARGET_GROUP_ID, msg.media, caption=str(doc_id))
-            # print(f"ret={ret}", flush=True)
+            
+           
+            # 插入或更新 placeholder 记录 (message_id 自动留空，由群组回调补全)
+            upsert_data = {
+                'chat_id'       : ret.chat_id,
+                'message_id'    : ret.id,
+                'doc_id'        : doc_id,
+                'access_hash'   : access_hash,
+                'file_reference': file_reference,
+                'mime_type'     : mime_type,
+                'file_type'     : file_type,
+                'file_name'     : file_name,
+                'file_size'     : file_size,
+                'uploader_type' : 'user',
+                'man_id'        : self.man_id
+            }
+
+            if record and record['id']:
+                upsert_data['id'] = record['id']
+                print(f"【👦】更新记录 id={record['id']}")
+                
+            
+            await self.upsert_file_record(upsert_data)
+                
         except ChatForwardsRestrictedError:
-            print(f"🚫 跳过：该媒体来自受保护频道 msg.id = {msg.id}", flush=True)
-            return
+            print(f"【👦】🚫 跳过：该媒体来自受保护频道 msg.id = {msg.id}", flush=True)
+            
         except Exception as e:
             if "The chat is restricted and cannot be used in that request" in str(e):
-                print(f"PPMM-⚠️ 這個群應該炸了", flush=True)
-                return  # ⚠️ 不处理，直接跳出
+                print(f"【👦】-⚠️ 這個群應該炸了", flush=True)
+                
             else:
-                print(f"❌ 其他错误：{e} TARGET_GROUP_ID={TARGET_GROUP_ID}", flush=True)
+                print(f"【👦】❌ 其他错误：{e} TARGET_GROUP_ID={TARGET_GROUP_ID}", flush=True)
+                '''
+                有可能 doc_id+man 和 file_unique_id + bot 没有一对一对应关系
+                所以需要再做处理, 等发生了再补
+                '''
             return
-
-        # 插入或更新 placeholder 记录 (message_id 自动留空，由群组回调补全)
-        await self.upsert_file_record({
-            'chat_id'       : ret.chat_id,
-            'message_id'    : ret.id,
-            'doc_id'        : doc_id,
-            'access_hash'   : access_hash,
-            'file_reference': file_reference,
-            'mime_type'     : mime_type,
-            'file_type'     : file_type,
-            'file_name'     : file_name,
-            'file_size'     : file_size,
-            'uploader_type' : 'user',
-            'man_id'        : self.man_id
-        })
-
-
-
-
-        print("【👦】完成媒体接收流程")
-       
-
-
-
+                   
+        print("【👦】🔚更新并传送给机器人，完成媒体接收流程")
         await msg.delete() 
-            
+
     # ================= Human Group Media 3-1. 群组媒体处理：人类账号 =================
     async def handle_user_group_media(self,event):
         msg = event.message
@@ -1522,125 +1615,60 @@ class MediaUtils:
         if not (msg.document or msg.photo or msg.video or msg.animation):
             return
         file_type = ''
-        if msg.photo:
-            media = msg.photo
-            file_type = "photo"
-        elif msg.document:
-            media = msg.document
-            attrs = media.attributes or []
-
-            # 先判断是不是 video
-            if any(isinstance(a, DocumentAttributeVideo) for a in attrs):
-                file_type = "video"
-            # 再判断是不是 gif / animation
-            elif any(isinstance(a, DocumentAttributeAnimated) for a in attrs):
-                file_type = "animation"
-            else:
-                file_type = "document"
-
-        else:
-            # 理论上不会进到这里（前面已经 return 过非 photo/document）
-            return   
+        row = None
 
         chat_id        = msg.chat_id
         message_id     = msg.id
-        doc_id         = media.id
-        access_hash    = media.access_hash
-        file_reference = media.file_reference.hex()
-        mime_type      = getattr(media, 'mime_type', 'image/jpeg' if msg.photo else None)
-        file_size      = getattr(media, 'size', None)
-        file_name      = self.get_file_name(media)
+
+        print(f"【👦】收到群组媒体，来自 chat_id={chat_id} message_id={message_id}",flush=True)
+        metadata = await self.build_media_dict_from_telethon(msg)
 
         # —— 步骤 A：先按 doc_id 查库 —— 
-        try:
-            # 检查是否已存在相同 doc_id 的记录
-
+        if metadata["caption"] is not None:
+            metadata["caption"] = metadata["caption"].strip()
             sql = '''
-                SELECT chat_id, message_id FROM file_records WHERE doc_id = %s AND man_id = %s
+                SELECT * FROM file_records WHERE file_unique_id = %s AND bot_id = %s
                 '''
-            row = await MySQLPool.fetchone(sql, (doc_id,self.man_id))
+            row = await MySQLPool.fetchone(sql, (metadata["caption"],self.bot_id))
+            print(f"【👦】通过 file_unique_id={metadata['caption']} 查询到的记录", flush=True)
 
-        except Exception as e:
-            print(f"[process_group_media_msg] doc_id 查库失败: {e}", flush=True)
+        if not row:
+            try:
+                # 检查是否已存在相同 doc_id 的记录
+                sql = '''
+                    SELECT * FROM file_records WHERE doc_id = %s AND man_id = %s
+                    '''
+                row = await MySQLPool.fetchone(sql, (metadata["doc_id"],self.man_id))
+                print(f"【👦】通过 doc_id={metadata['doc_id']} 查询到的记录", flush=True)
+                '''
+                如何解决同步问题
+                以及扩展名
+                '''
+
+            except Exception as e:
+                print(f"[process_group_media_msg] doc_id 查库失败: {e}", flush=True)
     
-        
-        if row:
+        if not row:
+            sql = '''
+                SELECT * FROM file_records WHERE chat_id = %s AND message_id = %s
+                '''
+            row = await MySQLPool.fetchone(sql, (chat_id, message_id))
+            print(f"【👦】通过 chat_id={chat_id} 和 message_id={message_id} 查询到的记录", flush=True)
+
+        metadata['man_id'] = self.man_id
+
+        if row and row['id']:
+            metadata['id'] = row['id']   
+
+
+        metadata['chat_id'] = chat_id
+        metadata['message_id'] = message_id        
+
+        try:
+            await self.upsert_file_record(metadata)
             
-            existing_chat_id = row["chat_id"]
-            existing_msg_id  = row["message_id"]
-            if not (existing_chat_id == chat_id and existing_msg_id == message_id):
-                print(f"【Telethon】在指定群组，收到群组媒体：来自 {msg.chat_id}",flush=True)
-    
-                # 重复上传到不同消息 → 更新并删除新消息
-                await self.upsert_file_record({
-                    'doc_id'        : doc_id,
-                    'access_hash'   : access_hash,
-                    'file_reference': file_reference,
-                    'mime_type'     : mime_type,
-                    'file_type'     : file_type,
-                    'file_name'     : file_name,
-                    'file_size'     : file_size,
-                    'uploader_type' : 'user',
-                    'chat_id'       : chat_id,
-                    'message_id'    : message_id,
-                    'man_id'        : self.man_id
-                })
-                print("D1015")
-                await msg.delete()
-            else:
-                # 同一条消息重复触发 → 仅更新，不删除
-                await self.upsert_file_record({
-                    'chat_id'       : chat_id,
-                    'message_id'    : message_id,
-                    'access_hash'   : access_hash,
-                    'file_reference': file_reference,
-                    'mime_type'     : mime_type,
-                    'file_type'     : file_type,
-                    'file_name'     : file_name,
-                    'file_size'     : file_size,
-                    'uploader_type' : 'user',
-                    'man_id'        : self.man_id
-                })
-            return
-
-        # —— 步骤 B：若 A 中没找到，再按 (chat_id, message_id) 查库 ——
-        try:
-           
-            sql = '''
-                SELECT id FROM file_records WHERE chat_id = %s AND message_id = %s
-                '''
-            row = await  MySQLPool.fetchone(sql, (chat_id, message_id))
         except Exception as e:
-            print(f"372 Error: {e}")
-      
-        if row:
-            # 已存在同条消息 → 更新并保留
-            await self.upsert_file_record({
-                'chat_id'       : chat_id,
-                'message_id'    : message_id,
-                'doc_id'        : doc_id,
-                'access_hash'   : access_hash,
-                'file_reference': file_reference,
-                'mime_type'     : mime_type,
-                'file_type'     : file_type,
-                'file_name'     : file_name,
-                'file_size'     : file_size,
-                'uploader_type' : 'user',
-                'man_id'        : self.man_id
-            })
-        else:
-            # 全新媒体 → 插入并保留
-            await self.upsert_file_record({
-                'chat_id'       : chat_id,
-                'message_id'    : message_id,
-                'doc_id'        : doc_id,
-                'access_hash'   : access_hash,
-                'file_reference': file_reference,
-                'mime_type'     : mime_type,
-                'file_type'     : file_type,
-                'file_name'     : file_name,
-                'file_size'     : file_size,
-                'uploader_type' : 'user',
-                'man_id'        : self.man_id
-            })
+            print(f"AIOR-606 Error: {e}")        
+
+        
         # B 分支保留消息，不删除

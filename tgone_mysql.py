@@ -7,6 +7,10 @@ import asyncio
 from functools import wraps
 from inspect import stack
 
+DBError = aiomysql.Error
+DBIntegrityError = aiomysql.IntegrityError
+DBOperationalError = aiomysql.OperationalError
+
 def _caller_info():
     frames = stack()
     if len(frames) > 2:
@@ -132,7 +136,7 @@ class MySQLPool:
 
     @classmethod
     @reconnecting
-    async def execute(cls, sql: str, params=None, error_tag: str = "") -> bool:
+    async def execute(cls, sql: str, params=None, error_tag: str = "", raise_on_error: bool = False) -> bool:
         conn, cur = await cls.get_conn_cursor()
         try:
             await cur.execute(sql, params or ())
@@ -144,9 +148,11 @@ class MySQLPool:
                 tag = _caller_info()   # 自动提取调用来源
             
             print(
-                f"⚠️ [{tag}] SQL 执行出错: {e} | sql={sql} | params={params}",
+                f"⚠️ [{tag}] SQL 执行出错: {e} | \nsql={sql} | \nparams={params}",
                 flush=True,
             )
+            if raise_on_error:
+                raise
             return False
         finally:
             await cls.release(conn, cur)
