@@ -48,12 +48,14 @@ def reconnecting(func):
                     raise
     return wrapper
 
+# tgone_mysql.py
 
 class MySQLPool:
     _pool = None
     _lock = asyncio.Lock()
     _cache_ready = False
     cache = None
+    _closing = False  # ✅ 新增：标记正在 close/rebuild，避免 acquire 竞态
 
     @classmethod
     async def init_pool(cls):
@@ -87,14 +89,38 @@ class MySQLPool:
 
     @classmethod
     async def ensure_pool(cls):
-        if cls._pool is None:
+        # ✅ 关键：不仅要看 None，还要看是否可用
+        if cls._pool_usable():
+            return cls._pool
+
+        # 连接池不可用 → 统一在锁内重建/初始化
+        async with cls._lock:
+            if cls._pool_usable():
+                return cls._pool
+            cls._closing = False  # 如果之前异常导致标志卡住，这里纠正
             await cls.init_pool()
-        return cls._pool
+            return cls._pool
 
     @classmethod
     async def get_conn_cursor(cls):
+        """
+        ✅ 关键：acquire 前确保 pool 可用。
+        这里不直接长时间持锁（避免吞吐下降），但要避免 acquire 与 close 交错。
+        """
         await cls.ensure_pool()
-        conn = await cls._pool.acquire()
+
+        # acquire 仍可能在 close 刚发生时抛错 → 捕获并重建一次
+        try:
+            conn = await cls._pool.acquire()
+        except Exception as e:
+            msg = str(e).lower()
+            if "after closing pool" in msg or "closing pool" in msg:
+                # 说明刚好撞上 close，重建并重试一次
+                await cls._rebuild_pool()
+                conn = await cls._pool.acquire()
+            else:
+                raise
+
         cursor = await conn.cursor(aiomysql.DictCursor)
         return conn, cursor
 
@@ -111,14 +137,19 @@ class MySQLPool:
     async def close(cls):
         async with cls._lock:
             if cls._pool:
-                cls._pool.close()
-                await cls._pool.wait_closed()
-                cls._pool = None
-                print("🛑 MySQL 连接池已关闭")
+                cls._closing = True
+                try:
+                    cls._pool.close()
+                    await cls._pool.wait_closed()
+                finally:
+                    cls._pool = None
+                    cls._closing = False
+                print("🛑 MySQL 连接池已关闭", flush=True)
 
     @classmethod
     async def _rebuild_pool(cls):
         async with cls._lock:
+            cls._closing = True
             if cls._pool:
                 try:
                     cls._pool.close()
@@ -128,7 +159,34 @@ class MySQLPool:
 
             cls._pool = None
             print("🔄 [MySQLPool] 正在重建 MySQL 连接池…", flush=True)
+            cls._closing = False
             await cls.init_pool()
+
+    @classmethod
+    def _pool_usable(cls) -> bool:
+        """
+        判断连接池是否可用：
+        - _pool 为空不可用
+        - 正在 closing 不可用
+        - aiomysql pool 处于 closed/closing 不可用（兼容不同版本属性）
+        """
+        p = cls._pool
+        if p is None:
+            return False
+        if cls._closing:
+            return False
+
+        # aiomysql pool 通常有 closed/closing 或 _closed/_closing
+        if getattr(p, "closed", False):
+            return False
+        if getattr(p, "closing", False):
+            return False
+        if getattr(p, "_closed", False):
+            return False
+        if getattr(p, "_closing", False):
+            return False
+
+        return True
 
     # ==================================================
     #   ✨ 统一 SQL helper：execute / fetchone / fetchall
