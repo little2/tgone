@@ -1249,11 +1249,9 @@ class MediaUtils:
 
 
             
-        # 新增：写入 photo 表/ document 表/ video 表/ animation 表
-        # await self.upsert_media(metadata)
 
-        # print(f"{ret} 已发送到目标群组：{TARGET_GROUP_ID}")
-   
+
+
         await message.delete()
         print(f"【🤖】🔚吃掉媒体，结束流程 ")
        
