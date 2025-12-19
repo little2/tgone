@@ -509,23 +509,24 @@ class MediaUtils:
     # send_media_by_file_unique_id 函数
     async def send_media_by_file_unique_id(self,client, to_user_id, file_unique_id, client_type, msg_id):
         ext_row = []
-        print(f"【🤖】【1】开始处理 file_unique_id={file_unique_id}，目标用户：{to_user_id}",flush=True)
+        print(f"【🚹】【1】开始处理 file_unique_id={file_unique_id}，目标用户：{to_user_id}",flush=True)
         try:
-
+            
             sql = """
                 SELECT chat_id, message_id, doc_id, access_hash, file_reference, file_id, file_unique_id,file_type 
                 FROM file_records WHERE file_unique_id = %s AND bot_id = %s
                 """
-            row = await MySQLPool.fetchone(sql, (file_unique_id,self.bot_id,))
             
+            row = await MySQLPool.fetchone(sql, (file_unique_id,self.bot_id,))
+            print(f"【🚹】【2.C】查询结果：",flush=True)
             if not row: # if row = None
-                print(f"【🤖】【2-2】没有找到本地端的文档，需要扩展查询结果：{ext_row}",flush=True)
+                print(f"【🚹】【2-2】没有找到本地端的文档，需要扩展查询结果：{ext_row}",flush=True)
                 ext_row = await self.fetch_file_by_source_id(file_unique_id)
                 
                 if ext_row:
                     # print(f"【send_media_by_file_unique_id】在 file_extension 中找到对应记录，尝试从 Bot 获取文件",flush=True)
                     # 如果在 file_extension 中找到对应记录，尝试从 Bot 获取文件
-                    print(f"【🤖】【2-3】",flush=True)
+                    print(f"【🚹】【2-3】",flush=True)
                     bot_row = await self.receive_file_from_bot(ext_row)
                     
                     max_retries = 3
@@ -1373,7 +1374,7 @@ class MediaUtils:
 
         to_user_id = msg.from_id
 
-        print(f"【Telethon】收到msg",flush=True)
+        
         
         # 获取发信人 ID
         try:
@@ -1402,11 +1403,13 @@ class MediaUtils:
                     print(f"Error kicking bot: {e} {botname}", flush=True)
 
         if len(text)<40 and self.doc_id_pattern.fullmatch(text):
+            print(f"【👦】收到 doc_id- {msg.text}",flush=True)
             doc_id = int(text)
             await self.send_media_by_doc_id(self.user_client, to_user_id, doc_id, 'man', msg.id)
 
 
         elif len(text)<40 and self.file_unique_id_pattern.fullmatch(text):
+            print(f"【👦】收到 file_unqiue_id - {msg.text}",flush=True)
             file_unique_id = text
             ret = await self.send_media_by_file_unique_id(self.user_client, to_user_id, file_unique_id, 'man', msg.id)
             print(f">>>【Telethon】将文件：{file_unique_id} 回覆给 {to_user_id}，返回结果：{ret}",flush=True)
@@ -1431,6 +1434,7 @@ class MediaUtils:
 
              
         else:
+            print(f"【👦】收到 text - {msg.text}",flush=True)
             print(f"{msg.text}")
             await msg.delete()
             print("D755")
