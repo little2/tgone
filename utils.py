@@ -146,7 +146,7 @@ class MediaUtils:
             data["file_type"] = self.map_sora_file_type(data["file_type"],'short')
 
         data['valid_state'] = 9  # 标记为有效
-        data['stage'] = 'pending'  # 标记为有效
+        data['stage'] = "pending"  # 标记为有效
 
         allowed_cols = {
             "source_id",
