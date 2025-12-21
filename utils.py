@@ -1506,8 +1506,8 @@ class MediaUtils:
                                 await asyncio.sleep(0.9)
                         except Exception as e:
                             print(f"【👦】发送失败，重试中：{e}", flush=True)
-                    await self.send_media_by_file_unique_id(self.user_client, to_user_id, get_file_unique_id, 'man', msg.id)
-                    print(f"【👦】最后一试，可能没东西，尝试回覆文件：{get_file_unique_id} 给 {to_user_id}",flush=True)
+                    retsult_send_media_by_file_unique_id = await self.send_media_by_file_unique_id(self.user_client, to_user_id, get_file_unique_id, 'man', msg.id)
+                    print(f"【👦】最后一试，可能没东西，尝试回覆文件：{get_file_unique_id} 给 {to_user_id} ret=>{retsult_send_media_by_file_unique_id}",flush=True)
 
                 self.loading_manager.set(file_unique_id, chat_id=msg.chat_id, message_id=msg.id)
                 asyncio.create_task(delayed_resend(file_unique_id))
