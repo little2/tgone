@@ -38,8 +38,63 @@ telegram_media_utils.py
 
 
 
+class LoadingManager:
+    def __init__(self):
+        # key: file_unique_id
+        # value: {
+        #   "file_id": file_id,
+        #   "chat_id": ...,
+        #   "message_id": ...
+        # }
+        self._data = {}
 
+    def set(self, file_unique_id: str, chat_id: int, message_id: int):
+        """
+        建立 loading 状态
+        """
+        self._data[file_unique_id] = {
+            "file_id": None,
+            "chat_id": chat_id,
+            "message_id": message_id,
+        }
 
+    def pop(self, file_unique_id: str):
+        """
+        取出并移除 loading
+        """
+        return self._data.pop(file_unique_id, None)
+
+    def get(self, file_unique_id: str):
+        """
+        只读取，不移除
+        """
+        return self._data.get(file_unique_id)
+
+    def has_file_id(self, file_unique_id: str) -> bool:
+        """
+        检查 loading[file_id] 中是否有 file_id 且有值
+        """
+        info = self._data.get(file_unique_id)
+        if not info:
+            return False
+        return bool(info.get("file_id"))
+
+    def exists(self, file_unique_id: str) -> bool:
+        """
+        单纯判断 loading[file_unique_id] 是否存在
+        """
+        return file_unique_id in self._data
+
+    def attach_file_id(self, file_unique_id: str, file_id: str) -> bool:
+        """
+        为已存在的 loading 绑定真实 file_id
+        """
+        info = self._data.get(file_unique_id)
+        if not info:
+            return False
+
+        info["file_id"] = file_id
+        return True
 
 
 class MediaUtils:
@@ -59,7 +114,8 @@ class MediaUtils:
         self.bot_id = 0
         self.config = config
 
-        self.receive_file_unique_id = None
+     
+        self.loading_manager = LoadingManager()
 
         self.cold_start = True
         self.webhook_host = config.get("webhook_host")
@@ -509,7 +565,8 @@ class MediaUtils:
     # send_media_by_file_unique_id 函数
     async def send_media_by_file_unique_id(self,client, to_user_id, file_unique_id, client_type, msg_id):
         ext_row = []
-        print(f"【🚹】【1】开始处理 file_unique_id={file_unique_id}，目标用户：{to_user_id}",flush=True)
+        print(f"👇-send_media_by_file_unique_id-",flush=True)
+        print(f"【🚹】【1】[{file_unique_id}]开始处理 file_unique_id={file_unique_id}，目标用户：{to_user_id}",flush=True)
         try:
             
             sql = """
@@ -518,15 +575,16 @@ class MediaUtils:
                 """
             
             row = await MySQLPool.fetchone(sql, (file_unique_id,self.bot_id,))
-            print(f"【🚹】【2.C】查询结果：",flush=True)
+            print(f"【🚹】【2.C】[{file_unique_id}]查询结果：",flush=True)
             if not row: # if row = None
-                print(f"【🚹】【2-2】没有找到本地端的文档，需要扩展查询结果：{ext_row}",flush=True)
+                
                 ext_row = await self.fetch_file_by_source_id(file_unique_id)
+                print(f"【🚹】【2-2】[{file_unique_id}]没有找到本地端的文档，需要查找扩展库",flush=True)
                 
                 if ext_row:
                     # print(f"【send_media_by_file_unique_id】在 file_extension 中找到对应记录，尝试从 Bot 获取文件",flush=True)
                     # 如果在 file_extension 中找到对应记录，尝试从 Bot 获取文件
-                    print(f"【🚹】【2-3】",flush=True)
+                    print(f"【🚹】【2-3】[{file_unique_id}]扩展库有😄",flush=True)
                     bot_row = await self.receive_file_from_bot(ext_row)
                     
                     max_retries = 3
@@ -542,8 +600,6 @@ class MediaUtils:
                         
                         return
                     else:
-                        print(f"【4】其他机器人已将资源传给人型机器人 {file_unique_id}",flush=True)
-                       
                         return "retrieved"
 
                         # chat_id, message_id, doc_id, access_hash, file_reference_hex, file_id, file_unique_id, file_type = row
@@ -552,7 +608,7 @@ class MediaUtils:
                         # return await self.send_media_by_file_unique_id(client, to_user_id, file_unique_id, client_type, msg_id)
                         # pass
                 else:
-                    print(f"【🤖】【2-4】",flush=True)
+                    print(f"【🚹】【2-4】[{file_unique_id}]扩展库没有",flush=True)
                     # row['file_type']
                     text = f"未找到 file_unique_id={file_unique_id} 对应的文件记录。(194)"
                     if isinstance(client, Bot):
@@ -567,10 +623,10 @@ class MediaUtils:
                         await self.set_file_vaild_state(file_unique_id, vaild_state=4)                    
                     return
             else:
-                print(f"【🤖】【2-1】从本机可查询到",flush=True)
+                print(f"【🚹】【2-1】从本机可查询到",flush=True)
                 await self.set_file_vaild_state(file_unique_id, vaild_state=9)   
                 if row and row['doc_id'] is None:
-                    print(f"【🤖】【3】发现 doc_id 为空，尝试发消息 {row} 给 {TARGET_GROUP_ID_FROM_BOT}",flush=True)
+                    print(f"【🚹】【3】发现 doc_id 为空，尝试发消息 这个媒体 给 {TARGET_GROUP_ID_FROM_BOT}",flush=True)
                     file_metadata = {
                         'file_type': row['file_type'],
                         'file_id': row['file_id'],
@@ -584,6 +640,9 @@ class MediaUtils:
                 
         
         except Exception as e:
+            if "Token is invalid" in str(e):
+                print(f"[194] Bot Token 无效，请检查配置。")
+                return
             print(f"[194] Error: {e}")
             return
         
@@ -593,6 +652,7 @@ class MediaUtils:
             await self.send_media_via_bot(client, to_user_id, row, reply_to_message_id=msg_id)
         else:
             await self.send_media_via_man(client, to_user_id, row, reply_to_message_id=msg_id)
+        print(f"👆-send_media_by_file_unique_id-[{file_unique_id}]",flush=True)
 
     async def extract_video_metadata_from_telethon(self,msg):
         file_type = ''
@@ -829,7 +889,7 @@ class MediaUtils:
         if not row:
             return None
         else:
-            print(f"【fetch_file_by_source_id】找到对应记录：{row}",flush=True)
+            
             return {
                 "file_type": row["file_type"],
                 "file_id": row["file_id"],
@@ -842,12 +902,14 @@ class MediaUtils:
     async def receive_file_from_bot(self, row):
         retSend = None
         bot_token = f"{row['bot_id']}:{row['bot_token']}"
+
+        process_header = f"--【🤖】{row['file_unique_id']} x "
     
         from aiogram import Bot
-        print(f"【🤖】4️⃣【receive_file_from_bot】开始处理 file_unique_id={row['file_unique_id']}，bot_id={row['bot_id']}",flush=True)
+        print(f"{process_header}开始处理 file_unique_id={row['file_unique_id']}，bot_id={row['bot_id']}",flush=True)
         mybot = Bot(token=bot_token)
         try:
-            print(f"【🤖】4️⃣【receive_file_from_bot】准备让机器人{row['bot_id']}发送文件file_unique_id={row['file_unique_id']}给 【👦】{self.man_id}",flush=True)
+            print(f"{process_header}准备让机器人{row['bot_id']}发送文件file_unique_id={row['file_unique_id']} 给 【👦】{self.man_id}",flush=True)
             if row["file_type"] == "photo" or row["file_type"] == "p":
                 # await mybot.send_photo(chat_id=7496113118, photo=row["file_id"])
                 retSend = await mybot.send_photo(chat_id=self.man_id, photo=row["file_id"])
@@ -859,13 +921,13 @@ class MediaUtils:
             elif row["file_type"] == "animation" or row["file_type"] == "n":
                 retSend = await mybot.send_animation(chat_id=self.man_id, animation=row["file_id"])
 
-            print(f"【🤖】4️⃣{row['file_unique_id']}【receive_file_from_bot】文件已发送到人型机器人，file_unique_id={row['file_unique_id']}",flush=True)
+            print(f"{process_header} 媒体已 私发 到👦，file_unique_id={row['file_unique_id']}",flush=True)
             # print(f"\n【🤖】4️⃣retSend=>{retSend}\n",flush=True)
         except TelegramForbiddenError as e:
         # 私聊未 /start、被拉黑、群权限不足等
-            print(f"【🤖】4️⃣{row['file_unique_id']} 发送被拒绝（Forbidden）: {e}", flush=True)
+            print(f"{process_header}发送被拒绝（Forbidden）: {e}", flush=True)
         except TelegramNotFound:
-            print(f"【🤖】4️⃣{row['file_unique_id']} chat not found: {self.man_id}. 可能原因：ID 错、bot 未入群、或用户未对该 bot /start", flush=True)
+            print(f"{process_header} chat not found: {self.man_id}. 可能原因：ID 错、bot 未入群、或用户未对该 bot /start", flush=True)
             # 机器人根本不认识这个 chat（不在群里/用户未 start/ID 错）
             await self.user_client.send_message(row["bot"], "/start")
             await self.user_client.send_message(row["bot"], "[~bot~]")
@@ -874,12 +936,18 @@ class MediaUtils:
             # 这里能准确看到 “chat not found”“message thread not found”等具体文本
             await self.user_client.send_message(row["bot"], "/start")
             await self.user_client.send_message(row["bot"], "[~bot~]")           
-            print(f"【🤖】4️⃣{row['file_unique_id']} 发送失败（BadRequest）: {e}", flush=True)
+            print(f"{process_header} 发送失败（BadRequest）: {e}", flush=True)
         except Exception as e:
-            # 不要在所有异常里就发 /start；只在你需要唤醒对话时再做
-            print(f"【🤖】4️⃣{row['file_unique_id']} ❌ 发送失败: {e}", flush=True)
+            if "Unauthorized" in str(e):
+                await self.user_client.send_message(row["bot"], "/start")
+                await self.user_client.send_message(row["bot"], "[~bot~]") 
+                print(f"{process_header} {e}", flush=True)
+            else:
+                # 不要在所有异常里就发 /start；只在你需要唤醒对话时再做
+                print(f"{process_header} ❌ 发送失败: {e}", flush=True)
         finally:
-            print(f"4️⃣{row['file_unique_id']} 最终结束")
+
+            print(f"{process_header} 最终结束，回主流程看看 👦 有没有收到了")
             await mybot.session.close()
             return retSend
              
@@ -1136,23 +1204,25 @@ class MediaUtils:
             
             if(ret=='retrieved'):
                
-                print(f">>>>>【Telethon】已从 Bot 获取文件，准备发送到 {to_user_id}，file_unique_id={file_unique_id}",flush=True)
-                async def delayed_resend():
+                print(f"正在等待扩展库的渲染【Telethon】已从 Bot 获取文件，准备发送到 {to_user_id}，file_unique_id={file_unique_id}",flush=True)
+                async def delayed_resend(get_file_unique_id):
                     for _ in range(6):  # 最多重试 6 次
                         try:
                             # 尝试发送文件(机器人)
-                            print(f"【Telethon】第 {_+1} 次尝试发送文件：{file_unique_id} 到 {to_user_id} {self.receive_file_unique_id}",flush=True)
-                            if self.receive_file_unique_id == file_unique_id:
+                            print(f"【Telethon】第 {_+1} 次检查是否收到渲染，并尝试发送文件：{get_file_unique_id} 到 {to_user_id} ",flush=True)
+                            if self.loading_manager.has_file_id(get_file_unique_id):
+                            
                                 # 显示第几次
-                                await self.send_media_by_file_unique_id(self.bot_client, to_user_id, text, 'bot', reply_to_message)
+                                await self.send_media_by_file_unique_id(self.bot_client, to_user_id, get_file_unique_id, 'bot', reply_to_message)
                                 return
                             else:
-                                await asyncio.sleep(0.5)
+                                await asyncio.sleep(0.9)
                         except Exception as e:
                             print(f"【Telethon】发送失败，重试中：{e}", flush=True)
-                    await self.send_media_by_file_unique_id(self.bot_client, to_user_id, text, 'bot', reply_to_message)
+                    await self.send_media_by_file_unique_id(self.bot_client, to_user_id, get_file_unique_id, 'bot', reply_to_message)
+                    print(f"【Telethon】最终尝试发送文件：{get_file_unique_id} 到 {to_user_id}，也有可能收不到",flush=True)
 
-                asyncio.create_task(delayed_resend())
+                asyncio.create_task(delayed_resend(file_unique_id))
             else:
                 print(f">>>>>【🤖】文件已发送到 {to_user_id}，file_unique_id={file_unique_id}",flush=True)
 
@@ -1230,6 +1300,9 @@ class MediaUtils:
         try:
             await self.upsert_media(metadata)
             await self.upsert_file_record(metadata)
+
+            self.loading_manager.attach_file_id(metadata['file_unique_id'], metadata['file_id'])
+            print(f"【👦】附加加载管理器，file_unique_id={metadata['file_unique_id']} file_id={metadata['file_id']}", flush=True)
             
         except Exception as e:
             code = e.args[0] if e.args else None
@@ -1295,11 +1368,10 @@ class MediaUtils:
         chat_id = message.chat.id
         message_id = message.message_id
 
-
+      
         print(f"【🤖】收到群聊媒体：{metadata['file_unique_id']}, 来自UID: {message.from_user.id}",flush=True)
-
-
-        self.receive_file_unique_id = metadata['file_unique_id']
+        
+       
 
         if metadata and metadata['caption']:
             caption = metadata['caption']
@@ -1361,7 +1433,8 @@ class MediaUtils:
                     await self.upsert_file_record(metadata)
                     print(f"AIOR-606 Error: {e}")
 
-        # 新增：写入 photo 表/ document 表/ video 表/ animation 表
+        #TODO: 如果都有要回到哪一个 chat_id, message_id, 是否直接回就好? (但懒得想) 12/21
+        self.loading_manager.attach_file_id(metadata['file_unique_id'], metadata['file_id'])
         
         
 
@@ -1403,41 +1476,50 @@ class MediaUtils:
                     print(f"Error kicking bot: {e} {botname}", flush=True)
 
         if len(text)<40 and self.doc_id_pattern.fullmatch(text):
-            print(f"【👦】收到 doc_id- {msg.text}",flush=True)
+            print(f"【👦】👇 (私聊) === 收到 doc_id- 请求 {msg.text}",flush=True)
             doc_id = int(text)
             await self.send_media_by_doc_id(self.user_client, to_user_id, doc_id, 'man', msg.id)
 
 
         elif len(text)<40 and self.file_unique_id_pattern.fullmatch(text):
-            print(f"【👦】收到 file_unqiue_id - {msg.text}",flush=True)
+            print(f"【👦】👇 (私聊) ==== 收到 file_unqiue_id 请求- {msg.text}",flush=True)
             file_unique_id = text
             ret = await self.send_media_by_file_unique_id(self.user_client, to_user_id, file_unique_id, 'man', msg.id)
-            print(f">>>【Telethon】将文件：{file_unique_id} 回覆给 {to_user_id}，返回结果：{ret}",flush=True)
+            
             if(ret=='retrieved'):
-                print(f">>>>>【Telethon】已从 Bot 获取文件{file_unique_id}，准备回覆给 {to_user_id}",flush=True)
-                async def delayed_resend():
+                print(f"【👦】收到 retrieved , 已请 Bot 发送文件 {file_unique_id}，等待渲染成功，以回覆给 {to_user_id}",flush=True)
+                async def delayed_resend(get_file_unique_id):
+                    print(f".      背景检查 {get_file_unique_id}")
                     for _ in range(6):  # 最多重试 6 次
                         try:
                             # 尝试发送文件 (人型机器人)
-                            print(f"【Telethon】第 {_+1} 次尝试回覆文件：{file_unique_id} 给 {to_user_id} {self.receive_file_unique_id}",flush=True)
-                            if self.receive_file_unique_id == file_unique_id:
+                            
+                            if self.loading_manager.has_file_id(get_file_unique_id):
                                 # 显示第几次
-                                await self.send_media_by_file_unique_id(self.user_client, to_user_id, file_unique_id, 'man', msg.id)
+                                print(f".      【👦】在 {_+1} 次检查 file_id 已渲染，并尝试回覆文件：{get_file_unique_id} 给 {to_user_id}",flush=True)
+                                try:
+                                    await self.send_media_by_file_unique_id(self.user_client, to_user_id, get_file_unique_id, 'man', msg.id)
+                                except Exception as e:
+                                    print(f"【👦】发送失败，重试中：{e}", flush=True)
                                 return
                             else:
-                                await asyncio.sleep(0.5)
+                                await asyncio.sleep(0.9)
                         except Exception as e:
-                            print(f"【Telethon】发送失败，重试中：{e}", flush=True)
-                    await self.send_media_by_file_unique_id(self.user_client, to_user_id, file_unique_id, 'man', msg.id)
+                            print(f"【👦】发送失败，重试中：{e}", flush=True)
+                    await self.send_media_by_file_unique_id(self.user_client, to_user_id, get_file_unique_id, 'man', msg.id)
+                    print(f"【👦】最后一试，可能没东西，尝试回覆文件：{get_file_unique_id} 给 {to_user_id}",flush=True)
 
-                asyncio.create_task(delayed_resend())
-
+                self.loading_manager.set(file_unique_id, chat_id=msg.chat_id, message_id=msg.id)
+                asyncio.create_task(delayed_resend(file_unique_id))
+            else:
+                print(f"【👦】将文件：{file_unique_id} 回覆给 {to_user_id}，返回结果：{ret}",flush=True)
              
         else:
-            print(f"【👦】收到 text - {msg.text}",flush=True)
+            
             print(f"{msg.text}")
             await msg.delete()
-            print("D755")
+            print(f"【👦】👆 (私聊) === 收到 text - {msg.text}",flush=True)
+            
 
     # ================= Human Private Meddia 私聊 Media 媒体处理：人类账号 =================
     async def handle_user_private_media(self,event):
@@ -1479,11 +1561,11 @@ class MediaUtils:
         
         caption = ""
         if(event is None):
-            print(f"【👦】-{doc_id}-来自私聊媒体回溯处理：{msg.media} {file_type}，chat_id={msg.chat_id}", flush=True)
+            print(f"【👦】👇 (私聊)-process_private_media_msg- {doc_id} -来自私聊媒体回溯处理：{msg.media} {file_type}，chat_id={msg.chat_id}", flush=True)
             caption        = msg.message or ""
             
         else:
-            print(f"【👦】-{doc_id}-收到私聊媒体，来自 {event.peer_id.user_id} doc_id = {doc_id} {file_type}",flush=True)
+            print(f"【👦】👇 (私聊)-process_private_media_msg- {doc_id} -收到私聊媒体，来自 {event.peer_id.user_id} doc_id = {doc_id} {file_type}",flush=True)
             caption        = event.message.text or ""
             
         # print(f"caption={caption}",flush=True)
@@ -1588,6 +1670,8 @@ class MediaUtils:
                 
             
             await self.upsert_file_record(upsert_data)
+
+            
                 
         except ChatForwardsRestrictedError:
             print(f"【👦】🚫 跳过：该媒体来自受保护频道 msg.id = {msg.id}", flush=True)
@@ -1603,8 +1687,8 @@ class MediaUtils:
                 所以需要再做处理, 等发生了再补
                 '''
             return
-                   
-        print("【👦】🔚更新并传送给机器人，完成媒体接收流程")
+                  
+        print("【👦】👆 (私聊)-process_private_media_msg- 更新并传送给机器人，完成媒体接收流程")
         await msg.delete() 
 
     # ================= Human Group Media 3-1. 群组媒体处理：人类账号 =================
@@ -1622,7 +1706,7 @@ class MediaUtils:
         chat_id        = msg.chat_id
         message_id     = msg.id
 
-        print(f"【👦】收到群组媒体，来自 chat_id={chat_id} message_id={message_id}",flush=True)
+        print(f"【👦】收到群组媒体，来自 chat_id={chat_id} message_id={message_id}, 检查库里有没有",flush=True)
         metadata = await self.build_media_dict_from_telethon(msg)
 
         # —— 步骤 A：先按 doc_id 查库 —— 
@@ -1632,7 +1716,7 @@ class MediaUtils:
                 SELECT * FROM file_records WHERE file_unique_id = %s AND bot_id = %s
                 '''
             row = await MySQLPool.fetchone(sql, (metadata["caption"],self.bot_id))
-            print(f"【👦】通过 file_unique_id={metadata['caption']} 查询到的记录", flush=True)
+            print(f"【👦】已经存 file_unique_id={metadata['caption']} 的记录", flush=True)
 
         if not row:
             try:
@@ -1667,8 +1751,9 @@ class MediaUtils:
         metadata['message_id'] = message_id        
 
         try:
+            print(f"【👦】- {metadata['doc_id']} - 更新记录", flush=True)
             await self.upsert_file_record(metadata)
-            
+           
         except Exception as e:
             print(f"AIOR-606 Error: {e}")        
 
