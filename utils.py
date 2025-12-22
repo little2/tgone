@@ -1645,8 +1645,15 @@ class MediaUtils:
         # 转发到群组，并删除私聊
         try:
             # 这里直接发送 msg.media，如果受保护会被阻止
-            
-            ret = await self.user_client.send_file(TARGET_GROUP_ID, msg.media, caption=str(doc_id))
+            try:
+                ret = await self.user_client.send_file(TARGET_GROUP_ID, msg.media, caption=str(doc_id))
+                print(f"【👦】已转发到目标群组：{TARGET_GROUP_ID}，消息 ID：{ret.id}",flush=True)
+            except ChatForwardsRestrictedError:
+                print(f"【👦】🚫 跳过：该媒体来自受保护频道 msg.id = {msg.id}", flush=True)
+                return  # ⚠️ 不处理，直接跳出
+            except Exception as e:
+                print(f"【👦】❌ 其他发送失败：{e}", flush=True)
+                return
             
            
             # 插入或更新 placeholder 记录 (message_id 自动留空，由群组回调补全)
