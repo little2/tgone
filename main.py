@@ -38,6 +38,22 @@ async def keep_alive_ping():
                     user_client.iter_dialogs(limit=1)
         except Exception as e:
             print(f"⚠️ Keep-alive ping failed: {e}")
+
+        try:
+            print(f"[CATCH] 触发重连 + catch_up()", flush=True)        
+            await user_client.catch_up()
+            print("[CATCH] catch_up() 执行完成。", flush=True)
+        except Exception as e:
+            err = f"[CATCH] 执行 catch_up() 失败: {e!r}"
+            print(err, flush=True)
+        
+        try:
+            user_client.iter_dialogs(limit=1)
+        except Exception as e:
+            print(f"[WD] keep_updates_warm 出错: {e}", flush=True)
+        return
+
+
         await asyncio.sleep(120)  # 每 5 分鐘 ping 一次
 
 async def on_startup(bot: Bot):
