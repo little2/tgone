@@ -7,7 +7,7 @@ import time
 from dotenv import load_dotenv
 from telethon.sessions import StringSession
 from telethon import TelegramClient, events
-
+from datetime import datetime
 # Aiogram 相关
 from aiogram import F, Bot, Dispatcher, types
 from aiogram.client.default import DefaultBotProperties
@@ -22,6 +22,24 @@ from utils import MediaUtils
 from tgone_config import API_ID, API_HASH, BOT_TOKEN, TARGET_GROUP_ID, PHONE_NUMBER,  BOT_MODE, WEBHOOK_HOST, WEBHOOK_PATH, SESSION_STRING, config
 
 lz_var_start_time = time.time()
+
+
+async def _fetch_and_consume(session: aiohttp.ClientSession, url: str):
+    """
+    并发读取网页内容：
+    - 加一个时间戳参数，避免缓存
+    - 真正把内容 read() 回来，让对方服务器感觉有人在看页面
+    """
+    try:
+        params = {"t": int(datetime.now().timestamp())}
+        async with session.get(url, params=params) as resp:
+            content = await resp.read()  # 真实读取内容
+            length = len(content)
+            # print(f"🌐 keep-alive fetch => {url} status={resp.status} bytes={length}", flush=True)
+    except Exception as e:
+        print(f"⚠️ keep-alive fetch failed => {url} error={e}", flush=True)
+
+
 
 async def ping_keepalive_task():
     """
@@ -65,16 +83,16 @@ async def ping_keepalive_task():
 
         # 间隔 50 秒
         try:
-            await client.catch_up()
-            client.iter_dialogs(limit=1)
+            await user_client.catch_up()
+            user_client.iter_dialogs(limit=1)
         except Exception as e:
             print("⚠️ catch_up() 失败，准备重连:", e, flush=True)
             try:
-                await client.disconnect()
+                await user_client.disconnect()
             except Exception:
                 pass
-            await client.connect()
-            await client.catch_up()
+            await user_client.connect()
+            await user_client.catch_up()
         await asyncio.sleep(50)
 
 
@@ -227,9 +245,9 @@ async def main():
     await media_utils.ensure_database_tables()
 
 
-    asyncio.create_task(ping_keepalive_task())
+   
     asyncio.create_task(media_utils.heartbeat())
-
+    asyncio.create_task(ping_keepalive_task())
     if BOT_MODE == "webhook":
         asyncio.create_task(run_telethon())
         dp.startup.register(on_startup)
