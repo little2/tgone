@@ -527,6 +527,180 @@ class MediaUtils:
         return web.Response(text="✅ Bot 正常运行", status=200)
 
 
+    # ================= 数据库表初始化 =================
+    async def ensure_database_tables(self):
+        """确保所有必需的数据库表存在，若不存在则创建"""
+        tables_sql = {
+            "sora_content": """
+            CREATE TABLE IF NOT EXISTS `sora_content` (
+            `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+            `source_id` varchar(50) NOT NULL,
+            `file_type` varchar(10) DEFAULT 'v',
+            `content` text DEFAULT NULL,
+            `content_seg` text DEFAULT NULL,
+            `file_size` bigint(20) UNSIGNED DEFAULT NULL,
+            `duration` int(10) UNSIGNED DEFAULT NULL,
+            `tag` varchar(200) DEFAULT NULL,
+            `thumb_file_unique_id` varchar(100) DEFAULT NULL,
+            `thumb_hash` varchar(64) DEFAULT NULL,
+            `owner_user_id` bigint(20) UNSIGNED DEFAULT NULL,
+            `source_channel_message_id` bigint(20) UNSIGNED DEFAULT NULL,
+            `valid_state` tinyint(3) UNSIGNED NOT NULL DEFAULT 1 COMMENT '1待验证 / 4失效 / 9有效 / 20 下架',
+            `stage` enum('','salai','luguan','no_thumb','no_file','pending','updated','prepare') DEFAULT NULL,
+            `plan_update_timestamp` int(13) UNSIGNED DEFAULT NULL,
+            `file_password` varchar(150) DEFAULT NULL,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `source_id` (`source_id`),
+            KEY `idx_file_size` (`file_size`),
+            KEY `idx_duration` (`duration`),
+            KEY `idx_source_id` (`source_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+            """,
+            "file_records": """
+            CREATE TABLE IF NOT EXISTS `file_records` (
+            `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+            `chat_id` bigint(20) DEFAULT NULL COMMENT 'Telegram 的 chat ID',
+            `message_id` bigint(20) DEFAULT NULL COMMENT 'Telegram 的 message ID，群组触发后补全',
+            `doc_id` bigint(20) DEFAULT NULL COMMENT 'MTProto 媒体的 document.id / photo.id / video.id',
+            `access_hash` bigint(20) DEFAULT NULL COMMENT 'MTProto 媒体的 access_hash',
+            `file_reference` text DEFAULT NULL COMMENT 'MTProto 媒体的 file_reference（hex）',
+            `file_id` varchar(255) DEFAULT NULL COMMENT 'Bot API 的 file_id',
+            `file_unique_id` varchar(255) DEFAULT NULL COMMENT 'Bot API 的 file_unique_id',
+            `file_type` varchar(10) DEFAULT NULL,
+            `mime_type` varchar(100) DEFAULT NULL COMMENT '媒体的 MIME 类型（如 "image/jpeg" 或 "video/mp4"）',
+            `file_name` varchar(255) DEFAULT NULL COMMENT '文件名（只有 document/video 才有，photo 通常无）',
+            `file_size` bigint(20) UNSIGNED DEFAULT NULL COMMENT '媒体大小（字节数）',
+            `uploader_type` enum('bot','user') DEFAULT 'user' COMMENT '标记此行由 bot 还是 user 上传',
+            `created_at` timestamp NULL DEFAULT current_timestamp() COMMENT '创建时间',
+            `updated_at` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp() COMMENT '最近更新时间',
+            `man_id` bigint(20) UNSIGNED DEFAULT NULL,
+            `bot_id` bigint(20) UNSIGNED DEFAULT NULL,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `uniq_file_uid` (`file_unique_id`,`bot_id`) USING BTREE,
+            KEY `doc_id` (`doc_id`,`man_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='Telegram 媒体索引表';
+            """,
+            "file_extension": """
+            CREATE TABLE IF NOT EXISTS `file_extension` (
+            `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+            `file_type` varchar(30) DEFAULT NULL,
+            `file_unique_id` varchar(100) NOT NULL,
+            `file_id` varchar(200) NOT NULL,
+            `bot` varchar(50) DEFAULT NULL,
+            `user_id` bigint(20) DEFAULT NULL,
+            `create_time` datetime DEFAULT NULL,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `file_id` (`file_id`,`bot`),
+            KEY `idx_file_unique_id` (`file_unique_id`),
+            KEY `idx_file_id` (`file_id`),
+            KEY `idx_bot` (`bot`),
+            KEY `idx_uid_bid` (`file_unique_id`,`file_id`),
+            KEY `idx_uid_bot` (`file_unique_id`,`bot`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+            """,
+            "document": """
+            CREATE TABLE IF NOT EXISTS `document` (
+            `file_unique_id` varchar(100) NOT NULL,
+            `file_size` int(12) UNSIGNED NOT NULL,
+            `file_name` varchar(100) DEFAULT NULL,
+            `mime_type` varchar(100) DEFAULT NULL,
+            `caption` mediumtext DEFAULT NULL,
+            `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            `update_time` datetime DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+            `files_drive` varchar(100) DEFAULT NULL,
+            `file_password` varchar(150) DEFAULT NULL,
+            `kc_id` int(10) UNSIGNED DEFAULT NULL,
+            `kc_status` enum('','pending','updated') DEFAULT NULL,
+            PRIMARY KEY (`file_unique_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+            """,
+            "photo": """
+            CREATE TABLE IF NOT EXISTS `photo` (
+            `file_unique_id` varchar(100) NOT NULL,
+            `file_size` int(11) NOT NULL,
+            `width` int(11) NOT NULL,
+            `height` int(11) NOT NULL,
+            `file_name` varchar(100) DEFAULT NULL,
+            `caption` mediumtext DEFAULT NULL,
+            `root_unique_id` varchar(100) DEFAULT NULL,
+            `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            `update_time` datetime DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+            `files_drive` varchar(100) DEFAULT NULL,
+            `hash` varchar(64) DEFAULT NULL,
+            `same_fuid` varchar(50) DEFAULT NULL,
+            `kc_id` int(11) UNSIGNED DEFAULT NULL,
+            `kc_status` varchar(10) DEFAULT NULL,
+            PRIMARY KEY (`file_unique_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+            """,
+            "video": """
+            CREATE TABLE IF NOT EXISTS `video` (
+            `file_unique_id` varchar(100) NOT NULL,
+            `file_size` int(13) UNSIGNED NOT NULL,
+            `duration` int(11) UNSIGNED DEFAULT NULL,
+            `width` int(11) UNSIGNED DEFAULT NULL,
+            `height` int(11) UNSIGNED DEFAULT NULL,
+            `file_name` varchar(100) DEFAULT NULL,
+            `mime_type` varchar(100) NOT NULL DEFAULT 'video/mp4',
+            `caption` mediumtext DEFAULT NULL,
+            `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            `update_time` datetime DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+            `tag_count` int(11) DEFAULT 0,
+            `kind` varchar(2) DEFAULT NULL,
+            `credit` int(11) DEFAULT 0,
+            `files_drive` varchar(100) DEFAULT NULL,
+            `root` varchar(50) DEFAULT NULL,
+            `kc_id` int(11) UNSIGNED DEFAULT NULL,
+            `kc_status` enum('','pending','updated') DEFAULT NULL,
+            PRIMARY KEY (`file_unique_id`),
+            KEY `file_size` (`file_size`,`width`,`height`,`mime_type`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+            """,
+            "animation": """
+            CREATE TABLE IF NOT EXISTS `animation` (
+            `file_unique_id` varchar(100) NOT NULL,
+            `file_size` int(13) UNSIGNED NOT NULL,
+            `duration` int(11) UNSIGNED DEFAULT NULL,
+            `width` int(11) UNSIGNED DEFAULT NULL,
+            `height` int(11) UNSIGNED DEFAULT NULL,
+            `file_name` varchar(100) DEFAULT NULL,
+            `mime_type` varchar(100) NOT NULL DEFAULT 'video/mp4',
+            `caption` mediumtext DEFAULT NULL,
+            `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            `update_time` datetime DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+            `tag_count` int(11) DEFAULT 0,
+            `kind` varchar(2) DEFAULT NULL,
+            `credit` int(11) DEFAULT 0,
+            `files_drive` varchar(100) DEFAULT NULL,
+            `root` varchar(50) DEFAULT NULL,
+            `kc_id` int(11) UNSIGNED DEFAULT NULL,
+            `kc_status` enum('','pending','updated') DEFAULT NULL,
+            PRIMARY KEY (`file_unique_id`),
+            KEY `file_size` (`file_size`,`width`,`height`,`mime_type`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+            """,
+            "bot": """
+            CREATE TABLE IF NOT EXISTS `bot` (
+            `bot_id` bigint(1) UNSIGNED NOT NULL,
+            `bot_token` mediumtext NOT NULL,
+            `bot_name` varchar(30) NOT NULL,
+            `user_id` bigint(1) DEFAULT NULL,
+            `bot_root` varchar(30) NOT NULL,
+            `bot_title` varchar(30) NOT NULL,
+            `work_status` enum('used','ban','free','frozen','') DEFAULT NULL,
+            PRIMARY KEY (`bot_id`)
+            ) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+            """
+        }
+
+        for table_name, sql in tables_sql.items():
+            try:
+                await MySQLPool.execute(sql)
+                print(f"✅ 确保表 `{table_name}` 存在")
+            except Exception as e:
+                print(f"❌ 创建表 `{table_name}` 失败: {e}")
+                raise
+
 
     
     # send_media_by_doc_id 函数 

@@ -168,6 +168,9 @@ async def run_aiogram_polling():
 async def main():
 # 10.1 Telethon “人类账号” 登录
 
+    print("🔧 正在初始化数据库表...")
+    await media_utils.ensure_database_tables()
+
     asyncio.create_task(media_utils.heartbeat())
 
     if BOT_MODE == "webhook":
