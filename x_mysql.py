@@ -1,6 +1,6 @@
 import aiomysql
 import time
-from config import MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB, MYSQL_DB_PORT
+from tgone_config import MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB, MYSQL_DB_PORT
 from typing import Optional, Dict, Any
 from lz_memory_cache import MemoryCache
 import asyncio

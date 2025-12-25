@@ -18,7 +18,7 @@ from telethon.tl.types import InputDocument, DocumentAttributeVideo,DocumentAttr
 
 from tgone_mysql import MySQLPool, DBIntegrityError, DBOperationalError
 
-from config import  TARGET_GROUP_ID, TARGET_GROUP_ID_FROM_BOT
+from tgone_config import  TARGET_GROUP_ID, TARGET_GROUP_ID_FROM_BOT
 
 
 """

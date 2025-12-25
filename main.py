@@ -19,10 +19,7 @@ from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_applicati
 from utils import MediaUtils
 
 
-from config import API_ID, API_HASH, BOT_TOKEN, TARGET_GROUP_ID, PHONE_NUMBER,  BOT_MODE, WEBHOOK_HOST, WEBHOOK_PATH, SESSION_STRING, config
-
-
-
+from tgone_config import API_ID, API_HASH, BOT_TOKEN, TARGET_GROUP_ID, PHONE_NUMBER,  BOT_MODE, WEBHOOK_HOST, WEBHOOK_PATH, SESSION_STRING, config
 
 lz_var_start_time = time.time()
 
