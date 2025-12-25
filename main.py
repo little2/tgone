@@ -23,6 +23,61 @@ from tgone_config import API_ID, API_HASH, BOT_TOKEN, TARGET_GROUP_ID, PHONE_NUM
 
 lz_var_start_time = time.time()
 
+async def ping_keepalive_task():
+    """
+    每 4 分钟并发访问一轮 URL，读取完整内容。
+    """
+    ping_urls = [
+        "https://tgone-da0b.onrender.com",  # TGOND  park
+        "https://lz-qjap.onrender.com",     # 上传 luzai02bot
+        "https://lz-v2p3.onrender.com",     # 鲁仔 lz04bot   # 
+        "https://twork-vdoh.onrender.com",  # TGtworkONE freebsd666bot
+        "https://twork-f1im.onrender.com",  # News  news05251
+        "https://lz-9bfp.onrender.com",     # 菊次郎 stcxp1069
+        "https://lz-rhxh.onrender.com",     # 红包 stoverepmaria
+        "https://lz-6q45.onrender.com",     # 布施 yaoqiang648
+        "https://tgone-ah13.onrender.com"   # Rely
+    ]
+
+    timeout = aiohttp.ClientTimeout(total=10)
+    headers = {
+        # 用正常浏览器 UA，更像「真人访问」
+        "User-Agent": "Mozilla/5.0 (keep-alive-bot) Chrome/120.0"
+    }
+
+    while True:
+        try:
+            async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+                tasks = [
+                    _fetch_and_consume(session, url)
+                    for url in ping_urls
+                ]
+                # 并发执行所有请求
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                # 只在需要时检查异常（这里仅打印，有需求可加统计）
+                for url, r in zip(ping_urls, results):
+                    if isinstance(r, Exception):
+                        print(f"⚠️ task error for {url}: {r}", flush=True)
+
+        except Exception as outer:
+            print(f"🔥 keep-alive loop outer error: {outer}", flush=True)
+
+        # 间隔 50 秒
+        try:
+            await client.catch_up()
+            client.iter_dialogs(limit=1)
+        except Exception as e:
+            print("⚠️ catch_up() 失败，准备重连:", e, flush=True)
+            try:
+                await client.disconnect()
+            except Exception:
+                pass
+            await client.connect()
+            await client.catch_up()
+        await asyncio.sleep(50)
+
+
 
 async def keep_alive_ping():
     url = f"{WEBHOOK_HOST}{WEBHOOK_PATH}" if BOT_MODE == "webhook" else f"{WEBHOOK_HOST}/"
@@ -171,6 +226,8 @@ async def main():
     print("🔧 正在初始化数据库表...")
     await media_utils.ensure_database_tables()
 
+
+    asyncio.create_task(ping_keepalive_task())
     asyncio.create_task(media_utils.heartbeat())
 
     if BOT_MODE == "webhook":
