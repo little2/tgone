@@ -689,7 +689,7 @@ class MediaUtils:
             `bot_title` varchar(30) NOT NULL,
             `work_status` enum('used','ban','free','frozen','') DEFAULT NULL,
             PRIMARY KEY (`bot_id`)
-            ) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
             """
         }
 
