@@ -9,3 +9,8 @@ pymysql>=1.1.0
 python-dotenv>=1.0.1
 
 aiomysql>=0.1.1
+
+# 加密依赖（解决 caching_sha2_password 认证问题）
+cryptography>=41.0.0
+
+
