@@ -42,7 +42,8 @@ MYSQL_PASSWORD  = config.get('db_password', os.getenv('MYSQL_DB_PASSWORD', ''))
 MYSQL_DB        = config.get('db_name', os.getenv('MYSQL_DB_NAME', ''))
 MYSQL_DB_PORT   = int(config.get('db_port', os.getenv('MYSQL_DB_PORT', 3306)))
 
-META_BOT        = config.get('meta_bot', os.getenv('META_BOT', ''))
+
+
 BOT_TOKEN       = config.get('bot_token', os.getenv('BOT_TOKEN', ''))
 TARGET_GROUP_ID = int(config.get('target_group_id', os.getenv('TARGET_GROUP_ID', 0)))
 TARGET_GROUP_ID_FROM_BOT = int(config.get('target_group_id_from_bot', os.getenv('TARGET_GROUP_ID_FROM_BOT', 0)))
