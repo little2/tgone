@@ -740,7 +740,7 @@ class MediaUtils:
     async def send_media_by_file_unique_id(self,client, to_user_id, file_unique_id, client_type, msg_id):
         ext_row = []
         print(f"👇-send_media_by_file_unique_id-",flush=True)
-        print(f"【🚹】【1】[{file_unique_id}]开始处理 file_unique_id={file_unique_id}，目标用户：{to_user_id}",flush=True)
+        print(f"【🚹】【1】[{file_unique_id}]开始处理 file_unique_id={file_unique_id}，先查询是否有该 file_unqiue_id 是否在库 , 目标用户：{to_user_id}",flush=True)
         try:
             
             sql = """
@@ -820,7 +820,7 @@ class MediaUtils:
             print(f"[194] Error: {e}")
             return
         
-        print(f"【🤖】【5】开始传送",flush=True)
+        print(f"【🤖】【5】开始传送 {row['file_unique_id']} by {client_type}",flush=True)
         if client_type == 'bot':
             # 机器人账号发送
             await self.send_media_via_bot(client, to_user_id, row, reply_to_message_id=msg_id)
@@ -1270,15 +1270,18 @@ class MediaUtils:
             raise RuntimeError("bot refresh sent, but file_records not updated in time")
 
         try:
+            print(f"【👦】准备发送文件，file_type={file_type}, doc_id={doc_id}, access_hash={access_hash}",flush=True)
             # 优先走历史消息（最稳：可自动刷新引用）
             await _send_from_history()
             return
 
         except Exception:
             # 历史消息拿不到，再尝试 DB ref 直发
+            
             pass
 
         try:
+            print(f"【👦】尝试用 DB 引用发送文件，file_type={file_type}, doc_id={doc_id}, access_hash={access_hash}",flush=True)
             if file_type == "photo":
                 if not _has_ref_fields():
                     return await _refresh_by_bot_and_retry()
@@ -1296,13 +1299,16 @@ class MediaUtils:
                 return
 
             # 其它类型统一走 bot 刷新
+            print(f"【👦】未知文件类型，尝试用 bot 刷新，file_type={file_type}",flush=True)
             return await _refresh_by_bot_and_retry()
 
         except FileReferenceExpiredError:
+            print(f"【👦】文件引用过期，尝试用 bot 刷新，file_type={file_type}",flush=True)
             # 引用过期：直接走 bot 刷新（不要再回拉历史了，历史前面已经失败过）
             return await _refresh_by_bot_and_retry()
 
         except Exception as e:
+            print(f"【👦】发送文件时出错：{e}，尝试用 bot 刷新",flush=True)
             # 其它异常：最后也尝试 bot 刷新一次
             try:
                 return await _refresh_by_bot_and_retry()
@@ -1614,7 +1620,7 @@ class MediaUtils:
 
     # ================= Human Private Text  私聊 Message 文字处理：人类账号 =================
     async def handle_user_private_text(self,event):
-        
+        _title = ''
         msg = event.message
         if not msg.is_private or msg.media or not msg.text:
             return
@@ -1650,18 +1656,20 @@ class MediaUtils:
                     print(f"Error kicking bot: {e} {botname}", flush=True)
 
         if len(text)<40 and self.doc_id_pattern.fullmatch(text):
-            print(f"【👦】👇 (私聊) === 收到 doc_id- 请求 {msg.text}",flush=True)
+            _title = f"【👦】{msg.text} -"
+            print(f"{_title}👇 (私聊) === 收到 doc_id- 请求 {msg.text}",flush=True)
             doc_id = int(text)
             await self.send_media_by_doc_id(self.user_client, to_user_id, doc_id, 'man', msg.id)
 
 
         elif len(text)<40 and self.file_unique_id_pattern.fullmatch(text):
-            print(f"【👦】👇 (私聊) ==== 收到 file_unqiue_id 请求- {msg.text}",flush=True)
+            _title = f"【👦】{msg.text} -"
+            print(f"{_title}👇 (私聊) ==== 收到 file_unqiue_id 请求- {msg.text}",flush=True)
             file_unique_id = text
             ret = await self.send_media_by_file_unique_id(self.user_client, to_user_id, file_unique_id, 'man', msg.id)
             
             if(ret=='retrieved'):
-                print(f"【👦】收到 retrieved , 已请 Bot 发送文件 {file_unique_id}，等待渲染成功，以回覆给 {to_user_id}",flush=True)
+                print(f"{_title} 收到 retrieved , 已请 Bot 发送文件 {file_unique_id}，等待渲染成功，以回覆给 {to_user_id}",flush=True)
                 async def delayed_resend(get_file_unique_id):
                     print(f".      背景检查 {get_file_unique_id}")
                     for _ in range(6):  # 最多重试 6 次
@@ -1670,29 +1678,26 @@ class MediaUtils:
                             
                             if self.loading_manager.has_file_id(get_file_unique_id):
                                 # 显示第几次
-                                print(f".      【👦】在 {_+1} 次检查 file_id 已渲染，并尝试回覆文件：{get_file_unique_id} 给 {to_user_id}",flush=True)
+                                print(f".      {_title}在 {_+1} 次检查 file_id 已渲染，并尝试回覆文件：{get_file_unique_id} 给 {to_user_id}",flush=True)
                                 try:
                                     await self.send_media_by_file_unique_id(self.user_client, to_user_id, get_file_unique_id, 'man', msg.id)
                                 except Exception as e:
-                                    print(f"【👦】发送失败，重试中：{e}", flush=True)
+                                    print(f"{_title}发送失败，重试中：{e}", flush=True)
                                 return
                             else:
                                 await asyncio.sleep(0.9)
                         except Exception as e:
-                            print(f"【👦】发送失败，重试中：{e}", flush=True)
+                            print(f"{_title}发送失败，重试中：{e}", flush=True)
                     retsult_send_media_by_file_unique_id = await self.send_media_by_file_unique_id(self.user_client, to_user_id, get_file_unique_id, 'man', msg.id)
-                    print(f"【👦】最后一试，可能没东西，尝试回覆文件：{get_file_unique_id} 给 {to_user_id} ret=>{retsult_send_media_by_file_unique_id}",flush=True)
+                    print(f"{_title}最后一试，可能没东西，尝试回覆文件：{get_file_unique_id} 给 {to_user_id} ret=>{retsult_send_media_by_file_unique_id}",flush=True)
 
                 self.loading_manager.set(file_unique_id, chat_id=msg.chat_id, message_id=msg.id)
                 asyncio.create_task(delayed_resend(file_unique_id))
             else:
-                print(f"【👦】将文件：{file_unique_id} 回覆给 {to_user_id}，返回结果：{ret}",flush=True)
-             
+                print(f"{_title}👆 直发，将文件：{file_unique_id} 回覆给 {to_user_id}，(send_media_via_) ",flush=True)
         else:
-            
-            print(f"{msg.text}")
             await msg.delete()
-            print(f"【👦】👆 (私聊) === 收到 text - {msg.text}",flush=True)
+            print(f"(私聊) 非请求=== 收到 text - {msg.text}",flush=True)
             
 
     # ================= Human Private Meddia 私聊 Media 媒体处理：人类账号 =================
