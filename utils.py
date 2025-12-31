@@ -761,8 +761,7 @@ class MediaUtils:
                     print(f"【🚹】【2-3】[{file_unique_id}]扩展库有😄",flush=True)
                     bot_row = await self.receive_file_from_bot(ext_row)
                     
-                    max_retries = 3
-                    delay = 2  # 每次重试的延迟时间（秒）
+                    
 
                     if not bot_row: # 传送失败
                         print(f"【🤖】【4】从机器人获取文件失败，file_unique_id={file_unique_id}",flush=True)
@@ -1086,16 +1085,16 @@ class MediaUtils:
             print(f"{process_header}准备让机器人{row['bot_id']}发送文件file_unique_id={row['file_unique_id']} 给 【👦】{self.man_id}",flush=True)
             if row["file_type"] == "photo" or row["file_type"] == "p":
                 # await mybot.send_photo(chat_id=7496113118, photo=row["file_id"])
-                retSend = await mybot.send_photo(chat_id=self.man_id, photo=row["file_id"])
+                retSend = await mybot.send_photo(chat_id=self.man_id, photo=row["file_id"], caption=f"{row['file_unique_id']}")
             elif row["file_type"] == "video" or row["file_type"] == "v":
-                retSend = await mybot.send_video(chat_id=self.man_id, video=row["file_id"])
+                retSend = await mybot.send_video(chat_id=self.man_id, video=row["file_id"], caption=f"{row['file_unique_id']}")
 
             elif row["file_type"] == "document" or row["file_type"] == "d":
-                retSend = await mybot.send_document(chat_id=self.man_id, document=row["file_id"])
+                retSend = await mybot.send_document(chat_id=self.man_id, document=row["file_id"], caption=f"{row['file_unique_id']}")
             elif row["file_type"] == "animation" or row["file_type"] == "n":
-                retSend = await mybot.send_animation(chat_id=self.man_id, animation=row["file_id"])
+                retSend = await mybot.send_animation(chat_id=self.man_id, animation=row["file_id"], caption=f"{row['file_unique_id']}")
 
-            print(f"{process_header} 媒体已 私发 到👦，file_unique_id={row['file_unique_id']}",flush=True)
+            print(f"{process_header} 媒体已 私发 到👦，file_unique_id={row['file_unique_id']}, 查看 👦process_private_media_msg",flush=True)
             # print(f"\n【🤖】4️⃣retSend=>{retSend}\n",flush=True)
         except TelegramForbiddenError as e:
         # 私聊未 /start、被拉黑、群权限不足等
@@ -1451,7 +1450,7 @@ class MediaUtils:
 
         if record:
              if record['doc_id'] is not None and record['file_unique_id'] is not None:
-                print(f"【🤖】已存在：doc_id={doc_id}，file_unique_id={record['file_unique_id']}，跳过转发", flush=True)
+                print(f"【🤖】已存在：doc_id={doc_id}，file_unique_id={record['file_unique_id']}，不需要转到展库", flush=True)
                 return   
              else:
                 print(f"【🤖】记录存在但缺少 doc_id {record['doc_id']} 或 file_unique_id ( {record['file_unique_id']})，继续处理", flush=True)   
