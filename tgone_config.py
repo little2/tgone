@@ -43,7 +43,8 @@ MYSQL_DB_PORT   = int(config.get('db_port', os.getenv('MYSQL_DB_PORT', 3306)))
 
 POSTGRES_DSN = os.getenv("POSTGRES_DSN")
 
-
+KEY_USER_ID     = int(config.get('key_user_id', os.getenv('KEY_USER_ID', 0)))
+KEY_USER_PHONE     = config.get('key_user_phone', os.getenv('KEY_USER_PHONE', ''))
 
 BOT_TOKEN       = config.get('bot_token', os.getenv('BOT_TOKEN', ''))
 TARGET_GROUP_ID = int(config.get('target_group_id', os.getenv('TARGET_GROUP_ID', 0)))

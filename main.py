@@ -17,11 +17,21 @@ from aiogram.filters import Command
 from aiohttp import web
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from utils import MediaUtils
+from telethon.tl.functions.contacts import ImportContactsRequest
+from telethon.tl.types import InputPhoneContact
 
-
-from tgone_config import API_ID, API_HASH, BOT_TOKEN, TARGET_GROUP_ID, PHONE_NUMBER,  BOT_MODE, WEBHOOK_HOST, WEBHOOK_PATH, SESSION_STRING, config
+from tgone_config import API_ID, API_HASH, BOT_TOKEN, TARGET_GROUP_ID, TARGET_GROUP_ID_FROM_BOT, PHONE_NUMBER,  BOT_MODE, WEBHOOK_HOST, WEBHOOK_PATH, SESSION_STRING,KEY_USER_PHONE,KEY_USER_ID, config
 
 lz_var_start_time = time.time()
+
+if TARGET_GROUP_ID == 0:
+    TARGET_GROUP_ID = 0 # bot
+
+if TARGET_GROUP_ID_FROM_BOT == 0:
+    
+    TARGET_GROUP_ID_FROM_BOT = 0 # userbot
+   
+
 
 
 async def _fetch_and_consume(session: aiohttp.ClientSession, url: str):
@@ -222,29 +232,48 @@ async def aiogram_handle_group_media(message: types.Message):
     await media_utils.aiogram_handle_group_media(message)
     return
    
+async def say_hello():
+     # 构造一个要导入的联系人
+    contact = InputPhoneContact(
+        client_id=0, 
+        phone=KEY_USER_PHONE, 
+        first_name="KeyMan", 
+        last_name=""
+    )
+    result = await user_client(ImportContactsRequest([contact]))
+    print("导入结果:", result)
+    target = await user_client.get_entity(KEY_USER_ID)     # 7550420493
+
+    me = await user_client.get_me()
+    await user_client.send_message(target, f"[TGONE] <code>{me.id}</code> - {me.first_name} {me.last_name or ''} {me.phone or ''}。我在执行TGONE任务！",parse_mode='html')   
 
 async def run_telethon():
+    
     await user_client.start(PHONE_NUMBER)
     print("【Telethon】人类账号 已启动。", flush=True)
+    await say_hello()
+
     await media_utils.set_bot_info()
     print(f'你的用户名: {media_utils.man_username} / {media_utils.bot_username}', flush=True)
-    print(f'你的ID: {media_utils.man_id} / {media_utils.bot_id}', flush=True)
+    print(f'你的ID (target_group_id_from_bot): {media_utils.man_id} / (target_group_id) {media_utils.bot_id}', flush=True)
     await user_client.send_message(media_utils.bot_username, '/start')
     await user_client.run_until_disconnected()
-
+    
 
 async def run_aiogram_polling():
     print("【Aiogram】Bot（纯 Bot-API） 已启动，监听私聊＋群组媒体。", flush=True)
+    me = await bot_client.get_me()
+    TARGET_GROUP_ID = me.id
     await dp.start_polling(bot_client)   
 
 # ================= 14. 启动两个客户端 =================
 async def main():
 # 10.1 Telethon “人类账号” 登录
 
-    print("🔧 正在初始化数据库表...")
-    await media_utils.ensure_database_tables()
 
 
+    
+    # await media_utils.ensure_database_tables()
    
     asyncio.create_task(media_utils.heartbeat())
     asyncio.create_task(ping_keepalive_task())
@@ -265,6 +294,7 @@ async def main():
         port = int(os.environ.get("PORT", 8080))
         await web._run_app(app, host="0.0.0.0", port=port)
     else:
+        print("🚀 啟動 Polling 模式")
         t = asyncio.create_task(run_telethon())
         await run_aiogram_polling()
         t.cancel()
