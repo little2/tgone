@@ -1262,6 +1262,7 @@ class MediaUtils:
                     """,
                     (file_unique_id, self.man_id),
                 )
+                print(f">>>>>【👦】轮询检查 file_records 更新情况：{new_row} {file_unique_id}  {self.man_id}", flush=True)
                 if new_row and new_row.get("file_reference") and new_row.get("doc_id"):
                     # 用刷新后的 row 再走一次 send_media_via_man（递归一次即可）
                     return await self.send_media_via_man(client, to_user_id, new_row, reply_to_message_id)
@@ -1307,7 +1308,7 @@ class MediaUtils:
             return await _refresh_by_bot_and_retry()
 
         except Exception as e:
-            print(f"【👦】发送文件时出错：{e}，尝试用 bot 刷新",flush=True)
+            print(f"【👦】1131 发送文件时出错：{e}，尝试用 bot 刷新",flush=True)
             # 其它异常：最后也尝试 bot 刷新一次
             try:
                 return await _refresh_by_bot_and_retry()

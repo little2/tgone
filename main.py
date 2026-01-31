@@ -143,6 +143,12 @@ async def on_startup(bot: Bot):
     await bot.set_webhook(webhook_url)
     cold_start = False  # 启动完成
 
+async def on_startup_poll(bot: Bot):
+   
+    print(f"🔗 設定 Telegram webhook 為空")
+    await bot.delete_webhook(drop_pending_updates=True)
+    # await bot.set_webhook(None)
+   
 
 # ================= 7. 初始化 Telethon 客户端 =================
 
@@ -177,6 +183,66 @@ async def join(invite_hash):
 
 
 
+from telethon import events
+from telethon.tl.types import InputPhoneContact
+from telethon.tl.functions.contacts import ImportContactsRequest
+
+from telethon.tl.types import InputPhoneContact, MessageMediaContact
+from telethon.tl.functions.contacts import ImportContactsRequest
+
+@user_client.on(
+    events.NewMessage(
+        incoming=True,
+        func=lambda e: e.is_private and (
+            getattr(e.message, "contact", None) is not None
+            or isinstance(getattr(e.message, "media", None), MessageMediaContact)
+        )
+    )
+)
+async def on_contact_card(event):
+    # 1) 兼容两种结构：message.contact / message.media(MessageMediaContact)
+    c = getattr(event.message, "contact", None)
+    if c is None and isinstance(getattr(event.message, "media", None), MessageMediaContact):
+        c = event.message.media
+
+    if c is None:
+        # 理论上不该发生，但兜底避免崩溃
+        return
+
+    phone = getattr(c, "phone_number", None)
+    if not phone:
+        await event.reply("❌ 名片没有手机号，无法加入联系人")
+        return
+
+    first_name = getattr(c, "first_name", "") or "Unknown"
+    last_name  = getattr(c, "last_name", "") or ""
+    card_uid   = getattr(c, "user_id", None)  # 可能为 None
+
+    contact = InputPhoneContact(
+        client_id=card_uid or 0,
+        phone=phone,
+        first_name=first_name,
+        last_name=last_name,
+    )
+
+    try:
+        result = await user_client(ImportContactsRequest([contact]))
+    except Exception as e:
+        await event.reply(f"❌ 导入联系人失败：{type(e).__name__}: {e}")
+        return
+
+    imported_uid = result.imported[0].user_id if getattr(result, "imported", None) else None
+    users = getattr(result, "users", None) or []
+
+    if imported_uid:
+        await event.reply(f"✅ 已加入联系人：user_id={imported_uid}")
+    elif users:
+        await event.reply(f"✅ 已处理名片（可能已存在联系人）：user_id={users[0].id}")
+    else:
+        await event.reply("⚠️ 已请求导入，但没有返回用户信息（可能隐私限制或已存在）")
+
+
+
 # ================= H1. 私聊 Message 文字处理：人类账号 =================
 # @user_client.on(events.NewMessage(incoming=True))
 @user_client.on(events.NewMessage(incoming=True, func=lambda e: e.is_private and not e.message.media))
@@ -202,8 +268,19 @@ async def handle_user_private_text(event):
 #     await media_utils.handle_user_private_text(event)
 #     return
 
+
+
 # ================= H2-1. 私聊 Media 媒体处理：人类账号 =================
-@user_client.on(events.NewMessage(incoming=True, func=lambda e: e.is_private and e.message.media is not None))
+
+@user_client.on(
+    events.NewMessage(
+        incoming=True,
+        func=lambda e: e.is_private
+        and e.message.media is not None
+        and not getattr(e.message, "contact", None)
+        and not isinstance(getattr(e.message, "media", None), MessageMediaContact)
+    )
+)
 async def handle_user_private_media(event):
     await media_utils.handle_user_private_media(event)
     return
@@ -294,6 +371,7 @@ async def main():
         port = int(os.environ.get("PORT", 8080))
         await web._run_app(app, host="0.0.0.0", port=port)
     else:
+        dp.startup.register(on_startup_poll)
         print("🚀 啟動 Polling 模式")
         t = asyncio.create_task(run_telethon())
         await run_aiogram_polling()
