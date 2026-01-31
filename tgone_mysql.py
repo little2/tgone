@@ -229,7 +229,7 @@ class MySQLPool:
                 tag = _caller_info()   # 自动提取调用来源
             
             print(
-                f"⚠️ [{tag}] SQL 执行出错: {e} | \nsql={sql} | \nparams={params}",
+                f"⚠️ [{tag}] SQL 执行出错 execute: {e} | \nsql={sql} | \nparams={params}",
                 flush=True,
             )
             if raise_on_error:
@@ -253,7 +253,7 @@ class MySQLPool:
                 tag = _caller_info()   # 自动提取调用来源
             
             print(
-                f"⚠️ [{tag}] SQL 执行出错: {e} | sql={sql} | params={params}",
+                f"⚠️ [{tag}] SQL 执行出错fetchone: {e} | sql={sql} | params={params}",
                 flush=True,
             )
             return None
@@ -273,7 +273,7 @@ class MySQLPool:
                 tag = _caller_info()   # 自动提取调用来源
             
             print(
-                f"⚠️ [{tag}] SQL 执行出错: {e} | sql={sql} | params={params}",
+                f"⚠️ [{tag}] SQL 执行出错 fetchall: {e} | sql={sql} | params={params}",
                 flush=True,
             )
             return []

@@ -512,12 +512,12 @@ class MediaUtils:
     
     async def heartbeat(self):
         while True:
-            print("💓 Alive (🤖 polling still running)")
+            
             try:
-                await MySQLPool.execute("SELECT 1")
-                print("✅ MySQL 连接正常")
+                await MySQLPool.ensure_pool()
+                print("💓 Alive | MySQL pool OK")
             except Exception as e:
-                print(f"⚠️ MySQL 保活失败：{e}")
+                print(f"⚠️ Heartbeat failed: {e}")
             await asyncio.sleep(600)
 
     async def health(self, request):
@@ -1817,7 +1817,9 @@ class MediaUtils:
             else:
                 print(f"【👦】确认记录存在，但缺少 doc_id ({record['doc_id']}) 或 file_unique_id ({record['file_unique_id']}), 准备更新并转发到 {TARGET_GROUP_ID}", flush=True)
         else:
-            print(f"【👦】1390:这个doc {doc_id} 不存在最新的库中，准备转发到 {TARGET_GROUP_ID}",flush=True)
+            print(f"【👦】1390:这个doc {doc_id} 不存在最新的库中，准备转发到 TARGET_GROUP_ID(BOT):{TARGET_GROUP_ID}",flush=True)
+
+
 
 
         # 转发到群组，并删除私聊
