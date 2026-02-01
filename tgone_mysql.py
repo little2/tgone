@@ -1,7 +1,7 @@
 import aiomysql
 import time
 from tgone_config import MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB, MYSQL_DB_PORT
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, List
 from lz_memory_cache import MemoryCache
 import asyncio
 from functools import wraps
@@ -279,3 +279,36 @@ class MySQLPool:
             return []
         finally:
             await cls.release(conn, cur)
+
+    @classmethod
+    async def transaction(cls, fn):
+        """
+        通用事务执行器（与现有 _pool / release / DictCursor 对齐）
+        fn: async def fn(cur): ...  # cur 为 DictCursor
+        """
+        await cls.ensure_pool()
+
+        conn = None
+        cur = None
+        try:
+            conn = await cls._pool.acquire()
+            cur = await conn.cursor(aiomysql.DictCursor)
+
+            await conn.begin()
+            result = await fn(cur)
+            await conn.commit()
+            return result
+        except Exception:
+            if conn:
+                await conn.rollback()
+            raise
+        finally:
+            # 复用你已有的 release 逻辑
+            if conn and cur:
+                await cls.release(conn, cur)
+            elif conn and cls._pool:
+                cls._pool.release(conn)
+
+
+
+''''''
