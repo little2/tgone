@@ -8,7 +8,6 @@ DB_CONFIG = {
     "password": "GB]RcWbK9EQOxcdv",
     "database": "telebot",
     "charset": "utf8mb4",
-    
     "port":58736
 }
 
