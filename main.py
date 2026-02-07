@@ -346,12 +346,7 @@ async def run_aiogram_polling():
 # ================= 14. 启动两个客户端 =================
 async def main():
 # 10.1 Telethon “人类账号” 登录
-
-
-
-    
     # await media_utils.ensure_database_tables()
-   
     asyncio.create_task(media_utils.heartbeat())
     asyncio.create_task(ping_keepalive_task())
     if BOT_MODE == "webhook":
