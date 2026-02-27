@@ -47,6 +47,7 @@ KEY_USER_ID     = int(config.get('key_user_id', os.getenv('KEY_USER_ID', 0)))
 KEY_USER_PHONE     = config.get('key_user_phone', os.getenv('KEY_USER_PHONE', ''))
 
 BOT_TOKEN       = config.get('bot_token', os.getenv('BOT_TOKEN', ''))
+SWITCHBOT_USERNAME = os.getenv("SWITCHBOT_USERNAME", "")
 TARGET_GROUP_ID = int(config.get('target_group_id', os.getenv('TARGET_GROUP_ID', 0)))
 TARGET_GROUP_ID_FROM_BOT = int(config.get('target_group_id_from_bot', os.getenv('TARGET_GROUP_ID_FROM_BOT', 0)))
 

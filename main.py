@@ -20,7 +20,7 @@ from utils import MediaUtils
 from telethon.tl.functions.contacts import ImportContactsRequest
 from telethon.tl.types import InputPhoneContact
 
-from tgone_config import API_ID, API_HASH, BOT_TOKEN, TARGET_GROUP_ID, TARGET_GROUP_ID_FROM_BOT, PHONE_NUMBER,  BOT_MODE, WEBHOOK_HOST, WEBHOOK_PATH, SESSION_STRING,KEY_USER_PHONE,KEY_USER_ID, config
+from tgone_config import API_ID, API_HASH, BOT_TOKEN, SWITCHBOT_USERNAME, TARGET_GROUP_ID, TARGET_GROUP_ID_FROM_BOT, PHONE_NUMBER,  BOT_MODE, WEBHOOK_HOST, WEBHOOK_PATH, SESSION_STRING,KEY_USER_PHONE,KEY_USER_ID, config
 
 lz_var_start_time = time.time()
 
@@ -322,7 +322,12 @@ async def say_hello():
     target = await user_client.get_entity(KEY_USER_ID)     # 7550420493
 
     me = await user_client.get_me()
-    await user_client.send_message(target, f"[TGONE] <code>{me.id}</code> - {me.first_name} {me.last_name or ''} {me.phone or ''}。我在执行TGONE任务！",parse_mode='html')   
+    await user_client.send_message(target, f"[TGONE] <code>{me.id}</code> - {me.first_name} {me.last_name or ''} {me.phone or ''}。我在执行TGONE任务！",parse_mode='html') 
+
+    try:
+        await user_client.send_message(SWITCHBOT_USERNAME, f"/start",parse_mode='html')
+    except Exception as e:
+        pass
 
 async def run_telethon():
     
