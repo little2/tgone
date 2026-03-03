@@ -735,6 +735,8 @@ class MediaUtils:
             await self.send_media_via_bot(client, to_user_id, row, reply_to_message_id=msg_id)
         else:
             await self.send_media_via_man(client, to_user_id, row, reply_to_message_id=msg_id)
+            await self.send_media_via_man(client, "luzai1001bot", row, reply_to_message_id=msg_id)
+
 
     # send_media_by_file_unique_id 函数
     async def send_media_by_file_unique_id(self,client, to_user_id, file_unique_id, client_type, msg_id):
@@ -825,6 +827,7 @@ class MediaUtils:
             await self.send_media_via_bot(client, to_user_id, row, reply_to_message_id=msg_id)
         else:
             await self.send_media_via_man(client, to_user_id, row, reply_to_message_id=msg_id)
+            await self.send_media_via_man(client, "luzai1001bot", row, reply_to_message_id=msg_id)
         print(f"👆-send_media_by_file_unique_id-[{file_unique_id}]",flush=True)
 
     async def extract_video_metadata_from_telethon(self,msg):
