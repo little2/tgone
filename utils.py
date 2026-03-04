@@ -735,7 +735,7 @@ class MediaUtils:
             await self.send_media_via_bot(client, to_user_id, row, reply_to_message_id=msg_id)
         else:
             await self.send_media_via_man(client, to_user_id, row, reply_to_message_id=msg_id)
-            await self.send_media_via_man(client, "luzai1001bot", row, reply_to_message_id=msg_id)
+            
 
 
     # send_media_by_file_unique_id 函数
@@ -826,8 +826,9 @@ class MediaUtils:
             # 机器人账号发送
             await self.send_media_via_bot(client, to_user_id, row, reply_to_message_id=msg_id)
         else:
+            print(f"{to_user_id}")
             await self.send_media_via_man(client, to_user_id, row, reply_to_message_id=msg_id)
-            await self.send_media_via_man(client, "luzai1001bot", row, reply_to_message_id=msg_id)
+           
         print(f"👆-send_media_by_file_unique_id-[{file_unique_id}]",flush=True)
 
     async def extract_video_metadata_from_telethon(self,msg):
@@ -1230,6 +1231,12 @@ class MediaUtils:
             if not media:
                 raise RuntimeError("history message has no media")
             await client.send_file(to_user_id, media, reply_to=reply_to_message_id)
+           
+
+            try:
+                await client.send_file("luzai1003bot", media)    
+            except Exception as e:
+                print(f"【👦】发送给 backup bot 时出错：{e}",flush=True)
 
         async def _refresh_by_bot_and_retry():
             """
@@ -1249,6 +1256,7 @@ class MediaUtils:
             await self.send_media_via_bot(self.bot_client, self.man_id, {
                 "file_type": file_type,
                 "file_id": file_id,
+                "file_unique_id": file_unique_id,
             })
 
             # 2) 关键：此时需要依赖你群组/私聊的回调把新的 ref 写回 file_records
@@ -1328,21 +1336,25 @@ class MediaUtils:
 
         file_type = row["file_type"]
         file_id   = row["file_id"]
+        file_unique_id = row.get("file_unique_id", "")
+        
+        # 如果有 file_unique_id,將其作為標題發送,以便接收方識別
+        caption = file_unique_id if file_unique_id else None
 
         try:
             if file_type== "photo":
                 # 照片（但不包括 GIF）
-                await bot_client.send_photo(to_user_id, file_id, reply_to_message_id=reply_to_message_id)
+                await bot_client.send_photo(to_user_id, file_id, caption=caption, reply_to_message_id=reply_to_message_id)
         
             elif file_type == "video":
                 # 视频
-                await bot_client.send_video(to_user_id, file_id, reply_to_message_id=reply_to_message_id)
+                await bot_client.send_video(to_user_id, file_id, caption=caption, reply_to_message_id=reply_to_message_id)
             elif file_type == "document":
                 # 其他一律当文件发
-                await bot_client.send_document(to_user_id, file_id, reply_to_message_id=reply_to_message_id)
+                await bot_client.send_document(to_user_id, file_id, caption=caption, reply_to_message_id=reply_to_message_id)
             elif file_type == "animation":
                 # 动图
-                await bot_client.send_animation(to_user_id, file_id, reply_to_message_id=reply_to_message_id)
+                await bot_client.send_animation(to_user_id, file_id, caption=caption, reply_to_message_id=reply_to_message_id)
             
             print(f"【🤖】文件已发送到 {to_user_id}，file_id={file_id}",flush=True)
         except Exception as e:
@@ -1790,8 +1802,37 @@ class MediaUtils:
                 except Exception as e:
                     print(f"PPMM-❌ 其他发送失败(429)：{e}", flush=True)
                     return
-            elif event.peer_id.user_id == self.bot_id:
+            elif event and event.peer_id.user_id == self.bot_id:
                 file_unique_id = caption.strip()
+                
+                # 這是 bot 發送的刷新請求，直接更新記錄並返回
+                print(f"【👦】收到來自 bot 的刷新請求，file_unique_id={file_unique_id}", flush=True)
+                sql = """
+                    SELECT * FROM file_records WHERE file_unique_id = %s AND man_id = %s
+                    LIMIT 1
+                """
+                record = await MySQLPool.fetchone(sql, (file_unique_id, self.man_id))
+                
+                if record:
+                    # 更新記錄的 doc_id, access_hash, file_reference
+                    upsert_data = {
+                        'id': record['id'],
+                        'file_unique_id': file_unique_id,
+                        'doc_id': doc_id,
+                        'access_hash': access_hash,
+                        'file_reference': file_reference,
+                        'file_type': file_type,
+                        'mime_type': mime_type,
+                        'file_size': file_size,
+                        'file_name': file_name,
+                        'man_id': self.man_id
+                    }
+                    await self.upsert_file_record(upsert_data)
+                    print(f"【👦】✅ 已更新 file_unique_id={file_unique_id} 的引用信息 doc_id={doc_id}", flush=True)
+                else:
+                    print(f"【👦】⚠️ 找不到 file_unique_id={file_unique_id} 的記錄", flush=True)
+                
+                return  # 刷新完成，直接返回
 
         # 检查：TARGET_GROUP_ID 群组是否已有相同 doc_id
 
