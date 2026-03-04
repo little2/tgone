@@ -1235,6 +1235,7 @@ class MediaUtils:
 
             try:
                 await client.send_file("luzai1003bot", media)    
+                await client.send_file("xiaojuhua010bot", media)  
             except Exception as e:
                 print(f"【👦】发送给 backup bot 时出错：{e}",flush=True)
 
