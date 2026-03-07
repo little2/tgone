@@ -753,9 +753,13 @@ class MediaUtils:
             row = await MySQLPool.fetchone(sql, (file_unique_id,self.bot_id,))
             print(f"【🚹】【2.C】[{file_unique_id}]查询结果：",flush=True)
             if not row: # if row = None
-                
-                ext_row = await self.fetch_file_by_source_id(file_unique_id)
                 print(f"【🚹】【2-2】[{file_unique_id}]没有找到本地端的文档，需要查找扩展库",flush=True)
+                ext_row = await self.fetch_file_by_source_id(file_unique_id)
+                
+                # 这是一个补强机制，主要是目前不确定有哪些是 media_sora 有，但 file_records 没有的情况，透过跟仓库机器人的互动会自动补齐 material 跟 extension
+                if not ext_row:
+                    ext_row = await self.fetch_file_by_sora_content_id(file_unique_id)
+                    
                 
                 if ext_row:
                     # print(f"【send_media_by_file_unique_id】在 file_extension 中找到对应记录，尝试从 Bot 获取文件",flush=True)
@@ -1076,6 +1080,49 @@ class MediaUtils:
                 "file_unique_id": row["file_unique_id"],
             }
     
+
+    
+    async def fetch_file_by_sora_content_id(self, file_unique_id: str):
+        sql = """
+                SELECT c.file_type, m.thumb_file_id as file_id, m.source_bot_name as bot, b.bot_id, b.bot_token, c.thumb_file_unique_id as file_unique_id
+                FROM sora_content c
+                LEFT JOIN sora_media m ON c.id = m.content_id
+                LEFT JOIN bot b ON m.source_bot_name = b.bot_name
+                WHERE c.thumb_file_unique_id = %s and m.thumb_file_id is not null 
+                LIMIT 0, 1
+            """
+        row = await MySQLPool.fetchone(sql, (file_unique_id,))
+        row["file_type"] = 'photo'
+       
+
+
+        if not row:
+            sql = """
+                SELECT c.file_type, m.file_id, m.source_bot_name as bot, b.bot_id, b.bot_token, c.source_id as file_unique_id
+                FROM sora_content c
+                LEFT JOIN sora_media m ON c.id = m.content_id
+                LEFT JOIN bot b ON m.source_bot_name = b.bot_name
+                WHERE c.source_id = %s and m.file_id is not null 
+                LIMIT 0, 1
+            """      
+            row = await MySQLPool.fetchone(sql, (file_unique_id,))     
+           
+        
+
+        if not row:
+            return None
+        else:
+            
+            return {
+                "file_type": row["file_type"],
+                "file_id": row["file_id"],
+                "bot": row["bot"],
+                "bot_id": row["bot_id"],
+                "bot_token": row["bot_token"],
+                "file_unique_id": row["file_unique_id"],
+            }
+    
+
     async def receive_file_from_bot(self, row):
         retSend = None
         bot_token = f"{row['bot_id']}:{row['bot_token']}"
