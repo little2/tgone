@@ -22,6 +22,9 @@ from telethon.tl.types import InputPhoneContact
 
 from tgone_config import API_ID, API_HASH, BOT_TOKEN, SWITCHBOT_USERNAME, TARGET_GROUP_ID, TARGET_GROUP_ID_FROM_BOT, PHONE_NUMBER,  BOT_MODE, WEBHOOK_HOST, WEBHOOK_PATH, SESSION_STRING,KEY_USER_PHONE,KEY_USER_ID, config
 
+from telethon.errors.common import TypeNotFoundError
+import traceback
+
 lz_var_start_time = time.time()
 
 if TARGET_GROUP_ID == 0:
@@ -342,8 +345,22 @@ async def run_telethon():
     print(f'你的用户名: {media_utils.man_username} / {media_utils.bot_username}', flush=True)
     print(f'你的ID (target_group_id_from_bot): {media_utils.man_id} / (target_group_id) {media_utils.bot_id}', flush=True)
     await user_client.send_message(media_utils.bot_username, '/start')
-    await user_client.run_until_disconnected()
-    
+    # await user_client.run_until_disconnected()
+    await run_client_forever(user_client)
+
+async def run_client_forever(client):
+    while True:
+        try:
+            print("[INFO] starting telethon client", flush=True)
+            await client.run_until_disconnected()
+        except TypeNotFoundError as e:
+            print(f"[ERROR] Telethon TypeNotFoundError: {e}", flush=True)
+            traceback.print_exc()
+            await asyncio.sleep(3)
+        except Exception as e:
+            print(f"[ERROR] unexpected telethon crash: {e}", flush=True)
+            traceback.print_exc()
+            await asyncio.sleep(5)
 
 async def run_aiogram_polling():
     print("【Aiogram】Bot（纯 Bot-API） 已启动，监听私聊＋群组媒体。", flush=True)

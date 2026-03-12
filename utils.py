@@ -820,9 +820,9 @@ class MediaUtils:
         
         except Exception as e:
             if "Token is invalid" in str(e):
-                print(f"[194] Bot Token 无效，请检查配置。")
+                print(f"[823] Bot Token 无效，请检查配置。")
                 return
-            print(f"[194] Error: {e}")
+            print(f"[825] Error: {e}")
             return
         
         print(f"【🤖】【5】开始传送 {row['file_unique_id']} by {client_type}",flush=True)
@@ -1092,7 +1092,8 @@ class MediaUtils:
                 LIMIT 0, 1
             """
         row = await MySQLPool.fetchone(sql, (file_unique_id,))
-        row["file_type"] = 'photo'
+        if row:
+            row["file_type"] = 'photo'
        
 
 
