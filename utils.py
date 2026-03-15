@@ -1150,7 +1150,7 @@ class MediaUtils:
             elif row["file_type"] == "animation" or row["file_type"] == "n":
                 retSend = await mybot.send_animation(chat_id=self.man_id, animation=row["file_id"], caption=f"{row['file_unique_id']}")
 
-            print(f"发送结果retSend={retSend}")
+            # print(f"发送结果retSend={retSend}")
             print(f"{process_header} 媒体已 私发 到👦，file_unique_id={row['file_unique_id']}, 查看 👦process_private_media_msg",flush=True)
             # print(f"\n【🤖】4️⃣retSend=>{retSend}\n",flush=True)
         except TelegramForbiddenError as e:
@@ -1826,7 +1826,7 @@ class MediaUtils:
 
         
         if caption !='':
-            print(f"【👦】")
+            print(f"【👦】有带caption")
             match = re.search(r'\|_forward_\|(@[a-zA-Z0-9_]+|-?\d+)', caption, re.IGNORECASE)
             if match:
                 print(f"PPMM-【Telethon】匹配到的转发模式：{match}",flush=True)
@@ -1904,7 +1904,7 @@ class MediaUtils:
         
         if file_unique_id is None or record is None:    # 非机器人转发，或找不到记录
             try:
-                
+                print(f"【👦】没有 file_unique_id 或找不到记录，准备根据 doc_id 查询")
         
                 sql = """
                     SELECT * FROM file_records WHERE doc_id = %s AND man_id = %s 
