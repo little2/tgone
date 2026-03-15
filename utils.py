@@ -826,12 +826,16 @@ class MediaUtils:
             return
         
         print(f"【🤖】【5】开始传送 {row['file_unique_id']} by {client_type}",flush=True)
-        if client_type == 'bot':
-            # 机器人账号发送
-            await self.send_media_via_bot(client, to_user_id, row, reply_to_message_id=msg_id)
-        else:
-            print(f"{to_user_id}")
-            await self.send_media_via_man(client, to_user_id, row, reply_to_message_id=msg_id)
+        try:
+            if client_type == 'bot':
+                # 机器人账号发送
+                await self.send_media_via_bot(client, to_user_id, row, reply_to_message_id=msg_id)
+            else:
+                print(f"{to_user_id}")
+                await self.send_media_via_man(client, to_user_id, row, reply_to_message_id=msg_id)
+        except Exception as send_err:
+            print(f"【🚹】send_media_by_file_unique_id 发送失败：{send_err}", flush=True)
+            return
            
         print(f"👆-send_media_by_file_unique_id-[{file_unique_id}]",flush=True)
 
@@ -1146,6 +1150,7 @@ class MediaUtils:
             elif row["file_type"] == "animation" or row["file_type"] == "n":
                 retSend = await mybot.send_animation(chat_id=self.man_id, animation=row["file_id"], caption=f"{row['file_unique_id']}")
 
+            print(f"发送结果retSend={retSend}")
             print(f"{process_header} 媒体已 私发 到👦，file_unique_id={row['file_unique_id']}, 查看 👦process_private_media_msg",flush=True)
             # print(f"\n【🤖】4️⃣retSend=>{retSend}\n",flush=True)
         except TelegramForbiddenError as e:
@@ -1309,8 +1314,8 @@ class MediaUtils:
             })
 
             # 2) 关键：此时需要依赖你群组/私聊的回调把新的 ref 写回 file_records
-            #    这里给一个简单轮询重查（最多等 3 秒）
-            for _ in range(6):
+            #    Render 环境下偶发写回延迟，适当拉长轮询时间避免误判
+            for _ in range(20):
                 await asyncio.sleep(0.5)
                 new_row = await MySQLPool.fetchone(
                     """
@@ -1373,7 +1378,12 @@ class MediaUtils:
             try:
                 return await _refresh_by_bot_and_retry()
             except Exception as e2:
-                raise RuntimeError(f"send_media_via_man failed: {e} | refresh fallback failed: {e2}") from e2
+                print(f"【👦】send_media_via_man failed: {e} | refresh fallback failed: {e2}", flush=True)
+                try:
+                    await client.send_message(to_user_id, "文件暂时无法发送，请稍后重试。", reply_to=reply_to_message_id)
+                except Exception as notify_err:
+                    print(f"【👦】发送失败提示消息也失败：{notify_err}", flush=True)
+                return
 
     # send_media_via_bot 函数
     async def send_media_via_bot(self, bot_client, to_user_id, row, reply_to_message_id=None):
