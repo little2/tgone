@@ -1066,7 +1066,7 @@ class MediaUtils:
                 SELECT f.file_type, f.file_id, f.bot, b.bot_id, b.bot_token, f.file_unique_id
                 FROM file_extension f
                 LEFT JOIN bot b ON f.bot = b.bot_name 
-                WHERE f.file_unique_id = %s AND b.bot_name != 'stcparkbot'
+                WHERE f.file_unique_id = %s AND b.bot_name not in ('ltp120bot','stcparkbot','luzai02bot','whaleboy013bot','ztdMiWen013Bot','xiaolongyang002bot','lypanbot','ganymederonin002bot','salai005bot','ztdreporter014bot','freejjbot','ztdbeachboy009bot','ztd005bot','xiaolongyang001bot','ztdsailor012bot','luzai04bot','ztdMiWen012Bot','ganymederonin001bot','DavidYaoBot','ztdsailor011bot','ztdv013bot','ztdbeachboy001bot','ztdMiWen002Bot','ztdMiWen003Bot','xxbbt1109bot','xljdd011bot','ztdg013bot','ztdStone002BOT','GetInvitation666BOT','ztbbtbot','ztdStone005BOT','resregs010bot','7551138377','ztdBlinkBox013Bot','xljdd012bot','luzai08bot','report807bot','0','guoguo807bot','ztdStone003BOT','xxbbt1026bot','ztdboutiques009bot','ztdboutiques013bot','xljdd009bot','ztdv001bot','luzai1001bot','luzai001bot','sora3658bot','ztdv009bot','ztdBlinkBox009Bot','luzai03bot')
                 LIMIT 0, 1
             """
         row = await MySQLPool.fetchone(sql, (source_id,))
