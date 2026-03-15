@@ -1761,7 +1761,7 @@ class MediaUtils:
                 print(f"{_title}👆 直发，将文件：{file_unique_id} 回覆给 {to_user_id}，(send_media_via_) ",flush=True)
         else:
             await msg.delete()
-            print(f"(私聊) 非请求=== 收到 text - {msg.text}",flush=True)
+            print(f"(私聊) 非请求=== 收到 text - from {msg.to_user_id} {msg.text}",flush=True)
             
 
     # ================= Human Private Meddia 私聊 Media 媒体处理：人类账号 =================
@@ -1979,7 +1979,7 @@ class MediaUtils:
 
     async def process_group_media_msg(self,msg):
         
-        if not (msg.document or msg.photo or msg.video or msg.animation):
+        if not (msg.document or msg.photo or msg.video or getattr(msg, "animation", None)):
             return
         file_type = ''
         row = None
