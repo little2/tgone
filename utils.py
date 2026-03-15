@@ -1065,8 +1065,8 @@ class MediaUtils:
         sql = """
                 SELECT f.file_type, f.file_id, f.bot, b.bot_id, b.bot_token, f.file_unique_id
                 FROM file_extension f
-                LEFT JOIN bot b ON f.bot = b.bot_name
-                WHERE f.file_unique_id = %s
+                LEFT JOIN bot b ON f.bot = b.bot_name 
+                WHERE f.file_unique_id = %s AND b.bot_name != 'stcparkbot'
                 LIMIT 0, 1
             """
         row = await MySQLPool.fetchone(sql, (source_id,))
