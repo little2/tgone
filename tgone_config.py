@@ -51,7 +51,7 @@ SWITCHBOT_USERNAME = os.getenv("SWITCHBOT_USERNAME", "")
 TARGET_GROUP_ID = int(config.get('target_group_id', os.getenv('TARGET_GROUP_ID', 0)))
 TARGET_GROUP_ID_FROM_BOT = int(config.get('target_group_id_from_bot', os.getenv('TARGET_GROUP_ID_FROM_BOT', 0)))
 
-version = "0.1.0"
+version = "0.1.1"
 
 
 
