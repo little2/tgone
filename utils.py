@@ -8,7 +8,7 @@ from aiogram.types import ContentType,Message
 
 import time
 from aiohttp import web
-from telethon.errors import ChatForwardsRestrictedError,FileReferenceExpiredError
+from telethon.errors import ChatForwardsRestrictedError, FileReferenceExpiredError, FloodWaitError
 from aiogram.exceptions import (
     TelegramBadRequest,
     TelegramForbiddenError, TelegramNotFound
@@ -121,6 +121,7 @@ class MediaUtils:
         self.webhook_host = config.get("webhook_host")
         self.webhook_path = config.get("webhook_path")
         self.bot_mode = config.get("bot_mode", "polling")
+        self._kick_cooldown_until: dict[str, float] = {}
 
     async def set_file_vaild_state(self,file_unique_id: str, vaild_state: int = 1):
         sql = """
@@ -1717,15 +1718,35 @@ class MediaUtils:
         text = msg.text.strip()
 
         if text:
+            botname = None
             try:
                 match = re.search(r'\|_kick_\|\s*(.*?)\s*(bot)', text, re.IGNORECASE)
                 if match:
                     botname = match.group(1) + match.group(2)
+
+                    now_ts = time.time()
+                    cooldown_until = self._kick_cooldown_until.get(botname, 0.0)
+                    if now_ts < cooldown_until:
+                        left = int(cooldown_until - now_ts)
+                        print(f"⏳ kick command in cooldown, skip {botname}, left={left}s", flush=True)
+                        await msg.delete()
+                        return
+
                     await self.user_client.send_message(botname, "/start")
                     await self.user_client.send_message(botname, "[~bot~]")
                     await msg.delete()
                     print("D717")
                     return
+            except FloodWaitError as e:
+                wait_s = int(getattr(e, "seconds", 0) or 0)
+                if botname and wait_s > 0:
+                    self._kick_cooldown_until[botname] = time.time() + wait_s
+                print(f"⚠️ kick floodwait: wait={wait_s}s bot={botname}", flush=True)
+                try:
+                    await msg.delete()
+                except Exception:
+                    pass
+                return
             except Exception as e:
                     print(f"Error kicking bot: {e} {botname}", flush=True)
 
