@@ -51,6 +51,13 @@ SWITCHBOT_USERNAME = os.getenv("SWITCHBOT_USERNAME", "")
 TARGET_GROUP_ID = int(config.get('target_group_id', os.getenv('TARGET_GROUP_ID', 0)))
 TARGET_GROUP_ID_FROM_BOT = int(config.get('target_group_id_from_bot', os.getenv('TARGET_GROUP_ID_FROM_BOT', 0)))
 
+s_raw = os.getenv("SWITCHBOT_CONFIGURATION")
+s_conf = json.loads(s_raw)
+SWITCHBOT_CHAT_ID: int = s_conf["chat_id"]
+SWITCHBOT_THREAD_ID: int = s_conf["thread_id"]
+SWITCHBOT_TOKEN: str = s_conf["switchbot_token"]
+SWITCHBOT_USERNAME = s_conf["switchbot_username"]
+
 version = "0.1.1"
 
 

@@ -15,3 +15,4 @@ md/ananbot.md
 __pycache__/*.*
 __pycache__/*.pyc
 
+__pycache__/tgone_config.cpython-313.pyc
