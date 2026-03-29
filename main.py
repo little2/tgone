@@ -45,12 +45,14 @@ async def _fetch_and_consume(session: aiohttp.ClientSession, url: str):
     """
     try:
         params = {"t": int(datetime.now().timestamp())}
-        async with session.get(url, params=params) as resp:
+        async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=10)) as resp:
             content = await resp.read()  # 真实读取内容
             length = len(content)
             # print(f"🌐 keep-alive fetch => {url} status={resp.status} bytes={length}", flush=True)
+    except asyncio.TimeoutError:
+        print(f"⚠️ keep-alive fetch timeout => {url} (10s)", flush=True)
     except Exception as e:
-        print(f"⚠️ keep-alive fetch failed => {url} error={e}", flush=True)
+        print(f"⚠️ keep-alive fetch failed => {url}: {type(e).__name__}: {e}", flush=True)
 
 
 
@@ -324,7 +326,7 @@ async def say_hello():
         last_name=""
     )
     result = await user_client(ImportContactsRequest([contact]))
-    print("导入结果:", result)
+    # print("导入结果:", result)
     target = await user_client.get_entity(KEY_USER_ID)     # 7550420493
 
     me = await user_client.get_me()
@@ -332,7 +334,9 @@ async def say_hello():
 
     try:
         await user_client.send_message(SWITCHBOT_USERNAME, f"/start",parse_mode='html')
+        print(f"✅ 已向 @{SWITCHBOT_USERNAME} 发送启动消息。", flush=True)
     except Exception as e:
+        print(f"⚠️ 向 @{SWITCHBOT_USERNAME} 发送消息失败（可能未关联或未启动）：{e}", flush=True)
         pass
 
 async def run_telethon():
