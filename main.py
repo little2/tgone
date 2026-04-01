@@ -333,8 +333,8 @@ async def say_hello():
     await user_client.send_message(target, f"[TGONE] <code>{me.id}</code> - {me.first_name} {me.last_name or ''} {me.phone or ''}。我在执行TGONE任务！",parse_mode='html') 
 
     try:
-        await user_client.send_message(SWITCHBOT_USERNAME, f"/start",parse_mode='html')
-        print(f"✅ 已向 @{SWITCHBOT_USERNAME} 发送启动消息。", flush=True)
+        switch_ret=await user_client.send_message(SWITCHBOT_USERNAME, f"/start",parse_mode='html')
+        print(f"✅ 已向 @{SWITCHBOT_USERNAME} 发送启动消息。{switch_ret}", flush=True)
     except Exception as e:
         print(f"⚠️ 向 @{SWITCHBOT_USERNAME} 发送消息失败（可能未关联或未启动）：{e}", flush=True)
         pass
