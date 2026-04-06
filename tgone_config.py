@@ -58,7 +58,7 @@ SWITCHBOT_THREAD_ID: int = s_conf["thread_id"]
 SWITCHBOT_TOKEN: str = s_conf["switchbot_token"]
 SWITCHBOT_USERNAME = s_conf["switchbot_username"]
 
-version = "0.1.1"
+version = "0.1.2"
 
 
 
