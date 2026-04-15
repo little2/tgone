@@ -261,16 +261,53 @@ async def handle_user_private_text(event):
         invite_hash = parts[1]
         # 执行加入群组
         await join(invite_hash)
-    if text.startswith("/hello"):
+    elif text.startswith("/hello"):
         hello_param = parts[1]
         # 执行加入群组
         await event.reply(f"已处理 join 指令：{hello_param}")
+
+    elif text.startswith("/sync_bot"):
+        await sync_bot()
+
+            
     else:    
         await media_utils.handle_user_private_text(event)
     return
 
 
-    
+async def sync_bot():
+
+    """
+    先从 tgone 输入 /sync_bot 同步和 tg bot 的状态, 再到 lz 去同步 mysql / pg 的 bot 状态
+    1.先从 tgone_mysql 取出机器人信息（SELECT * FROM `bot` where bot_id !=user_id and bot_token !="" and work_status != 'ban' 
+ORDER BY `bot`.`work_status` DESC)
+    2.使用 telethon 验证 bot_name 是否有效 （client.get_entity(bot_name)），如果无效则更新数据库 work_status = 'ban'，如果有效则更新 work_status = 'used' 
+    """
+
+    rows = await media_utils.fetch_bot_sync_list()
+    print(f"🔍 从数据库获取到 {len(rows)} 条机器人信息。", flush=True)
+    for row in rows:
+        bot_id = row['bot_id']
+        bot_name = row['bot_name']
+        print(f"验证机器人 {bot_name} (ID: {bot_id})...", flush=True)
+        try:
+            entity = await user_client.get_entity(bot_name)
+            print(f"✅ 验证成功：{bot_name} 存在。", flush=True)
+            await media_utils.update_bot_status(bot_id, 'used')
+        except Exception as e:
+            print(f"❌ 验证失败：{bot_name} 无效，错误: {e}", flush=True)
+            await media_utils.update_bot_status(bot_id, 'ban')
+
+    sync_ret = await media_utils.sync_bot_mysql_to_pg()
+    print(
+        f"✅ bot 同步到 PostgreSQL 完成: total={sync_ret.get('total')} "
+        f"upserted={sync_ret.get('upserted')} failed={sync_ret.get('failed')}",
+        flush=True,
+    )
+
+
+   
+
 
 # async def handle_user_private_text(event):
 #     await media_utils.handle_user_private_text(event)

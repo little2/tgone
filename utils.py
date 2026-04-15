@@ -144,6 +144,34 @@ class MediaUtils:
         self.bot_id = bot_info.id
         self.bot_username = bot_info.username
 
+    async def fetch_bot_info_list(self):
+        sql = """
+            SELECT *
+            FROM `bot`
+            WHERE bot_id != user_id
+              AND bot_token != ''
+              AND work_status != 'ban'
+            ORDER BY `bot`.`work_status` DESC
+        """
+        return await MySQLPool.fetchall(sql, error_tag="fetch_bot_info_list")
+
+    async def update_bot_status(self, bot_id: int, work_status: str = "used") -> bool:
+        allowed = {"used", "ban", "free", "frozen", ""}
+        if work_status not in allowed:
+            raise ValueError(f"unsupported work_status: {work_status}")
+
+        sql = """
+            UPDATE `bot`
+            SET work_status = %s
+            WHERE bot_id = %s
+            LIMIT 1
+        """
+        return await MySQLPool.execute(
+            sql,
+            (work_status, int(bot_id)),
+            error_tag="update_bot_status",
+        )
+
     def get_file_name(self, media):
         from telethon.tl.types import DocumentAttributeFilename
         for attr in getattr(media, 'attributes', []):
@@ -1067,7 +1095,7 @@ class MediaUtils:
                 SELECT f.file_type, f.file_id, f.bot, b.bot_id, b.bot_token, f.file_unique_id
                 FROM file_extension f
                 LEFT JOIN bot b ON f.bot = b.bot_name 
-                WHERE f.file_unique_id = %s AND b.bot_name not in ('ltp120bot','stcparkbot','luzai02bot','luzai003bot','whaleboy013bot','ztdMiWen013Bot','xiaolongyang002bot','lypanbot','ganymederonin002bot','salai005bot','salai003bot','has_no_access_bot','ztdreporter014bot','freejjbot','ztdbeachboy009bot','ztd005bot','xiaolongyang001bot','ztdsailor012bot','luzai04bot','ztdMiWen012Bot','ganymederonin001bot','DavidYaoBot','ztdsailor011bot','ztdv013bot','ztdbeachboy001bot','ztdMiWen002Bot','ztdMiWen003Bot','xxbbt1109bot','xljdd011bot','ztdg013bot','ztdStone002BOT','GetInvitation666BOT','ztbbtbot','ztdStone005BOT','resregs010bot','7551138377','ztdBlinkBox013Bot','xljdd012bot','luzai08bot','report807bot','0','guoguo807bot','ztdStone003BOT','xxbbt1026bot','ztdboutiques009bot','ztdboutiques013bot','xljdd009bot','ztdv001bot','luzai1001bot','luzai001bot','sora3658bot','ztdv009bot','ztdBlinkBox009Bot','luzai03bot')
+                WHERE f.file_unique_id = %s AND b.work_status in ('used', 'free')
                 LIMIT 0, 1
             """
         row = await MySQLPool.fetchone(sql, (source_id,))
@@ -1093,7 +1121,7 @@ class MediaUtils:
                 FROM sora_content c
                 LEFT JOIN sora_media m ON c.id = m.content_id
                 LEFT JOIN bot b ON m.source_bot_name = b.bot_name
-                WHERE c.thumb_file_unique_id = %s and m.thumb_file_id is not null  AND b.bot_name not in ('ltp120bot','stcparkbot','luzai02bot','luzai003bot','whaleboy013bot','ztdMiWen013Bot','xiaolongyang002bot','lypanbot','ganymederonin002bot','salai005bot','salai003bot','has_no_access_bot','ztdreporter014bot','freejjbot','ztdbeachboy009bot','ztd005bot','xiaolongyang001bot','ztdsailor012bot','luzai04bot','ztdMiWen012Bot','ganymederonin001bot','DavidYaoBot','ztdsailor011bot','ztdv013bot','ztdbeachboy001bot','ztdMiWen002Bot','ztdMiWen003Bot','xxbbt1109bot','xljdd011bot','ztdg013bot','ztdStone002BOT','GetInvitation666BOT','ztbbtbot','ztdStone005BOT','resregs010bot','7551138377','ztdBlinkBox013Bot','xljdd012bot','luzai08bot','report807bot','0','guoguo807bot','ztdStone003BOT','xxbbt1026bot','ztdboutiques009bot','ztdboutiques013bot','xljdd009bot','ztdv001bot','luzai1001bot','luzai001bot','sora3658bot','ztdv009bot','ztdBlinkBox009Bot','luzai03bot') 
+                WHERE c.thumb_file_unique_id = %s and m.thumb_file_id is not null  AND b.work_status in ('used', 'free')
                 LIMIT 0, 1
             """
         row = await MySQLPool.fetchone(sql, (file_unique_id,))
@@ -1108,7 +1136,7 @@ class MediaUtils:
                 FROM sora_content c
                 LEFT JOIN sora_media m ON c.id = m.content_id
                 LEFT JOIN bot b ON m.source_bot_name = b.bot_name
-                WHERE c.source_id = %s and m.file_id is not null 
+                WHERE c.source_id = %s and m.file_id is not null  AND b.work_status in ('used', 'free')
                 LIMIT 0, 1
             """      
             row = await MySQLPool.fetchone(sql, (file_unique_id,))     
