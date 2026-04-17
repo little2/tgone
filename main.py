@@ -268,6 +268,7 @@ async def handle_user_private_text(event):
 
     elif text.startswith("/sync_bot"):
         await sync_bot()
+        await user_client.send_message(event.chat_id, "👋 你好！你的状态已同步为 'used'，可以正常使用了。")
 
             
     else:    
@@ -294,6 +295,8 @@ ORDER BY `bot`.`work_status` DESC)
             entity = await user_client.get_entity(bot_name)
             print(f"✅ 验证成功：{bot_name} 存在。", flush=True)
             await media_utils.update_bot_status(bot_id, 'used')
+            
+           
         except Exception as e:
             print(f"❌ 验证失败：{bot_name} 无效，错误: {e}", flush=True)
             await media_utils.update_bot_status(bot_id, 'ban')
@@ -304,6 +307,7 @@ ORDER BY `bot`.`work_status` DESC)
         f"upserted={sync_ret.get('upserted')} failed={sync_ret.get('failed')}",
         flush=True,
     )
+    
 
 
    
