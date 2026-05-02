@@ -26,6 +26,7 @@ from telethon.errors.common import TypeNotFoundError
 import traceback
 
 lz_var_start_time = time.time()
+_client_reconnect_lock = asyncio.Lock()
 
 if TARGET_GROUP_ID == 0:
     TARGET_GROUP_ID = 0 # bot
@@ -101,16 +102,12 @@ async def ping_keepalive_task():
 
         # 间隔 50 秒
         try:
-            await user_client.catch_up()
-            user_client.iter_dialogs(limit=1)
+            if user_client.is_connected():
+                await user_client.catch_up()
+            else:
+                print("⚠️ keepalive: user_client 当前未连接，跳过 catch_up", flush=True)
         except Exception as e:
-            print("⚠️ catch_up() 失败，准备重连:", e, flush=True)
-            try:
-                await user_client.disconnect()
-            except Exception:
-                pass
-            await user_client.connect()
-            await user_client.catch_up()
+            print(f"⚠️ keepalive catch_up 失败: {e}", flush=True)
         await asyncio.sleep(50)
 
 
@@ -122,27 +119,33 @@ async def keep_alive_ping():
             async with aiohttp.ClientSession() as session:
                 async with session.get(url) as resp:
                     print(f"🌐 Keep-alive ping {url} status {resp.status}")
-                    await user_client.catch_up()
-                    user_client.iter_dialogs(limit=1)
+                    if user_client.is_connected():
+                        await user_client.catch_up()
         except Exception as e:
             print(f"⚠️ Keep-alive ping failed: {e}")
 
         try:
-            print(f"[CATCH] 触发重连 + catch_up()", flush=True)        
-            await user_client.catch_up()
-            print("[CATCH] catch_up() 执行完成。", flush=True)
+            if user_client.is_connected():
+                print(f"[CATCH] 触发 catch_up()", flush=True)
+                await user_client.catch_up()
+                print("[CATCH] catch_up() 执行完成。", flush=True)
+            else:
+                print("[CATCH] user_client 未连接，跳过 catch_up()", flush=True)
         except Exception as e:
             err = f"[CATCH] 执行 catch_up() 失败: {e!r}"
             print(err, flush=True)
-        
-        try:
-            user_client.iter_dialogs(limit=1)
-        except Exception as e:
-            print(f"[WD] keep_updates_warm 出错: {e}", flush=True)
-        return
-
 
         await asyncio.sleep(120)  # 每 5 分鐘 ping 一次
+
+
+async def ensure_client_connected(client: TelegramClient):
+    """确保 Telethon 客户端已连接（并发安全）。"""
+    async with _client_reconnect_lock:
+        if client.is_connected():
+            return
+        print("[INFO] telethon disconnected, reconnecting...", flush=True)
+        await client.connect()
+        print("[INFO] telethon reconnected", flush=True)
 
 async def on_startup(bot: Bot):
     webhook_url = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
@@ -396,8 +399,15 @@ async def run_telethon():
 async def run_client_forever(client):
     while True:
         try:
+            await ensure_client_connected(client)
             print("[INFO] starting telethon client", flush=True)
             await client.run_until_disconnected()
+            print("[WARN] telethon disconnected, will retry", flush=True)
+            await asyncio.sleep(2)
+        except ConnectionError as e:
+            print(f"[ERROR] telethon connection error: {e}", flush=True)
+            traceback.print_exc()
+            await asyncio.sleep(3)
         except TypeNotFoundError as e:
             print(f"[ERROR] Telethon TypeNotFoundError: {e}", flush=True)
             traceback.print_exc()
@@ -405,6 +415,11 @@ async def run_client_forever(client):
         except Exception as e:
             print(f"[ERROR] unexpected telethon crash: {e}", flush=True)
             traceback.print_exc()
+            if "disconnected" in str(e).lower():
+                try:
+                    await ensure_client_connected(client)
+                except Exception as reconnect_e:
+                    print(f"[ERROR] reconnect failed: {reconnect_e}", flush=True)
             await asyncio.sleep(5)
 
 async def run_aiogram_polling():
