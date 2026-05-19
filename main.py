@@ -150,15 +150,15 @@ async def ensure_client_connected(client: TelegramClient):
 async def on_startup():
     webhook_url = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
     print(f"🔗 設定 Telegram webhook 為：{webhook_url}")
-    await bot.delete_webhook(drop_pending_updates=True)
-    await bot.set_webhook(webhook_url)
+    await bot_client.delete_webhook(drop_pending_updates=True)
+    await bot_client.set_webhook(webhook_url)
     cold_start = False  # 启动完成
 
-async def on_startup_poll(bot: Bot):
+async def on_startup_poll():
    
     print(f"🔗 設定 Telegram webhook 為空")
-    await bot.delete_webhook(drop_pending_updates=True)
-    # await bot.set_webhook(None)
+    await bot_client.delete_webhook(drop_pending_updates=True)
+    # await bot_client.set_webhook(None)
    
 
 # ================= 7. 初始化 Telethon 客户端 =================
