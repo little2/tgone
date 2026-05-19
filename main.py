@@ -147,7 +147,7 @@ async def ensure_client_connected(client: TelegramClient):
         await client.connect()
         print("[INFO] telethon reconnected", flush=True)
 
-async def on_startup(bot: Bot):
+async def on_startup():
     webhook_url = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
     print(f"🔗 設定 Telegram webhook 為：{webhook_url}")
     await bot.delete_webhook(drop_pending_updates=True)
