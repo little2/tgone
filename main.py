@@ -288,7 +288,7 @@ ORDER BY `bot`.`work_status` DESC)
     2.使用 telethon 验证 bot_name 是否有效 （client.get_entity(bot_name)），如果无效则更新数据库 work_status = 'ban'，如果有效则更新 work_status = 'used' 
     """
 
-    rows = await media_utils.fetch_bot_sync_list()
+    rows = await media_utils.fetch_bot_info_list()
     print(f"🔍 从数据库获取到 {len(rows)} 条机器人信息。", flush=True)
     for row in rows:
         bot_id = row['bot_id']

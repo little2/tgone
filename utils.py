@@ -155,6 +155,10 @@ class MediaUtils:
         """
         return await MySQLPool.fetchall(sql, error_tag="fetch_bot_info_list")
 
+    async def fetch_bot_sync_list(self):
+        """兼容旧调用名（过渡期），后续可移除。"""
+        return await self.fetch_bot_info_list()
+
     async def update_bot_status(self, bot_id: int, work_status: str = "used") -> bool:
         allowed = {"used", "ban", "free", "frozen", ""}
         if work_status not in allowed:
