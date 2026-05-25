@@ -23,7 +23,7 @@ from telethon.tl.types import InputPhoneContact
 from tgone_config import API_ID, API_HASH, BOT_TOKEN, SWITCHBOT_USERNAME, TARGET_GROUP_ID, TARGET_GROUP_ID_FROM_BOT, PHONE_NUMBER,  BOT_MODE, WEBHOOK_HOST, WEBHOOK_PATH, SESSION_STRING,KEY_USER_PHONE,KEY_USER_ID, config
 
 from telethon.errors.common import TypeNotFoundError
-from telethon.errors import FloodWaitError
+from telethon.errors import FloodWaitError, UsernameNotOccupiedError, UsernameInvalidError
 import traceback
 
 lz_var_start_time = time.time()
@@ -330,8 +330,15 @@ ORDER BY `bot`.`work_status` DESC)
             await media_utils.update_bot_status(bot_id, 'used')
             
            
+        except (UsernameNotOccupiedError, UsernameInvalidError) as e:
+            print(f"🚫 {bot_name} 用户名不存在或格式无效，标记为 ban: {e}", flush=True)
+            await media_utils.update_bot_status(bot_id, 'ban')
         except Exception as e:
-            print(f"❌ 验证失败：{bot_name} 无效，错误: {e}", flush=True)
+            err_low = str(e).lower()
+            if "nobody is using this username" in err_low or "username" in err_low and "unacceptable" in err_low:
+                print(f"🚫 {bot_name} 用户名无效（解析失败），标记为 ban: {e}", flush=True)
+            else:
+                print(f"❌ 验证失败：{bot_name} 无效，错误: {e}", flush=True)
             await media_utils.update_bot_status(bot_id, 'ban')
 
     # sync_ret = await media_utils.sync_bot_mysql_to_pg()
