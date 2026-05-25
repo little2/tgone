@@ -23,6 +23,7 @@ from telethon.tl.types import InputPhoneContact
 from tgone_config import API_ID, API_HASH, BOT_TOKEN, SWITCHBOT_USERNAME, TARGET_GROUP_ID, TARGET_GROUP_ID_FROM_BOT, PHONE_NUMBER,  BOT_MODE, WEBHOOK_HOST, WEBHOOK_PATH, SESSION_STRING,KEY_USER_PHONE,KEY_USER_ID, config
 
 from telethon.errors.common import TypeNotFoundError
+from telethon.errors import FloodWaitError
 import traceback
 
 lz_var_start_time = time.time()
@@ -296,6 +297,35 @@ ORDER BY `bot`.`work_status` DESC)
         print(f"验证机器人 {bot_name} (ID: {bot_id})...", flush=True)
         try:
             entity = await user_client.get_entity(bot_name)
+
+            # 额外校验：解析成功不代表可用（可能被 Telegram ToS 封禁/限制）
+            if not getattr(entity, "bot", False):
+                raise RuntimeError("not_a_bot_entity")
+            if getattr(entity, "deleted", False):
+                raise RuntimeError("bot_deleted")
+            if getattr(entity, "scam", False) or getattr(entity, "fake", False):
+                raise RuntimeError("bot_flagged_scam_or_fake")
+            if getattr(entity, "restriction_reason", None):
+                raise RuntimeError(f"bot_restricted:{entity.restriction_reason}")
+
+            # 主动探测一次可交互性，识别「This bot can't be displayed...」场景
+            try:
+                await user_client.send_message(bot_name, "/start")
+            except FloodWaitError as fw:
+                # FloodWait 不是封禁，保持 used，避免误杀
+                wait_s = int(getattr(fw, "seconds", 0) or 0)
+                print(f"⚠️ {bot_name} 探测触发 FloodWait({wait_s}s)，暂不判定为 ban", flush=True)
+            except Exception as probe_err:
+                probe_msg = str(probe_err)
+                probe_low = probe_msg.lower()
+                if (
+                    "violated telegram's terms of service" in probe_low
+                    or "can’t be displayed" in probe_low
+                    or "can't be displayed" in probe_low
+                ):
+                    raise RuntimeError(f"tos_violation:{probe_msg}")
+                raise RuntimeError(f"probe_failed:{probe_msg}")
+
             print(f"✅ 验证成功：{bot_name} 存在。", flush=True)
             await media_utils.update_bot_status(bot_id, 'used')
             
