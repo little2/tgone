@@ -272,7 +272,7 @@ async def handle_user_private_text(event):
 
     elif text.startswith("/sync_bot"):
         await sync_bot()
-        await user_client.send_message(event.chat_id, "👋 你好！你的状态已同步为 'used'，可以正常使用了。")
+        await user_client.send_message(event.chat_id, "✅ 同步完成，请查看日志输出。")
 
             
     else:    
@@ -340,13 +340,13 @@ ORDER BY `bot`.`work_status` DESC)
             else:
                 print(f"❌ 验证失败：{bot_name} 无效，错误: {e}", flush=True)
             await media_utils.update_bot_status(bot_id, 'ban')
+        finally:
+            await asyncio.sleep(1)  # 避免请求过快
 
     # sync_ret = await media_utils.sync_bot_mysql_to_pg()
-    # print(
-    #     f"✅ bot 同步到 PostgreSQL 完成: total={sync_ret.get('total')} "
-    #     f"upserted={sync_ret.get('upserted')} failed={sync_ret.get('failed')}",
-    #     flush=True,
-    # )
+    print(
+       f"🔄 同步完成。请前往 LZ 面板检查机器人状态。{len(rows)} 个机器人已验证，详情请查看日志输出。"
+    )
     
 
 
