@@ -1130,6 +1130,7 @@ class MediaUtils:
                 FROM file_extension f
                 LEFT JOIN bot b ON f.bot = b.bot_name 
                 WHERE f.file_unique_id = %s AND b.work_status in ('used', 'free')
+                ORDER BY f.id DESC
                 LIMIT 0, 1
             """
         row = await MySQLPool.fetchone(sql, (source_id,))
@@ -2000,8 +2001,11 @@ class MediaUtils:
         if record:
 
             if record['doc_id'] is not None and record['file_unique_id'] is not None:
-                print(f"【👦】确认已存在：doc_id={doc_id}，file_unique_id={record['file_unique_id']}，跳过转发", flush=True)
-                return
+                if record['bot_id'] == self.bot_id:
+                    print(f"【👦】确认已存在：doc_id={doc_id}，file_unique_id={record['file_unique_id']}，跳过转发", flush=True)
+                    return
+                else:
+                    print(f"【👦】确认记录存在，但 bot_id 不符，准备更新并转发到 {TARGET_GROUP_ID}", flush=True)
             else:
                 print(f"【👦】确认记录存在，但缺少 doc_id ({record['doc_id']}) 或 file_unique_id ({record['file_unique_id']}), 准备更新并转发到 {TARGET_GROUP_ID}", flush=True)
         else:

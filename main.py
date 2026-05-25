@@ -271,6 +271,8 @@ async def handle_user_private_text(event):
         await event.reply(f"已处理 join 指令：{hello_param}")
 
     elif text.startswith("/sync_bot"):
+        await user_client.send_message(event.chat_id, "🔄 开始同步机器人状态，请稍候...")
+
         await sync_bot()
         await user_client.send_message(event.chat_id, "✅ 同步完成，请查看日志输出。")
 
