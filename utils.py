@@ -123,6 +123,32 @@ class MediaUtils:
         self.bot_mode = config.get("bot_mode", "polling")
         self._kick_cooldown_until: dict[str, float] = {}
 
+    async def _kick_bot_with_cooldown(self, botname: str, reason: str = "") -> bool:
+        """向目标 bot 发送唤醒指令，并带 FloodWait 冷却保护。"""
+        if not botname:
+            return False
+
+        now_ts = time.time()
+        cooldown_until = self._kick_cooldown_until.get(botname, 0.0)
+        if now_ts < cooldown_until:
+            left = int(cooldown_until - now_ts)
+            print(f"⏳ kick cooldown active, skip {botname}, left={left}s reason={reason}", flush=True)
+            return False
+
+        try:
+            await self.user_client.send_message(botname, "/start")
+            await self.user_client.send_message(botname, "[~bot~]")
+            return True
+        except FloodWaitError as e:
+            wait_s = int(getattr(e, "seconds", 0) or 0)
+            if wait_s > 0:
+                self._kick_cooldown_until[botname] = time.time() + wait_s
+            print(f"⚠️ kick floodwait: wait={wait_s}s bot={botname} reason={reason}", flush=True)
+            return False
+        except Exception as e:
+            print(f"⚠️ kick failed: bot={botname} reason={reason} err={e}", flush=True)
+            return False
+
     async def set_file_vaild_state(self,file_unique_id: str, vaild_state: int = 1):
         sql = """
             UPDATE sora_content
@@ -851,6 +877,10 @@ class MediaUtils:
                
                 
         
+        except FloodWaitError as e:
+            wait_s = int(getattr(e, "seconds", 0) or 0)
+            print(f"[826] FloodWait while handling file_unique_id={file_unique_id}, wait={wait_s}s", flush=True)
+            return
         except Exception as e:
             if "Token is invalid" in str(e):
                 print(f"[823] Bot Token 无效，请检查配置。")
@@ -1192,18 +1222,15 @@ class MediaUtils:
         except TelegramNotFound:
             print(f"{process_header} chat not found: {self.man_id}. 可能原因：ID 错、bot 未入群、或用户未对该 bot /start", flush=True)
             # 机器人根本不认识这个 chat（不在群里/用户未 start/ID 错）
-            await self.user_client.send_message(row["bot"], "/start")
-            await self.user_client.send_message(row["bot"], "[~bot~]")
+            await self._kick_bot_with_cooldown(row.get("bot") or "", reason="TelegramNotFound")
             
         except TelegramBadRequest as e:
             # 这里能准确看到 “chat not found”“message thread not found”等具体文本
-            await self.user_client.send_message(row["bot"], "/start")
-            await self.user_client.send_message(row["bot"], "[~bot~]")           
+            await self._kick_bot_with_cooldown(row.get("bot") or "", reason=f"TelegramBadRequest:{e}")
             print(f"{process_header} 发送失败（BadRequest）: {e}", flush=True)
         except Exception as e:
             if "Unauthorized" in str(e):
-                await self.user_client.send_message(row["bot"], "/start")
-                await self.user_client.send_message(row["bot"], "[~bot~]") 
+                await self._kick_bot_with_cooldown(row.get("bot") or "", reason="Unauthorized")
                 print(f"{process_header} {e}", flush=True)
             else:
                 # 不要在所有异常里就发 /start；只在你需要唤醒对话时再做
@@ -1894,20 +1921,16 @@ class MediaUtils:
                 else:
                     print(f"PPMM-【Telethon】捕获到的字符串不是数字：{captured_str}",flush=True)
                     destination_chat_id = str(captured_str)
-                
+
                 try:
                     print(f"PPMM-📌 获取实体：{destination_chat_id}", flush=True)
                     entity = await self.user_client.get_entity(destination_chat_id)
                     ret = await self.user_client.send_file(entity, msg.media)
-                #     print(f"✅ 成功发送到 {destination_chat_id}，消息 ID：{ret.id}", flush=True)
-                # except Exception as e:
-                #     print(f"❌ 无法发送到 {destination_chat_id}：{e}", flush=True)
-
-
-                # try:
-                #     ret = await user_client.send_file(destination_chat_id, msg.media)
                     print(f"PPMM-【Telethon】已转发到目标群组：{destination_chat_id}，消息 ID：{ret.id}",flush=True)
-                    # print(f"{ret}",flush=True)
+                except FloodWaitError as e:
+                    wait_s = int(getattr(e, "seconds", 0) or 0)
+                    print(f"PPMM-⚠️ 转发 FloodWait：wait={wait_s}s, destination={destination_chat_id}", flush=True)
+                    return
                 except ChatForwardsRestrictedError:
                     print(f"PPMM-⚠️ 该媒体来自受保护频道，无法转发，已跳过。msg.id = {msg.id}", flush=True)
                     return  # ⚠️ 不处理，直接跳出
@@ -1916,34 +1939,42 @@ class MediaUtils:
                     return
             elif event and event.peer_id.user_id == self.bot_id:
                 file_unique_id = caption.strip()
-                
-                # 這是 bot 發送的刷新請求，直接更新記錄並返回
-                print(f"【👦】收到來自 bot 的刷新請求，file_unique_id={file_unique_id}", flush=True)
-                sql = """
-                    SELECT * FROM file_records WHERE file_unique_id = %s AND man_id = %s
-                    LIMIT 1
-                """
-                record = await MySQLPool.fetchone(sql, (file_unique_id, self.man_id))
-                
-                if record:
-                    # 更新記錄的 doc_id, access_hash, file_reference
-                    upsert_data = {
-                        'id': record['id'],
-                        'file_unique_id': file_unique_id,
-                        'doc_id': doc_id,
-                        'access_hash': access_hash,
-                        'file_reference': file_reference,
-                        'file_type': file_type,
-                        'mime_type': mime_type,
-                        'file_size': file_size,
-                        'file_name': file_name,
-                        'man_id': self.man_id
-                    }
-                    await self.upsert_file_record(upsert_data)
-                    print(f"【👦】✅ 已更新 file_unique_id={file_unique_id} 的引用信息 doc_id={doc_id}", flush=True)
-                else:
-                    print(f"【👦】⚠️ 找不到 file_unique_id={file_unique_id} 的記錄", flush=True)
-                
+
+                # 这是 bot 发送给 man 的刷新媒体，更新本地 file_records 后直接返回
+                try:
+                    exist_row = await MySQLPool.fetchone(
+                        """
+                        SELECT id FROM file_records
+                        WHERE file_unique_id = %s AND man_id = %s
+                        ORDER BY id DESC
+                        LIMIT 1
+                        """,
+                        (file_unique_id, self.man_id),
+                    )
+
+                    if exist_row and exist_row.get("id"):
+                        await self.upsert_file_record({
+                            "id": exist_row["id"],
+                            "file_unique_id": file_unique_id,
+                            "doc_id": doc_id,
+                            "access_hash": access_hash,
+                            "file_reference": file_reference,
+                            "file_type": file_type,
+                            "mime_type": mime_type,
+                            "file_name": file_name,
+                            "file_size": file_size,
+                            "chat_id": msg.chat_id,
+                            "message_id": msg.id,
+                            "uploader_type": "user",
+                            "man_id": self.man_id,
+                            "bot_id": self.bot_id,
+                        })
+                        print(f"【👦】已刷新 file_records：file_unique_id={file_unique_id}, doc_id={doc_id}", flush=True)
+                    else:
+                        print(f"【👦】⚠️ 找不到 file_unique_id={file_unique_id} 的记录，跳过刷新。", flush=True)
+                except Exception as e:
+                    print(f"【👦】刷新 file_records 失败：file_unique_id={file_unique_id}, err={e}", flush=True)
+
                 return  # 刷新完成，直接返回
 
         # 检查：TARGET_GROUP_ID 群组是否已有相同 doc_id

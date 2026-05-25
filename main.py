@@ -304,12 +304,12 @@ ORDER BY `bot`.`work_status` DESC)
             print(f"❌ 验证失败：{bot_name} 无效，错误: {e}", flush=True)
             await media_utils.update_bot_status(bot_id, 'ban')
 
-    sync_ret = await media_utils.sync_bot_mysql_to_pg()
-    print(
-        f"✅ bot 同步到 PostgreSQL 完成: total={sync_ret.get('total')} "
-        f"upserted={sync_ret.get('upserted')} failed={sync_ret.get('failed')}",
-        flush=True,
-    )
+    # sync_ret = await media_utils.sync_bot_mysql_to_pg()
+    # print(
+    #     f"✅ bot 同步到 PostgreSQL 完成: total={sync_ret.get('total')} "
+    #     f"upserted={sync_ret.get('upserted')} failed={sync_ret.get('failed')}",
+    #     flush=True,
+    # )
     
 
 
