@@ -829,10 +829,9 @@ class MediaUtils:
                     ext_row = await self.fetch_file_by_sora_content_id(file_unique_id)
                     if(ext_row):
                         print(f"【🚹】【2-3】[{file_unique_id}]进阶扩展库通过 sora_content_id 查到记录了😄",flush=True)
-                    else
-                    {
+                    else:
                         print(f"【🚹】【2-3】[{file_unique_id}]进阶扩展库通过 sora_content_id 没有查到记录了😢",flush=True)
-                    }
+                    
                     
                 
                 if ext_row:
