@@ -147,6 +147,12 @@ class MediaUtils:
             return False
         except Exception as e:
             print(f"⚠️ kick failed: bot={botname} reason={reason} err={e}", flush=True)
+            if str(e) in "Nobody is using this username":
+                # 这种情况说明 bot 账号被删除了，后续就不必再尝试了
+                print(f"🚫 bot {botname} seems deleted, set kick cooldown to inf", flush=True)
+                self._kick_cooldown_until[botname] = float("inf")
+                # 从数据据中，把 bot.work_status 设为 ban
+                await self.update_bot_status(bot_id=self.bot_id, work_status="ban")
             return False
 
     async def set_file_vaild_state(self,file_unique_id: str, vaild_state: int = 1):
@@ -817,6 +823,7 @@ class MediaUtils:
                 
                 # 这是一个补强机制，主要是目前不确定有哪些是 media_sora 有，但 file_records 没有的情况，透过跟仓库机器人的互动会自动补齐 material 跟 extension
                 if not ext_row:
+                    print(f"【🚹】【2-2】[{file_unique_id}] 需要进一阶查找 fetch_file_by_sora_content_id",flush=True)
                     ext_row = await self.fetch_file_by_sora_content_id(file_unique_id)
                     
                 
@@ -1228,14 +1235,14 @@ class MediaUtils:
         except TelegramBadRequest as e:
             # 这里能准确看到 “chat not found”“message thread not found”等具体文本
             await self._kick_bot_with_cooldown(row.get("bot") or "", reason=f"TelegramBadRequest:{e}")
-            print(f"{process_header} 发送失败（BadRequest）: {e}", flush=True)
+            print(f"❌ {process_header} 发送失败(1231)（BadRequest）: {e}", flush=True)
         except Exception as e:
             if "Unauthorized" in str(e):
                 await self._kick_bot_with_cooldown(row.get("bot") or "", reason="Unauthorized")
                 print(f"{process_header} {e}", flush=True)
             else:
                 # 不要在所有异常里就发 /start；只在你需要唤醒对话时再做
-                print(f"{process_header} ❌ 发送失败: {e}", flush=True)
+                print(f"{process_header} ❌ 发送失败(1238): {e}", flush=True)
         finally:
 
             print(f"{process_header} 最终结束，回主流程看看 👦 有没有收到了")
