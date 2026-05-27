@@ -818,19 +818,27 @@ class MediaUtils:
             row = await MySQLPool.fetchone(sql, (file_unique_id,self.bot_id,))
             print(f"【🚹】【2.C】[{file_unique_id}]查询结果：",flush=True)
             if not row: # if row = None
-                print(f"【🚹】【2-2】[{file_unique_id}]没有找到本地端的文档，需要查找扩展库",flush=True)
+                
                 ext_row = await self.fetch_file_by_source_id(file_unique_id)
                 
                 # 这是一个补强机制，主要是目前不确定有哪些是 media_sora 有，但 file_records 没有的情况，透过跟仓库机器人的互动会自动补齐 material 跟 extension
-                if not ext_row:
-                    print(f"【🚹】【2-2】[{file_unique_id}] 需要进一阶查找 fetch_file_by_sora_content_id",flush=True)
+                if ext_row:
+                    print(f"【🚹】【2-2】[{file_unique_id}]扩展库有😄",flush=True)
+                else:
+                    
                     ext_row = await self.fetch_file_by_sora_content_id(file_unique_id)
+                    if(ext_row):
+                        print(f"【🚹】【2-3】[{file_unique_id}]进阶扩展库通过 sora_content_id 查到记录了😄",flush=True)
+                    else
+                    {
+                        print(f"【🚹】【2-3】[{file_unique_id}]进阶扩展库通过 sora_content_id 没有查到记录了😢",flush=True)
+                    }
                     
                 
                 if ext_row:
                     # print(f"【send_media_by_file_unique_id】在 file_extension 中找到对应记录，尝试从 Bot 获取文件",flush=True)
                     # 如果在 file_extension 中找到对应记录，尝试从 Bot 获取文件
-                    print(f"【🚹】【2-3】[{file_unique_id}]扩展库有😄",flush=True)
+                   
                     bot_row = await self.receive_file_from_bot(ext_row)
                     
                     
@@ -1593,8 +1601,11 @@ class MediaUtils:
 
         if record:
              if record['doc_id'] is not None and record['file_unique_id'] is not None:
-                print(f"【🤖】已存在：doc_id={doc_id}，file_unique_id={record['file_unique_id']}，不需要转到展库", flush=True)
-                return   
+                if record['bot_id'] == self.bot_id or record['bot_id'] is None:
+                    print(f"【🤖】已存在：doc_id={doc_id}，file_unique_id={record['file_unique_id']}，不需要转到展库", flush=True)
+                    return   
+                else:
+                    print(f"【🤖】记录存在但 bot_id 不匹配（{record['bot_id']} vs {self.bot_id}），继续处理", flush=True)
              else:
                 print(f"【🤖】记录存在但缺少 doc_id {record['doc_id']} 或 file_unique_id ( {record['file_unique_id']})，继续处理", flush=True)   
         else:
