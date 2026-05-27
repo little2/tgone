@@ -147,7 +147,7 @@ class MediaUtils:
             return False
         except Exception as e:
             print(f"⚠️ kick failed: bot={botname} reason={reason} err={e}", flush=True)
-            if str(e) in "Nobody is using this username":
+            if "Nobody is using this username" in str(e):
                 # 这种情况说明 bot 账号被删除了，后续就不必再尝试了
                 print(f"🚫 bot {botname} seems deleted, set kick cooldown to inf", flush=True)
                 self._kick_cooldown_until[botname] = float("inf")
