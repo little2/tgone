@@ -99,6 +99,29 @@ class LoadingManager:
 
 class MediaUtils:
 
+    async def insert_media_auto_send(self, chat_id: str, message_thread_id: int, text: str, type_: str, bot: str):
+        """
+        插入一筆資料到 media_auto_send。
+        :param chat_id: 目標 chat id
+        :param message_thread_id: 線程 id
+        :param text: 要發送的文字內容
+        :param type_: 類型（如 text、url、fd...）
+        :param bot: 機器人名稱
+        """
+        sql = '''
+            INSERT INTO media_auto_send
+                (chat_id, message_thread_id, text, type, bot, create_timestamp, plan_send_timestamp)
+            VALUES
+                (%s, %s, %s, %s, %s, %s, %s)
+        '''
+        now_ts = int(time.time())
+        params = [chat_id, message_thread_id, text, type_, bot, now_ts, now_ts]
+        try:
+            await MySQLPool.execute(sql, params)
+            print(f"[insert_media_auto_send] 插入成功 chat_id={chat_id} bot={bot} type={type_}", flush=True)
+        except Exception as e:
+            print(f"[insert_media_auto_send] 插入失敗: {e}", flush=True)
+
     # def __init__(self, pool: aiomysql.Pool, bot_client, user_client, lz_var_start_time, config):
     def __init__(self, bot_client, user_client, lz_var_start_time, config):
         self.bot_client = bot_client
@@ -816,6 +839,7 @@ class MediaUtils:
                 """
             
             row = await MySQLPool.fetchone(sql, (file_unique_id,self.bot_id,))
+            file_type = row['file_type'] if row else None
             print(f"【🚹】【2.C】[{file_unique_id}]查询结果：",flush=True)
             if not row: # if row = None
                 
@@ -826,11 +850,11 @@ class MediaUtils:
                     print(f"【🚹】【2-2】[{file_unique_id}]扩展库有😄",flush=True)
                 else:
                     
-                    ext_row = await self.fetch_file_by_sora_content_id(file_unique_id)
+                    ext_row = await self.fetch_file_by_file_unique_id(file_unique_id)
                     if(ext_row):
-                        print(f"【🚹】【2-3】[{file_unique_id}]进阶扩展库通过 sora_content_id 查到记录了😄",flush=True)
+                        print(f"【🚹】【2-3】[{file_unique_id}]进阶扩展库通过 file_unique_id 查到记录了😄",flush=True)
                     else:
-                        print(f"【🚹】【2-3】[{file_unique_id}]进阶扩展库通过 sora_content_id 没有查到记录了😢",flush=True)
+                        print(f"【🚹】【2-3】[{file_unique_id}]进阶扩展库通过 file_unique_id 没有查到记录了😢",flush=True)
                     
                     
                 
@@ -850,6 +874,8 @@ class MediaUtils:
                         else:
                             await client.send_message(to_user_id, text, reply_to=msg_id)
                         
+                        self.insert_media_auto_send(chat_id="-1002107818319",message_thread_id=3234,text=file_unique_id,type_= "lack",bot="lyjwcbot")
+
                         return
                     else:
                         return "retrieved"
@@ -868,7 +894,8 @@ class MediaUtils:
                     else:
                         await client.send_message(to_user_id, text, reply_to=msg_id)
 
-                    
+                    self.insert_media_auto_send(chat_id="-1002107818319",message_thread_id=3234,text=file_unique_id,type_= "lack",bot="lyjwcbot")
+
                     # 完全没有
                     # 如果 file_unqiue_id 的开头不是 X_
                     if not file_unique_id.startswith('X_'):
@@ -1164,9 +1191,9 @@ class MediaUtils:
     
 
     
-    async def fetch_file_by_sora_content_id(self, file_unique_id: str):
+    async def fetch_file_by_file_unique_id(self, file_unique_id: str):
         sql = """
-                SELECT c.file_type, m.thumb_file_id as file_id, m.source_bot_name as bot, b.bot_id, b.bot_token, c.thumb_file_unique_id as file_unique_id
+                SELECT c.file_type, m.thumb_file_id as file_id, m.source_bot_name as bot, b.bot_id, b.bot_token, c.thumb_file_unique_id as file_unique_id, c.id as content_id
                 FROM sora_content c
                 LEFT JOIN sora_media m ON c.id = m.content_id
                 LEFT JOIN bot b ON m.source_bot_name = b.bot_name
@@ -1181,7 +1208,7 @@ class MediaUtils:
 
         if not row:
             sql = """
-                SELECT c.file_type, m.file_id, m.source_bot_name as bot, b.bot_id, b.bot_token, c.source_id as file_unique_id
+                SELECT c.file_type, m.file_id, m.source_bot_name as bot, b.bot_id, b.bot_token, c.source_id as file_unique_id, c.id as content_id
                 FROM sora_content c
                 LEFT JOIN sora_media m ON c.id = m.content_id
                 LEFT JOIN bot b ON m.source_bot_name = b.bot_name
@@ -1203,6 +1230,7 @@ class MediaUtils:
                 "bot_id": row["bot_id"],
                 "bot_token": row["bot_token"],
                 "file_unique_id": row["file_unique_id"],
+                "content_id": row["content_id"],
             }
     
 
