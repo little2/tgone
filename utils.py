@@ -874,7 +874,7 @@ class MediaUtils:
                         else:
                             await client.send_message(to_user_id, text, reply_to=msg_id)
                         
-                        self.insert_media_auto_send(chat_id="-1002107818319",message_thread_id=3234,text=file_unique_id,type_= "lack",bot="lyjwcbot")
+                        await self.insert_media_auto_send(chat_id="-1002107818319",message_thread_id=3234,text=file_unique_id,type_= "lack",bot="lyjwcbot")
 
                         return
                     else:
@@ -894,7 +894,7 @@ class MediaUtils:
                     else:
                         await client.send_message(to_user_id, text, reply_to=msg_id)
 
-                    self.insert_media_auto_send(chat_id="-1002107818319",message_thread_id=3234,text=file_unique_id,type_= "lack",bot="lyjwcbot")
+                    await self.insert_media_auto_send(chat_id="-1002107818319",message_thread_id=3234,text=file_unique_id,type_= "lack",bot="lyjwcbot")
 
                     # 完全没有
                     # 如果 file_unqiue_id 的开头不是 X_
