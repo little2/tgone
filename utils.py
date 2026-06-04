@@ -122,6 +122,25 @@ class MediaUtils:
         except Exception as e:
             print(f"[insert_media_auto_send] 插入失敗: {e}", flush=True)
 
+    async def remove_file_id(self, file_id: str) -> bool:
+        """
+        從 file_extension 刪除指定 file_id 的記錄。
+        """
+        if not file_id:
+            return False
+
+        sql = """
+            DELETE FROM file_extension
+            WHERE file_id = %s
+        """
+        try:
+            result = await MySQLPool.execute(sql, (file_id,))
+            print(f"[remove_file_id] 刪除成功 file_id={file_id}", flush=True)
+            return bool(result)
+        except Exception as e:
+            print(f"[remove_file_id] 刪除失敗 file_id={file_id}: {e}", flush=True)
+            return False
+
     # def __init__(self, pool: aiomysql.Pool, bot_client, user_client, lz_var_start_time, config):
     def __init__(self, bot_client, user_client, lz_var_start_time, config):
         self.bot_client = bot_client
@@ -1271,6 +1290,12 @@ class MediaUtils:
             # 这里能准确看到 “chat not found”“message thread not found”等具体文本
             await self._kick_bot_with_cooldown(row.get("bot") or "", reason=f"TelegramBadRequest:{e}")
             print(f"❌ {process_header} 发送失败(1231)（BadRequest）: {e}", flush=True)
+            if "wrong file identifier" in str(e):
+                print(f"{process_header} 可能原因：file_id 无效（过期/错误）", flush=True)
+                # 删除 file_extension 中的记录，避免下次再用这个 file_id 发送 ( 使用 function )
+                await self.remove_file_id(row["file_id"])
+
+
         except Exception as e:
             if "Unauthorized" in str(e):
                 await self._kick_bot_with_cooldown(row.get("bot") or "", reason="Unauthorized")
