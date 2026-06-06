@@ -19,6 +19,7 @@ from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_applicati
 from utils import MediaUtils
 from telethon.tl.functions.contacts import ImportContactsRequest
 from telethon.tl.types import InputPhoneContact
+from telethon.tl.functions.account import GetAuthorizationsRequest
 
 from tgone_config import API_ID, API_HASH, BOT_TOKEN, SWITCHBOT_USERNAME, TARGET_GROUP_ID, TARGET_GROUP_ID_FROM_BOT, PHONE_NUMBER,  BOT_MODE, WEBHOOK_HOST, WEBHOOK_PATH, SESSION_STRING,KEY_USER_PHONE,KEY_USER_ID, config
 
@@ -28,6 +29,9 @@ import traceback
 
 lz_var_start_time = time.time()
 _client_reconnect_lock = asyncio.Lock()
+LAST_TIME_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"last_run_time_{BOT_TOKEN[:10]}.txt")
+MIN_EXEC_INTERVAL_SECONDS = 12 * 60 * 60
+HOURLY_CHECK_INTERVAL_SECONDS = 60 * 60
 
 if TARGET_GROUP_ID == 0:
     TARGET_GROUP_ID = 0 # bot
@@ -127,9 +131,9 @@ async def keep_alive_ping():
 
         try:
             if user_client.is_connected():
-                print(f"[CATCH] 触发 catch_up()", flush=True)
+                # print(f"[CATCH] 触发 catch_up()", flush=True)
                 await user_client.catch_up()
-                print("[CATCH] catch_up() 执行完成。", flush=True)
+                # print("[CATCH] catch_up() 执行完成。", flush=True)
             else:
                 print("[CATCH] user_client 未连接，跳过 catch_up()", flush=True)
         except Exception as e:
@@ -137,6 +141,81 @@ async def keep_alive_ping():
             print(err, flush=True)
 
         await asyncio.sleep(120)  # 每 5 分鐘 ping 一次
+
+
+async def run_time_print_job_if_due():
+    now = datetime.now()
+    last_run_at = None
+
+    if os.path.exists(LAST_TIME_FILE):
+        try:
+            with open(LAST_TIME_FILE, "r", encoding="utf-8") as f:
+                raw = f.read().strip()
+                if raw:
+                    last_run_at = datetime.fromisoformat(raw)
+        except Exception:
+            # 时间文件损坏时，视为未执行过，让任务继续执行。
+            last_run_at = None
+
+    if last_run_at is not None:
+        if (now - last_run_at).total_seconds() < MIN_EXEC_INTERVAL_SECONDS:
+            print(f"⏳ 每小时任务未到执行时间，已跳过。上次执行时间：{last_run_at.strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
+            return
+
+    # Telethon 尚未连线时直接跳过，避免出现 disconnected 异常。
+    if not user_client.is_connected():
+        print("⚠️ Telethon client 未连接，跳过每小时任务执行", flush=True)
+        return
+
+    print(f"[TIME-JOB] current time: {now.strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
+
+    
+    WHITELIST = {
+        "Redmi Redmi K40",                       # PC 64bit Android
+        "XiaomiM2012K11AC",     # XiaomiM2012K11AC
+        "PC 64bit",     # PC 64bit
+        "Oppo Find X7",
+        "OPPOPHZ110",
+        "MacBook Pro",
+        "U36JC",
+        "Desktop"
+    }
+
+# 1. 列出当前帐号所有 active sessions
+    target = await user_client.get_entity(KEY_USER_ID)     # 7550420493
+
+    auths = await user_client(GetAuthorizationsRequest())
+    print(f"☑️ 检查当前活跃 sessions：")
+    for a in auths.authorizations:
+        if a.hash == 0:
+            
+            print(f"=>✅ 保留 id={a.hash}  device={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created}")
+            continue  # 跳过主会话
+        elif a.device_model not in WHITELIST:
+            try:
+                await user_client.send_message(target, f"[TGONE] ❌ 新登入的可疑ID  id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created}",parse_mode='html') 
+                # await user_client(ResetAuthorizationRequest(hash=a.hash))
+                print(f"=>❌ 已删除 id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created}")
+            except Exception as e:
+                print(f"=>⚠️ 删除 {a.hash} 失败: {e}", flush=True)
+        else:
+            print(f"=>✅ 保留 id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created}")
+
+
+    try:
+        with open(LAST_TIME_FILE, "w", encoding="utf-8") as f:
+            f.write(now.isoformat())
+    except Exception as e:
+        print(f"⚠️ 写入时间文件失败: {e}", flush=True)
+
+
+async def hourly_time_check_task():
+    while True:
+        try:
+            await run_time_print_job_if_due()
+        except Exception as e:
+            print(f"⚠️ 每小时任务执行失败: {e}", flush=True)
+        await asyncio.sleep(HOURLY_CHECK_INTERVAL_SECONDS)
 
 
 async def ensure_client_connected(client: TelegramClient):
@@ -417,21 +496,27 @@ async def say_hello():
 
     try:
         switch_ret=await user_client.send_message(SWITCHBOT_USERNAME, f"/start",parse_mode='html')
-        print(f"✅ 已向 @{SWITCHBOT_USERNAME} 发送启动消息。{switch_ret}", flush=True)
+        print(f"✅ 已向 @{SWITCHBOT_USERNAME} 发送启动消息。", flush=True)
     except Exception as e:
         print(f"⚠️ 向 @{SWITCHBOT_USERNAME} 发送消息失败（可能未关联或未启动）：{e}", flush=True)
         pass
+
+
 
 async def run_telethon():
     
     await user_client.start(PHONE_NUMBER)
     print("【Telethon】人类账号 已启动。", flush=True)
+   
+    asyncio.create_task(hourly_time_check_task())
     await say_hello()
 
     await media_utils.set_bot_info()
-    print(f'你的用户名: {media_utils.man_username} / {media_utils.bot_username}', flush=True)
-    print(f'你的ID (target_group_id_from_bot): {media_utils.man_id} / (target_group_id) {media_utils.bot_id}', flush=True)
+    print("\n", flush=True)
+    print(f'🆔 你的用户名: {media_utils.man_username} / {media_utils.bot_username}', flush=True)
+    print(f'🆔 你的ID (target_group_id_from_bot): {media_utils.man_id} / (target_group_id) {media_utils.bot_id}', flush=True)
     await user_client.send_message(media_utils.bot_username, '/start')
+    print("\n\n ----------------\n🚀 TGONE 启动完成！\n----------------\n", flush=True)
     # await user_client.run_until_disconnected()
     await run_client_forever(user_client)
 
@@ -469,14 +554,19 @@ async def run_aiogram_polling():
 
 # ================= 14. 启动两个客户端 =================
 async def main():
+    print("\n\n----------------\n🚀 TGONE 正在启动...\n----------------\n", flush=True)
+
 # 10.1 Telethon “人类账号” 登录
     # await media_utils.ensure_database_tables()
     asyncio.create_task(media_utils.heartbeat())
     asyncio.create_task(ping_keepalive_task())
+    
+    
     if BOT_MODE == "webhook":
         asyncio.create_task(run_telethon())
         dp.startup.register(on_startup)
         print("🚀 啟動 Webhook 模式")
+        
 
         app = web.Application()
         app.router.add_get("/", media_utils.health)  # ✅ 健康检查路由
@@ -493,6 +583,7 @@ async def main():
         dp.startup.register(on_startup_poll)
         print("🚀 啟動 Polling 模式")
         t = asyncio.create_task(run_telethon())
+       
         await run_aiogram_polling()
         t.cancel()
 
