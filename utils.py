@@ -866,7 +866,7 @@ class MediaUtils:
                 
                 # 这是一个补强机制，主要是目前不确定有哪些是 media_sora 有，但 file_records 没有的情况，透过跟仓库机器人的互动会自动补齐 material 跟 extension
                 if ext_row:
-                    print(f"【🚹】【2-2】[{file_unique_id}]扩展库有😄",flush=True)
+                    print(f"【🚹】【2-2】[{file_unique_id}]扩展库有😄 {ext_row['bot_id']}",flush=True)
                 else:
                     
                     ext_row = await self.fetch_file_by_file_unique_id(file_unique_id)
