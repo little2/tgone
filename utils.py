@@ -2094,7 +2094,7 @@ class MediaUtils:
                 print(f"【👦】🚫 跳过：该媒体来自受保护频道 msg.id = {msg.id}", flush=True)
                 return  # ⚠️ 不处理，直接跳出
             except Exception as e:
-                print(f"【👦】❌ 其他发送失败：{e}", flush=True)
+                print(f"【👦】❌ 其他发送失败 TARGET_GROUP_ID={TARGET_GROUP_ID} ：{e}", flush=True)
                 return
             
            
