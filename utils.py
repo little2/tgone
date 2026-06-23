@@ -848,6 +848,7 @@ class MediaUtils:
     # send_media_by_file_unique_id 函数
     async def send_media_by_file_unique_id(self,client, to_user_id, file_unique_id, client_type, msg_id):
         ext_row = []
+        send_bot_id = 0
         print(f"👇-send_media_by_file_unique_id-",flush=True)
         print(f"【🚹】【1】[{file_unique_id}]开始处理 file_unique_id={file_unique_id}，先查询是否有该 file_unqiue_id 是否在库 , 目标用户：{to_user_id}",flush=True)
         try:
@@ -866,12 +867,14 @@ class MediaUtils:
                 
                 # 这是一个补强机制，主要是目前不确定有哪些是 media_sora 有，但 file_records 没有的情况，透过跟仓库机器人的互动会自动补齐 material 跟 extension
                 if ext_row:
+                    send_bot_id = ext_row['bot_id']
                     print(f"【🚹】【2-2】[{file_unique_id}]扩展库有😄 {ext_row['bot_id']}",flush=True)
                 else:
                     
                     ext_row = await self.fetch_file_by_file_unique_id(file_unique_id)
                     if(ext_row):
                         print(f"【🚹】【2-3】[{file_unique_id}]进阶扩展库通过 file_unique_id 查到记录了😄",flush=True)
+                        send_bot_id = ext_row['bot_id']
                     else:
                         print(f"【🚹】【2-3】[{file_unique_id}]进阶扩展库通过 file_unique_id 没有查到记录了😢",flush=True)
                     
@@ -897,6 +900,7 @@ class MediaUtils:
 
                         return
                     else:
+                        send_bot_id = bot_row['bot_id']
                         return "retrieved"
 
                         # chat_id, message_id, doc_id, access_hash, file_reference_hex, file_id, file_unique_id, file_type = row
@@ -930,6 +934,7 @@ class MediaUtils:
                         'file_id': row['file_id'],
                         'file_unique_id': row['file_unique_id']
                     }
+                    
                     
                     await self.bot_send_file(file_metadata, TARGET_GROUP_ID_FROM_BOT)
                    

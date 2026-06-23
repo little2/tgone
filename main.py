@@ -1,6 +1,7 @@
 
 
 import os
+from aiogram.exceptions import TelegramUnauthorizedError
 import aiohttp
 import asyncio
 import time
@@ -555,6 +556,17 @@ async def run_aiogram_polling():
 # ================= 14. 启动两个客户端 =================
 async def main():
     print("\n\n----------------\n🚀 TGONE 正在启动...\n----------------\n", flush=True)
+
+    try:
+        bot_info = await bot_client.get_me()
+        print(f"Bot token 正常：@{bot_info.username}")
+    except TelegramUnauthorizedError:
+        print("‼️Bot token 錯誤或已失效")
+        raise
+        return
+    except Exception as e:
+        print(f"‼️Bot token 錯誤或已失效：{e}", flush=True)
+        return
 
 # 10.1 Telethon “人类账号” 登录
     # await media_utils.ensure_database_tables()
