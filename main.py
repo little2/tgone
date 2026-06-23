@@ -563,10 +563,10 @@ async def main():
     except TelegramUnauthorizedError:
         print("‼️Bot token 錯誤或已失效")
         raise
-        return
+        
     except Exception as e:
         print(f"‼️Bot token 錯誤或已失效：{e}", flush=True)
-        return
+        exit(1)
 
 # 10.1 Telethon “人类账号” 登录
     # await media_utils.ensure_database_tables()
