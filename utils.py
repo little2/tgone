@@ -1268,7 +1268,7 @@ class MediaUtils:
         print(f"{process_header}开始处理 file_unique_id={row['file_unique_id']}，bot_id={row['bot_id']}",flush=True)
         mybot = Bot(token=bot_token)
         try:
-            print(f"{process_header}准备让机器人{row['bot_id']}发送文件file_unique_id={row['file_unique_id']} 给 【👦】{self.man_id}",flush=True)
+            print(f"{process_header}准备让机器人 {row['bot_id']} 发送文件file_unique_id={row['file_unique_id']} 给 【👦】{self.man_id}",flush=True)
             if row["file_type"] == "photo" or row["file_type"] == "p":
                 # await mybot.send_photo(chat_id=7496113118, photo=row["file_id"])
                 retSend = await mybot.send_photo(chat_id=self.man_id, photo=row["file_id"], caption=f"{row['file_unique_id']}")
@@ -1299,8 +1299,6 @@ class MediaUtils:
                 print(f"{process_header} 可能原因：file_id 无效（过期/错误）", flush=True)
                 # 删除 file_extension 中的记录，避免下次再用这个 file_id 发送 ( 使用 function )
                 await self.remove_file_id(row["file_id"])
-
-
         except Exception as e:
             if "Unauthorized" in str(e):
                 await self._kick_bot_with_cooldown(row.get("bot") or "", reason="Unauthorized")
@@ -1310,7 +1308,7 @@ class MediaUtils:
                 print(f"{process_header} ❌ 发送失败(1238): {e}", flush=True)
         finally:
 
-            print(f"{process_header} 最终结束，回主流程看看 👦 有没有收到了")
+            print(f"{process_header} 最终结束，回主流程看看 👦 有没有收到了 retSend={retSend}")
             await mybot.session.close()
             return retSend
              
