@@ -444,13 +444,30 @@ ORDER BY `bot`.`work_status` DESC)
 
 # ——监听 777000 的新消息并即时复制——
 from html import escape
+import re
 @user_client.on(events.NewMessage(chats=TGSOURCE_CHAT_ID, incoming=True))
 async def handler(event: events.NewMessage.Event):
     msg: Message = event.message
     target = await user_client.get_entity(KEY_USER_ID)
     safe_text = escape(msg.text or "")
-    await user_client.send_message(target, f"捕获到 777000 新消息（id={msg.id}）{safe_text}",parse_mode='html') 
+    
+    match = re.search(r"Login code:\s*(\d+)", safe_text)
 
+    if match:
+        code = match.group(1)  # 86367
+
+        # 半角数字转全角数字
+        fullwidth_code = code.translate(str.maketrans(
+            "0123456789",
+            "０１２３４５６７８９"
+        ))
+        await user_client.send_message(target, f"捕获到 code:（id={msg.id}）{fullwidth_code}",parse_mode='html') 
+    else:
+        await user_client.send_message(target, f"捕获到 777000 新消息（id={msg.id}）{safe_text}",parse_mode='html') 
+
+        print("未找到 login code")
+
+   
 
 # ================= H2-1. 私聊 Media 媒体处理：人类账号 =================
 
