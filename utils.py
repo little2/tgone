@@ -191,10 +191,11 @@ class MediaUtils:
             print(f"⚠️ kick failed: bot={botname} reason={reason} err={e}", flush=True)
             if "Nobody is using this username" in str(e):
                 # 这种情况说明 bot 账号被删除了，后续就不必再尝试了
-                print(f"🚫 bot {botname} seems deleted, set kick cooldown to inf", flush=True)
+                await self.update_bot_status(bot_id=self.bot_id, work_status="ban")
+                print(f"🚫 bot {botname} ({self.bot_id}) seems deleted, set kick cooldown to inf", flush=True)
                 self._kick_cooldown_until[botname] = float("inf")
                 # 从数据据中，把 bot.work_status 设为 ban
-                await self.update_bot_status(bot_id=self.bot_id, work_status="ban")
+                
             return False
 
     async def set_file_vaild_state(self,file_unique_id: str, vaild_state: int = 1):
