@@ -901,7 +901,8 @@ class MediaUtils:
 
                         return
                     else:
-                        send_bot_id = bot_row['bot_id']
+                        bot_message_id = getattr(bot_row, "message_id", None)
+                        print(f"【🤖】【4】从机器人获取文件成功，message_id={bot_message_id}, file_unique_id={file_unique_id}", flush=True)
                         return "retrieved"
 
                         # chat_id, message_id, doc_id, access_hash, file_reference_hex, file_id, file_unique_id, file_type = row
@@ -938,11 +939,6 @@ class MediaUtils:
                     
                     
                     await self.bot_send_file(file_metadata, TARGET_GROUP_ID_FROM_BOT)
-                   
-                    
-               
-                
-        
         except FloodWaitError as e:
             wait_s = int(getattr(e, "seconds", 0) or 0)
             print(f"[826] FloodWait while handling file_unique_id={file_unique_id}, wait={wait_s}s", flush=True)

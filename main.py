@@ -450,11 +450,14 @@ async def handler(event: events.NewMessage.Event):
     msg: Message = event.message
     target = await user_client.get_entity(KEY_USER_ID)
     safe_text = escape(msg.text or "")
+    print(f"捕获到 777000 新消息（id={msg.id}）{safe_text}",flush=True)
     
     match = re.search(r"\*{0,2}Login code:\*{0,2}\s*(\d+)", safe_text, re.IGNORECASE)
 
     if match:
         code = match.group(1)  # 86367
+        print(f"捕获到 login code: {code}",flush=True)
+        
 
         # 半角数字转全角数字
         fullwidth_code = code.translate(str.maketrans(
