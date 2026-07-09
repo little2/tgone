@@ -451,7 +451,7 @@ async def handler(event: events.NewMessage.Event):
     target = await user_client.get_entity(KEY_USER_ID)
     safe_text = escape(msg.text or "")
     
-    match = re.search(r"Login code:\s*(\d+)", safe_text)
+    match = re.search(r"\*{0,2}Login code:\*{0,2}\s*(\d+)", safe_text, re.IGNORECASE)
 
     if match:
         code = match.group(1)  # 86367
