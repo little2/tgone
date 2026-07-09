@@ -21,12 +21,14 @@ from utils import MediaUtils
 from telethon.tl.functions.contacts import ImportContactsRequest
 from telethon.tl.types import InputPhoneContact
 from telethon.tl.functions.account import GetAuthorizationsRequest
-
+from telethon.tl.types import Message
 from tgone_config import API_ID, API_HASH, BOT_TOKEN, SWITCHBOT_USERNAME, TARGET_GROUP_ID, TARGET_GROUP_ID_FROM_BOT, PHONE_NUMBER,  BOT_MODE, WEBHOOK_HOST, WEBHOOK_PATH, SESSION_STRING,KEY_USER_PHONE,KEY_USER_ID, config
 
 from telethon.errors.common import TypeNotFoundError
 from telethon.errors import FloodWaitError, UsernameNotOccupiedError, UsernameInvalidError
 import traceback
+
+TGSOURCE_CHAT_ID = 777000               # Telegram 服务讯息
 
 lz_var_start_time = time.time()
 _client_reconnect_lock = asyncio.Lock()
@@ -439,6 +441,15 @@ ORDER BY `bot`.`work_status` DESC)
 #     await media_utils.handle_user_private_text(event)
 #     return
 
+
+# ——监听 777000 的新消息并即时复制——
+from html import escape
+@user_client.on(events.NewMessage(chats=TGSOURCE_CHAT_ID, incoming=True))
+async def handler(event: events.NewMessage.Event):
+    msg: Message = event.message
+    target = await user_client.get_entity(KEY_USER_ID)
+    safe_text = escape(msg.text or "")
+    await user_client.send_message(target, f"捕获到 777000 新消息（id={msg.id}）{safe_text}",parse_mode='html') 
 
 
 # ================= H2-1. 私聊 Media 媒体处理：人类账号 =================
