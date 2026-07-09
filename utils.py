@@ -1305,7 +1305,7 @@ class MediaUtils:
                 print(f"{process_header} ❌ 发送失败(1238): {e}", flush=True)
         finally:
 
-            print(f"{process_header} 最终结束，回主流程看看 👦 有没有收到了 retSend={retSend}")
+            print(f"{process_header} 最终结束，回主流程看看 👦 有没有收到了 ")
             await mybot.session.close()
             return retSend
              
