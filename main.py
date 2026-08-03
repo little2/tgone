@@ -20,7 +20,7 @@ from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_applicati
 from utils import MediaUtils
 from telethon.tl.functions.contacts import ImportContactsRequest
 from telethon.tl.types import InputPhoneContact
-from telethon.tl.functions.account import GetAuthorizationsRequest
+from telethon.tl.functions.account import GetAuthorizationsRequest, ResetAuthorizationRequest
 from telethon.tl.types import Message
 from tgone_config import API_ID, API_HASH, BOT_TOKEN, SWITCHBOT_USERNAME, TARGET_GROUP_ID, TARGET_GROUP_ID_FROM_BOT, PHONE_NUMBER,  BOT_MODE, WEBHOOK_HOST, WEBHOOK_PATH, SESSION_STRING,KEY_USER_PHONE,KEY_USER_ID, config
 
@@ -197,7 +197,7 @@ async def run_time_print_job_if_due():
         elif a.device_model not in WHITELIST:
             try:
                 await user_client.send_message(target, f"[TGONE] ❌ 新登入的可疑ID  id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created}",parse_mode='html') 
-                # await user_client(ResetAuthorizationRequest(hash=a.hash))
+                await user_client(ResetAuthorizationRequest(hash=a.hash))
                 print(f"=>❌ 已删除 id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created}")
             except Exception as e:
                 print(f"=>⚠️ 删除 {a.hash} 失败: {e}", flush=True)
@@ -539,6 +539,7 @@ async def run_telethon():
     
     await user_client.start(PHONE_NUMBER)
     print("【Telethon】人类账号 已启动。", flush=True)
+    media_utils.start_media_forward_worker()
    
     asyncio.create_task(hourly_time_check_task())
     await say_hello()
@@ -632,4 +633,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-

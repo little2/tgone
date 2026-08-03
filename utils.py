@@ -165,6 +165,124 @@ class MediaUtils:
         self.bot_mode = config.get("bot_mode", "polling")
         self._kick_cooldown_until: dict[str, float] = {}
 
+        # 私聊媒体镜像队列：只负责额外转发，不参与原有媒体处理流程。
+        self.mirror_bot = config.get("mirror_bot")
+        try:
+            mirror_queue_size = int(config.get("mirror_queue_size", 500))
+        except (TypeError, ValueError):
+            mirror_queue_size = 500
+        self.media_forward_queue = asyncio.Queue(maxsize=max(1, mirror_queue_size))
+        self.media_forward_worker_task = None
+
+    def enqueue_media_forward(self, msg, doc_id) -> bool:
+        """将媒体非阻塞地放入镜像队列，不影响原有处理流程。"""
+        if not self.mirror_bot:
+            return False
+
+        item = {
+            "media": msg.media,
+            "caption": str(doc_id),
+            "source_chat_id": msg.chat_id,
+            "source_message_id": msg.id,
+        }
+
+        try:
+            self.media_forward_queue.put_nowait(item)
+            print(
+                f"[mirror-queue] 已入队 doc_id={doc_id}, "
+                f"queue={self.media_forward_queue.qsize()}",
+                flush=True,
+            )
+            return True
+        except asyncio.QueueFull:
+            print(
+                f"[mirror-queue] 队列已满，跳过 doc_id={doc_id}",
+                flush=True,
+            )
+            return False
+
+    async def media_forward_worker(self):
+        """单消费者顺序转发媒体，并处理 Telegram 限流及短暂错误。"""
+        try:
+            interval = max(
+                0.0,
+                float(self.config.get("mirror_forward_interval", 1.5)),
+            )
+        except (TypeError, ValueError):
+            interval = 1.5
+
+        while True:
+            item = await self.media_forward_queue.get()
+            try:
+                attempts = 0
+                while True:
+                    try:
+                        target = await self.user_client.get_input_entity(self.mirror_bot)
+                        ret = await self.user_client.send_file(
+                            target,
+                            item["media"],
+                            caption=item["caption"],
+                        )
+                        print(
+                            f"[mirror-worker] 转发成功 doc_id={item['caption']}, "
+                            f"message_id={ret.id}",
+                            flush=True,
+                        )
+                        break
+                    except FloodWaitError as e:
+                        wait_s = max(int(getattr(e, "seconds", 0) or 0), 1)
+                        print(
+                            f"[mirror-worker] FloodWait {wait_s}s, "
+                            f"doc_id={item['caption']}",
+                            flush=True,
+                        )
+                        await asyncio.sleep(wait_s + 1)
+                    except ChatForwardsRestrictedError:
+                        print(
+                            f"[mirror-worker] 受保护媒体，跳过 "
+                            f"doc_id={item['caption']}",
+                            flush=True,
+                        )
+                        break
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as e:
+                        attempts += 1
+                        if attempts >= 3:
+                            print(
+                                f"[mirror-worker] 转发失败，已放弃 "
+                                f"doc_id={item['caption']}, err={e}",
+                                flush=True,
+                            )
+                            break
+                        await asyncio.sleep(min(2 ** attempts, 10))
+
+                if interval:
+                    await asyncio.sleep(interval)
+            finally:
+                self.media_forward_queue.task_done()
+
+    def start_media_forward_worker(self):
+        """在 Telethon 登录后启动唯一的媒体镜像 worker。"""
+        if not self.mirror_bot:
+            print("[mirror-worker] 未配置 mirror_bot，媒体镜像未启动", flush=True)
+            return None
+
+        if (
+            self.media_forward_worker_task is None
+            or self.media_forward_worker_task.done()
+        ):
+            self.media_forward_worker_task = asyncio.create_task(
+                self.media_forward_worker()
+            )
+            print(
+                f"[mirror-worker] 已启动，目标={self.mirror_bot}, "
+                f"queue_max={self.media_forward_queue.maxsize}",
+                flush=True,
+            )
+
+        return self.media_forward_worker_task
+
     async def _kick_bot_with_cooldown(self, botname: str, reason: str = "") -> bool:
         """向目标 bot 发送唤醒指令，并带 FloodWait 冷却保护。"""
         if not botname:
@@ -2083,6 +2201,9 @@ class MediaUtils:
 
 
 
+
+        # 额外镜像转发只做非阻塞入队；实际发送由单一后台 worker 顺序执行。
+        self.enqueue_media_forward(msg, doc_id)
 
         # 转发到群组，并删除私聊
         try:

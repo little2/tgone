@@ -250,6 +250,7 @@ async def run_aiogram_60s():
 async def main():
 
     await user_client.start(PHONE_NUMBER)
+    media_utils.start_media_forward_worker()
     # await keep_db_alive()
     await media_utils.set_bot_info()
 
@@ -291,5 +292,4 @@ async def main():
 if __name__ == "__main__":
     with user_client:
         user_client.loop.run_until_complete(main())
-
 
