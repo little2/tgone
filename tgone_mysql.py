@@ -1,6 +1,5 @@
 import aiomysql
 import time
-from tgone_config import MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB, MYSQL_DB_PORT
 from typing import Optional, Dict, Any, List
 from lz_memory_cache import MemoryCache
 import asyncio
@@ -52,11 +51,36 @@ def reconnecting(func):
 
 class MySQLPool:
     _pool = None
+    _config: Optional[Dict[str, Any]] = None
     _lock = asyncio.Lock()
     _cache_ready = False
     cache = None
     _closing = False  # ✅ 新增：标记正在 close/rebuild，避免 acquire 竞态
     _debug_mode = False
+
+    @classmethod
+    def configure(
+        cls,
+        *,
+        host: str,
+        user: str,
+        password: str,
+        database: str,
+        port: int = 3306,
+    ) -> None:
+        """注入 MySQL 設定；必須在建立連線池之前呼叫。"""
+        if cls._pool is not None:
+            raise RuntimeError("MySQL pool 建立後不可重新設定")
+        if not host or not user or not database:
+            raise ValueError("MySQL host、user、database 不可為空")
+
+        cls._config = {
+            "host": host,
+            "user": user,
+            "password": password,
+            "db": database,
+            "port": int(port),
+        }
 
     @classmethod
     def show_debug(cls,text):
@@ -83,12 +107,12 @@ class MySQLPool:
             cls._pool = None
 
         if cls._pool is None:
+            if cls._config is None:
+                raise RuntimeError(
+                    "MySQLPool 尚未設定，請先呼叫 MySQLPool.configure()"
+                )
             cls._pool = await aiomysql.create_pool(
-                host=MYSQL_HOST,
-                user=MYSQL_USER,
-                password=MYSQL_PASSWORD,
-                db=MYSQL_DB,
-                port=MYSQL_DB_PORT,
+                **cls._config,
                 charset="utf8mb4",
                 autocommit=True,
                 minsize=2,

@@ -245,7 +245,7 @@ SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 START TRANSACTION;
 SET time_zone = "+00:00";
 
-CREATE TABLE `bot` (
+CREATE TABLE IF NOT EXISTS `bot` (
   `bot_id` bigint(1) UNSIGNED NOT NULL,
   `bot_token` mediumtext NOT NULL,
   `bot_name` varchar(30) NOT NULL,

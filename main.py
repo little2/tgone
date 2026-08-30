@@ -18,11 +18,12 @@ from aiogram.filters import Command
 from aiohttp import web
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from utils import MediaUtils
+from tgone_mysql import MySQLPool
 from telethon.tl.functions.contacts import ImportContactsRequest
 from telethon.tl.types import InputPhoneContact
 from telethon.tl.functions.account import GetAuthorizationsRequest, ResetAuthorizationRequest
 from telethon.tl.types import Message
-from tgone_config import API_ID, API_HASH, BOT_TOKEN, SWITCHBOT_USERNAME, TARGET_GROUP_ID, TARGET_GROUP_ID_FROM_BOT, PHONE_NUMBER,  BOT_MODE, WEBHOOK_HOST, WEBHOOK_PATH, SESSION_STRING,KEY_USER_PHONE,KEY_USER_ID, config
+from tgone_config import API_ID, API_HASH, BOT_TOKEN, SWITCHBOT_USERNAME, TARGET_GROUP_ID, TARGET_GROUP_ID_FROM_BOT, PHONE_NUMBER, BOT_MODE, WEBHOOK_HOST, WEBHOOK_PATH, SESSION_STRING, KEY_USER_PHONE, KEY_USER_ID, MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB, MYSQL_DB_PORT, config
 
 from telethon.errors.common import TypeNotFoundError
 from telethon.errors import FloodWaitError, UsernameNotOccupiedError, UsernameInvalidError
@@ -587,6 +588,13 @@ async def run_aiogram_polling():
 
 # ================= 14. 启动两个客户端 =================
 async def main():
+    MySQLPool.configure(
+        host=MYSQL_HOST,
+        user=MYSQL_USER,
+        password=MYSQL_PASSWORD,
+        database=MYSQL_DB,
+        port=MYSQL_DB_PORT,
+    )
     print("\n\n----------------\n🚀 TGONE 正在启动...\n----------------\n", flush=True)
 
     try:
