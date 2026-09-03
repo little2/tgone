@@ -67,6 +67,7 @@ async def get_all_bots() -> list[dict[str, Any]]:
         WHERE bot_id = user_id
           AND bot_token IS NOT NULL
           AND work_status IN ('used', 'free')
+                    AND check_timestamp <= UNIX_TIMESTAMP() - 3600
         ORDER BY check_timestamp ASC
     """
     return await MySQLPool.fetchall(
@@ -497,8 +498,12 @@ async def check_all_userbot(config: dict[str, Any] | None = None) -> None:
     if not bots:
         raise RuntimeError("bot 資料表沒有任何資料")
 
-    bot_info = bots[0]
-    await check_userbot(bot_info)
+    for bot in bots:
+        await check_userbot(bot)
+        await asyncio.sleep(3)  # 避免過於頻繁的請求
+        print("\n" + "=" * 50 + "\n", flush=True)
+    # bot_info = bots[0]
+    # await check_userbot(bot_info)
     
 
 async def rec_new_account():   
@@ -535,9 +540,9 @@ async def main() -> None:
         port=int(config.get("db_port", os.getenv("MYSQL_DB_PORT", 3306))),
     )
     try:
-        # await check_all_userbot(config)
+        await check_all_userbot(config)
         # await rec_new_account()  # Replace with the actual phone number
-        await check_phone()  # Replace with the actual phone number
+        # await check_phone()  # Replace with the actual phone number
     finally:
         await MySQLPool.close()
 
