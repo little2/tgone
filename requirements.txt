@@ -1,6 +1,7 @@
 # Telegram 客户端与 Bot
-telethon==1.38.0
+telethon==1.44.0
 aiogram==3.20.0.post0
+aiohttp-socks~=0.8.3
 
 # 数据库
 pymysql>=1.1.0
@@ -12,5 +13,3 @@ aiomysql>=0.1.1
 
 # 加密依赖（解决 caching_sha2_password 认证问题）
 cryptography>=41.0.0
-
-

@@ -1,537 +1,33 @@
-"""讀取 MySQL `bot` 資料表中的所有資料。"""
+"""Telegram 使用者帳號管理程式入口。"""
 
-import json
-import os
 import asyncio
-import re
-import time
-from datetime import timedelta, timezone
-from html import escape
-from typing import Any
-from unittest import result
-
-from dotenv import load_dotenv
-from telethon import TelegramClient
-from telethon.sessions import StringSession
-from telethon.tl.functions.account import GetAuthorizationsRequest, ResetAuthorizationRequest, UpdateUsernameRequest
-from telethon.errors import (
-    AuthKeyDuplicatedError,
-    AuthKeyUnregisteredError,
-    FloodWaitError,
-    PeerFloodError,
-    PeerIdInvalidError,
-    RPCError,
-    SessionPasswordNeededError,
-)
-from telethon.tl.functions.contacts import ImportContactsRequest
-from telethon.tl.types import InputPhoneContact
-# shared_config 會在 import 時讀取 SETTING_URL，因此必須先載入環境變數。
-
+import os
+from datetime import datetime, timedelta
 from pathlib import Path
+import random
+from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
+
+from aiogram_bot_operator import AiogramBotOperator
+from tgone_mysql import MySQLPool
+from user_account_manager import UserAccountManager
+from human_bot_operator import HumanBotOperator
+
+
+API_ID = int(os.getenv("API_ID", 0))
+API_HASH = os.getenv("API_HASH", "")
 
 env_path = Path(__file__).resolve().parent / ".env"
-
 load_dotenv(dotenv_path=env_path)
 
-from shared_config import SharedConfig  # noqa: E402
-from tgone_mysql import MySQLPool  # noqa: E402
 
-TGSOURCE_CHAT_ID = 777000               # Telegram 服务讯息
+async def catch_miwen():
+    # Implement the catch functionality here
+    pass
 
-
-def load_config() -> dict[str, Any]:
-    """合併遠端設定與 CONFIGURATION，後者有較高優先權。"""
-    SharedConfig.load()
-
-    try:
-        configuration = json.loads(os.getenv("CONFIGURATION", "") or "{}")
-    except json.JSONDecodeError as exc:
-        raise ValueError("CONFIGURATION 不是有效的 JSON") from exc
-
-    if not isinstance(configuration, dict):
-        raise ValueError("CONFIGURATION 必須是 JSON object")
-
-    
-    config = SharedConfig.get_all()
-
-    configuration.update(config)
-    return configuration
-
-
-async def get_all_bots() -> list[dict[str, Any]]:
-    """登入 MySQL 並回傳 `bot` 資料表的所有資料。"""
-    sql = """
-        SELECT *
-        FROM `bot`
-        WHERE bot_id = user_id
-          AND bot_token IS NOT NULL
-          AND work_status IN ('used', 'free')
-                    AND check_timestamp <= UNIX_TIMESTAMP() - 3600
-        ORDER BY check_timestamp ASC
-    """
-    return await MySQLPool.fetchall(
-        sql,
-        error_tag="userbot.get_all_bots",
-    )
-
-
-async def get_bot(phone_number: str) -> dict[str, Any] | None:
-    """根據電話號碼取得 `bot` 資料表中對應的完整 row。"""
-    phone_number = (phone_number or "").strip()
-    if not phone_number:
-        raise ValueError("phone_number 不可為空")
-
-    return await MySQLPool.fetchone(
-        "SELECT * FROM `bot` WHERE `phone` = %s LIMIT 1",
-        (phone_number,),
-        error_tag="userbot.get_bot",
-    )
-
-
-async def tg_login(user_client, phone_number, pw2fa):
-    try:
-        # Send verification code and start the login process
-        print("Sending verification code to the specified phone number...", flush=True)
-        await user_client.send_code_request(phone_number)
-
-        # User inputs the received verification code
-        code = input('Please enter the code you received(a): ')  
-        # Use phone number and verification code to log in
-        return await user_client.sign_in(phone=phone_number, password=pw2fa, code=code)
-
-    except SessionPasswordNeededError:
-        # Handle two-factor authentication
-        print("Two-factor authentication password is required", flush=True)
-        return await user_client.sign_in(password=pw2fa)
-
-    except RPCError as e:
-        # Capture RPC error and display detailed error message
-        print(f"Failed to send verification request, error: {e}", flush=True)     
-        return e  
-
-async def login_bot(
-    bot_info: dict[str, Any], 
-    pw2fa: str | None = None
-) -> tuple[TelegramClient | None, int, dict[str, Any]]:
-    """使用指定 bot 資料內的 StringSession 登入 Telegram。"""
-
-    status_code = 1
-    phone_number = bot_info.get("phone")
-    session_string = bot_info.get("bot_token")
-    config = load_config()
-    if pw2fa is None:
-        pw2fa = config.get("default_pw2fa", None)
-    api_id = bot_info.get('api_id', int(config.get("api_id", os.getenv("API_ID", 0) or 0)))
-    api_hash = bot_info.get('api_hash', config.get("api_hash", os.getenv("API_HASH", "")))
-
-    if not session_string:
-        session_name = phone_number.replace('+', '').replace(' ', '') + '_' + str(api_id) # 确保电话号码格式正确
-    else:
-        session_name = StringSession(str(session_string).strip())
-
-    #     bot_info['check_status'] =  "bot_info 的 bot_token 為空"
-    #     return None, 0, bot_info
-
-
-    if not api_id or not api_hash:
-        bot_info['check_status'] =  "缺少 API_ID 或 API_HASH"
-        return None, 0, bot_info
-
-    
-
-    try:
-        user_client = TelegramClient(
-            session_name, api_id, str(api_hash)
-        )
-        await user_client.connect()
-    except Exception as exc:
-        bot_info['check_status'] =  (f"bot_token 不是有效的 Telethon StringSession，"
-                    f"bot_id= {bot_info.get('bot_id')} ，api={api_id} 錯誤={exc}")
-              
-
-        # return (
-        #     None,
-        #     0,
-        #     bot_info,
-        # )
-
-    if not await user_client.is_user_authorized():
-       
-        phone_number = bot_info.get('phone')
-        if not phone_number:
-            bot_name = str(bot_info.get('bot_name') or '')
-            if bot_name.startswith("p_"):
-                phone_number = "+" + bot_name[2:]
-
-        phone_number = str(phone_number or "").strip()
-        if not re.fullmatch(r"\+[1-9]\d{6,14}", phone_number):
-            await user_client.disconnect()
-            bot_info['check_status'] =  (
-                f"bot_id= {bot_info.get('bot_id')} 缺少有效 phone ( {phone_number} )，"
-                "格式必須是 + 加國碼與電話號碼"
-            )
-            return (
-                None,
-                0,
-                bot_info,
-            )
-        
-        print(f"User is not authorized, starting the login process...  {phone_number} ,bot_id= {bot_info.get('bot_id')} ", flush=True)
-        result = await tg_login(user_client, phone_number, pw2fa)
-       
-        if isinstance(result, FloodWaitError):
-            await user_client.disconnect()
-            bot_info['check_status'] = (
-                f"Telegram 限制發送驗證碼，需等待 {result.seconds} 秒後再試"
-            )
-            return None, 0, bot_info
-        elif "has been banned from" in str(result):
-            print(f"❌ 该用户已被封禁。{bot_info.get('bot_title')}", flush=True)
-            bot_info['check_status'] = "該用戶已被封禁"
-            return None, 4, bot_info
-        elif "The phone code entered was invalid" in str(result):
-            print("❌ The phone code entered was invalid。", flush=True)
-            bot_info['check_status'] =  "The phone code entered was invalid"
-            return None, 0, bot_info
-        elif result:
-            stringsession = StringSession.save(user_client.session)
-            print("\n✅ 以下是你的 StringSession（可写入 .env）\n")
-            print("USER_SESSION_STRING=" + stringsession)
-            bot_info['bot_token'] = stringsession
-            bot_info['check_status'] = "new stringsession"
-            return user_client, status_code,  bot_info
-
-
-        else:
-            await user_client.disconnect()
-            bot_info['check_status'] = (
-                "bot_token 不是已授權的 Telethon StringSession，"
-                f"bot_id={bot_info.get('bot_id')} {bot_info.get('phone')}"
-            )
-            return (
-                None,
-                0,
-                bot_info,
-            )
-    else:
-        print(f"✅ 已登入 {bot_info.get('bot_title')}，bot_id={bot_info.get('bot_id')}，phone={bot_info.get('phone')}", flush=True)
-        bot_info['check_status'] = "已登入"
-        
-        bot_info['bot_token'] = StringSession.save(user_client.session)
-        return user_client, status_code,  bot_info
-    return user_client, status_code,  bot_info
-
-
-async def forward_latest_group_messages(user_client, target_user_id, group_id, limit=3):
-    """Forward the latest messages from the configured group to the target user."""
-    if not group_id:
-        print("未配置 TGSOURCE_CHAT_ID，跳过群组消息转发", flush=True)
-        return
-
-    try:
-        group = await user_client.get_entity(int(group_id))
-        messages = await user_client.get_messages(group, limit=limit)
-        messages = list(reversed(messages))
-
-        if not messages:
-            print(f"指定群组 {group_id} 没有可转发的消息", flush=True)
-            return
-
-        target = await user_client.get_entity(int(target_user_id))
-        for msg in messages:
-            safe_text = escape(msg.text or "")
-            received_at = msg.date
-            if received_at is not None:
-                if received_at.tzinfo is None:
-                    received_at = received_at.replace(tzinfo=timezone.utc)
-                received_time = received_at.astimezone(
-                    timezone(timedelta(hours=8))
-                ).strftime("%Y-%m-%d %H:%M:%S")
-            else:
-                received_time = "未知"
-
-            match = re.search(
-                r"\*{0,2}Login code:\*{0,2}\s*(\d+)",
-                safe_text,
-                re.IGNORECASE,
-            )
-
-            if match:
-                code = match.group(1)
-                print(
-                    f"捕获到 login code: {code}，收到时间：{received_time}（Asia/Taipei）",
-                    flush=True,
-                )
-
-                fullwidth_code = code.translate(
-                    str.maketrans("0123456789", "０１２３４５６７８９")
-                )
-                await user_client.send_message(
-                    target,
-                    f"捕获到 code:（id={msg.id}）{fullwidth_code}"
-                    f"\n收到时间：{received_time}（Asia/Taipei）",
-                    parse_mode="html",
-                )
-
-    except Exception as exc:
-        print(
-            f"转发群组 {group_id} 的最后消息失败：{exc}",
-            flush=True,
-        )
-
-
-async def check_userbot(bot_info, pw2fa=None):
-    TARGET_USER_ID = SharedConfig.get("key_man_id")
-
-    work_status = bot_info.get("work_status","free")
-    user_client, status_code, new_bot_info = await login_bot(bot_info, pw2fa)
-
-    config = load_config()
-    default_pw2fa = config.get("default_pw2fa", None)
-    if new_bot_info and new_bot_info.get("api_id") is None:
-        new_bot_info["api_id"] = int(config.get("api_id", os.getenv("API_ID", 0) or 0))
-    if new_bot_info and new_bot_info.get("api_hash") is None:
-        new_bot_info["api_hash"] = config.get("api_hash", os.getenv("API_HASH", ""))
-        
-
-    if status_code != 1 or user_client is None:
-        print(f"登入失敗: {new_bot_info.get('check_status')}", flush=True)
-        if status_code == 4:
-            work_status = "ban"
-       
-    else:
-        try:
-            me = await user_client.get_me()
-            new_bot_info['bot_id'] = me.id
-            new_bot_info['bot_name'] = me.username
-            new_bot_info['user_id'] = me.id
-            new_bot_info['bot_root'] = me.username
-            new_bot_info['bot_title'] = me.first_name+" "+(me.last_name or "")
-           
-
-            try:
-
-                # 构造一个要导入的联系人
-                contact = InputPhoneContact(
-                    client_id=0, 
-                    phone="+447447471403", 
-                    first_name="Vampire", 
-                    last_name=""
-                )
-
-                
-                
-                
-                try:
-                    result = await user_client(ImportContactsRequest([contact]))
-                except Exception as e:
-                    print(f"❌ 更新失败: {e}")
-                    if "FROZEN_METHOD_INVALID" in str(e):                       
-                        new_bot_info["work_status"] = 'frozen'
-
-
-
-                target_user_id = int(TARGET_USER_ID)
-                target = await user_client.get_entity(target_user_id)
-                await user_client.send_message(
-                    target,
-                    f"[RESET] 你好, 我是 <code>{me.id}</code> - "
-                    f"{me.first_name} {me.last_name or ''} +{me.phone} "
-                    f"\nrestricted={me.restricted}\nscam={me.scam}\nfake={me.fake}",
-                    parse_mode="HTML",
-                )
-                await forward_latest_group_messages(
-                    user_client,
-                    TARGET_USER_ID,
-                    TGSOURCE_CHAT_ID,
-                )
-            except PeerFloodError as exc:
-                warning = f"Telegram 限制發送通知（PeerFloodError）：{exc}"
-                print(f"⚠️ {warning}", flush=True)
-                new_bot_info["check_status"] = warning
-            except (PeerIdInvalidError, ValueError, TypeError) as exc:
-                peer_type = "bot" if getattr(me, "bot", False) else "user"
-                warning = (
-                    f"通知發送失敗：登入類型={peer_type}，"
-                    f"target_user_id={TARGET_USER_ID}，錯誤={exc}"
-                )
-                print(f"⚠️ {warning}", flush=True)
-                new_bot_info["check_status"] = warning
-                if peer_type == "user":
-                    new_bot_info["work_status"] = 'frozen'
-
-
-            WHITELIST = {
-                "Redmi Redmi K40",                       # PC 64bit Android
-                "XiaomiM2012K11AC",     # XiaomiM2012K11AC
-                "PC 64bit",     # PC 64bit
-                "Oppo Find X7",
-                "OPPOPHZ110",
-                "MacBook Pro",
-                "U36JC",
-                "Desktop",
-                "Xiaomi Mi 9 Lite",
-                "XiaomiMi 9 Lite",
-                "iPad mini (6th gen)"
-            }
-
-            # 1. 列出当前帐号所有 active sessions
-            auths = await user_client(GetAuthorizationsRequest())
-            
-            for a in auths.authorizations:
-                if a.hash == 0:
-                    print(f"✅ 保留本身 id={a.hash}  device={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created}")
-                    continue  # 跳过主会话
-                elif a.device_model not in WHITELIST:
-                    try:
-                        if a.device_model == "Swift SFG14-71" or a.device_model == "Vivo Y28s 5G":
-                            print(f"❌ 已删除 id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created} (已删除)")
-                            await user_client(ResetAuthorizationRequest(hash=a.hash))
-                        elif a.hash == -212406687192506612 or a.hash == -6894703599540223408:
-                            print(f"❌ 已删除 id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created} (已删除)")
-                            await user_client(ResetAuthorizationRequest(hash=a.hash))
-                        else:
-                            # await client(ResetAuthorizationRequest(hash=a.hash))
-                            print(f"❗️ 建議删除 id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created}")
-                            # ❗️ 建議删除 id=-2622773520313404250  device_model=Desktop  platform=  ip=  date=2026-05-08 15:57:28+00:00
-                            # ❗️ 建議删除 id=985113455830527986  device_model=Desktop  platform=  ip=  date=2026-01-03 08:01:27+00:00
-                            # ❗️ 建議删除 id=3145982375868211614  device_model=Desktop  platform=  ip=  date=2026-05-08 15:55:32+00:00
-                    except Exception as e:
-                        print(f"删除 {a.hash} 失败: {e}")
-                else:
-                    print(f"✅ 保留 id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created}")
-
-            if pw2fa:
-                try:
-                    
-                    if default_pw2fa and default_pw2fa != pw2fa:
-                       
-                        await user_client.edit_2fa(
-                            current_password=pw2fa,  # 直接传入旧密码
-                            new_password=default_pw2fa,      # 设置的新密码
-                            hint="HINT"
-                        )
-                        print("✅ 2FA 密码已更新")
-                    else:
-                        print(f"ℹ️ 2FA 密码未更新，使用默认密码或未提供新密码")
-
-                except Exception as e:
-                    print(f"❌ 更新失败: {e}")
-                    if "FROZEN_METHOD_INVALID" in str(e):
-                        print("❌ 旧密码无效，请检查 PW2FA 是否正确。")
-                        new_bot_info['work_status']  = "frozen"
-
-            username = None
-            if new_bot_info['bot_name'] is None:
-                try:
-                    phone_number2 = new_bot_info.get('phone').replace('+', 'p_').replace(' ', '')  # 确保电话号码格式正确
-                    await user_client(UpdateUsernameRequest(phone_number2))  # 设置空字符串即为移除
-                    new_bot_info['bot_name'] = phone_number2
-                    print("用户名已成功变更。")
-                except Exception as e:
-                    print(f"用户名变更失败：{e}") 
-            
-
-            print(
-                f"✅ Telegram 登入成功：資料列 id={bot_info.get('bot_id')} {bot_info.get('bot_title')}，"
-                f"user_id={getattr(me, 'id', None)}，"
-                f"username={getattr(me, 'username', None)}"
-            )
-        except AuthKeyUnregisteredError:
-            work_status = "free"
-            new_bot_info["check_status"] = (
-                "Telethon StringSession 的 auth key 已被 Telegram 註銷，需要重新登入"
-            )
-            print(
-                f"登入 session 已失效：bot_id= {new_bot_info.get('bot_id')} ",
-                flush=True,
-            )
-        finally:
-            await user_client.disconnect()
-
-    new_bot_info['check_timestamp'] = int(time.time())
-
-
-
-
-
-    await MySQLPool.execute(
-        "INSERT INTO `bot` "
-        "(`bot_id`, `bot_token`, `bot_name`, `bot_root`, `user_id`, `bot_title`, `phone`, "
-        "`api_id`, `api_hash`, `work_status`, `check_timestamp`, `check_status`, `api_url`) "
-        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
-        "ON DUPLICATE KEY UPDATE "
-        "`bot_token` = VALUES(`bot_token`), "
-        "`bot_name` = VALUES(`bot_name`), "
-        "`bot_root` = VALUES(`bot_root`), "
-        "`user_id` = VALUES(`user_id`), "
-        "`bot_title` = VALUES(`bot_title`), "
-        "`phone` = VALUES(`phone`), "
-        "`api_id` = VALUES(`api_id`), "
-        "`api_hash` = VALUES(`api_hash`), "
-        "`check_timestamp` = VALUES(`check_timestamp`), "
-        "`check_status` = VALUES(`check_status`), "
-        "`work_status` = VALUES(`work_status`)",
-        (
-            new_bot_info["bot_id"],
-            new_bot_info.get("bot_token", ""),
-            new_bot_info.get("bot_name"),
-            new_bot_info.get("bot_root"),
-            new_bot_info.get("user_id"),
-            new_bot_info.get("bot_title", ""),
-            new_bot_info.get("phone"),
-            new_bot_info.get("api_id"),
-            new_bot_info.get("api_hash"),
-            work_status,
-            new_bot_info["check_timestamp"],
-            new_bot_info.get("check_status", ""),
-            new_bot_info.get("api_url", ""),
-        ),
-        error_tag="userbot.upsert_check_timestamp",
-        raise_on_error=True,
-    )
-
-async def check_all_userbot(config: dict[str, Any] | None = None) -> None:
-    
-    bots = await get_all_bots()
-    if not bots:
-        raise RuntimeError("bot 資料表沒有任何資料")
-
-    for bot in bots:
-        await check_userbot(bot)
-        await asyncio.sleep(3)  # 避免過於頻繁的請求
-        print("\n" + "=" * 50 + "\n", flush=True)
-    # bot_info = bots[0]
-    # await check_userbot(bot_info)
-    
-
-async def rec_new_account():   
-    pw2fa = "Aa123123"  # Replace with the actual password for two-factor authentication
-    phone_number = "+62895376857784"  # Replace with the actual phone number for the new account
-    api_url = ""
-
-    bot_info  = {       
-        "phone": phone_number,
-        "api_url": api_url,       
-    }
-    print(f"開始登入 {phone_number} ...", flush=True)
-    await check_userbot(bot_info, pw2fa)
-
-async def check_phone():
-  
-    phone_number = "+6287888900688"  # Replace with the actual phone number for the new account
-
-    bot_info = await get_bot(phone_number)
-    if not bot_info:
-        raise RuntimeError("bot 資料表沒有任何資料")
-    await check_userbot(bot_info)    
-
-
-
-
-async def main() -> None:
-    config = load_config()
+async def main_check_user() -> None:
+    account_manager = UserAccountManager()
+    config = account_manager.load_config()
     MySQLPool.configure(
         host=config.get("db_host", os.getenv("MYSQL_DB_HOST", "localhost")),
         user=config.get("db_user", os.getenv("MYSQL_DB_USER", "")),
@@ -539,13 +35,250 @@ async def main() -> None:
         database=config.get("db_name", os.getenv("MYSQL_DB_NAME", "")),
         port=int(config.get("db_port", os.getenv("MYSQL_DB_PORT", 3306))),
     )
+
+   
+
     try:
-        await check_all_userbot(config)
-        # await rec_new_account()  # Replace with the actual phone number
-        # await check_phone()  # Replace with the actual phone number
+        await account_manager.check_all_userbot(config)
+        # await account_manager.rec_new_account(
+        #     phone_number="+15809565862",
+        #     pw2fa="z4422404",
+        # )
+        # await account_manager.check_phone("+573012688582")
+        # await account_manager.check_phone("+6282127491912")
+        # await account_manager.check_phone("+916295379623")
+
     finally:
         await MySQLPool.close()
 
 
+async def main() -> None:
+    account_manager = UserAccountManager()
+    config = account_manager.load_config()
+    MySQLPool.configure(
+        host=config.get("db_host", os.getenv("MYSQL_DB_HOST", "localhost")),
+        user=config.get("db_user", os.getenv("MYSQL_DB_USER", "")),
+        password=config.get("db_password", os.getenv("MYSQL_DB_PASSWORD", "")),
+        database=config.get("db_name", os.getenv("MYSQL_DB_NAME", "")),
+        port=int(config.get("db_port", os.getenv("MYSQL_DB_PORT", 3306))),
+    )
+
+    # 此段内容来自 JSON；保留 JSON 的 null 写法并在 Python 中对应为 None。
+    null = None
+    # script= {"version":"1","script":{"script_id":"classmate_private_topic_3p_001","title":"同学间的私密经历闲聊","start_at":"2026-01-01T00:00:00+08:00"},"chat":{"chat_id":0,"message_thread_id":null},"participants":[{"actor_id":"linhao","name":"林浩","sender_type":"user","sender_id":1001},{"actor_id":"achen","name":"阿辰","sender_type":"user","sender_id":1002},{"actor_id":"zimo","name":"子墨","sender_type":"user","sender_id":1003}],"messages":[{"message_id":"m001","after_start":8,"actor_id":"linhao","reply_to":null,"typing_duration":2,"content":{"text":"问个私密的事","parse_mode":null}},{"message_id":"m002","after_start":13,"actor_id":"achen","reply_to":"m001","typing_duration":1,"content":{"text":"你说啊","parse_mode":null}},{"message_id":"m003","after_start":18,"actor_id":"zimo","reply_to":null,"typing_duration":1,"content":{"text":"突然这么严肃","parse_mode":null}},{"message_id":"m004","after_start":76,"actor_id":"linhao","reply_to":null,"typing_duration":2,"content":{"text":"跟同学亲密过吗","parse_mode":null}},{"message_id":"m005","after_start":82,"actor_id":"achen","reply_to":"m004","typing_duration":2,"content":{"text":"有过一点经历","parse_mode":null}},{"message_id":"m006","after_start":88,"actor_id":"zimo","reply_to":null,"typing_duration":2,"content":{"text":"我只谈过恋爱","parse_mode":null}},{"message_id":"m007","after_start":144,"actor_id":"linhao","reply_to":"m005","typing_duration":2,"content":{"text":"不会很尴尬吗","parse_mode":null}},{"message_id":"m008","after_start":151,"actor_id":"achen","reply_to":null,"typing_duration":2,"content":{"text":"当时关系很好","parse_mode":null}},{"message_id":"m009","after_start":158,"actor_id":"zimo","reply_to":null,"typing_duration":2,"content":{"text":"后来还联系？","parse_mode":null}},{"message_id":"m010","after_start":212,"actor_id":"linhao","reply_to":null,"typing_duration":1,"content":{"text":"我也好奇这个","parse_mode":null}},{"message_id":"m011","after_start":219,"actor_id":"achen","reply_to":"m009","typing_duration":2,"content":{"text":"现在还是朋友","parse_mode":null}},{"message_id":"m012","after_start":226,"actor_id":"zimo","reply_to":null,"typing_duration":2,"content":{"text":"那还挺自然","parse_mode":null}},{"message_id":"m013","after_start":280,"actor_id":"linhao","reply_to":null,"typing_duration":2,"content":{"text":"谁先提的啊","parse_mode":null}},{"message_id":"m014","after_start":287,"actor_id":"achen","reply_to":"m013","typing_duration":2,"content":{"text":"算是互相试探","parse_mode":null}},{"message_id":"m015","after_start":294,"actor_id":"zimo","reply_to":null,"typing_duration":1,"content":{"text":"懂了哈哈","parse_mode":null}},{"message_id":"m016","after_start":348,"actor_id":"linhao","reply_to":null,"typing_duration":2,"content":{"text":"之后见面尴尬不","parse_mode":null}},{"message_id":"m017","after_start":355,"actor_id":"achen","reply_to":"m016","typing_duration":2,"content":{"text":"前两天有一点","parse_mode":null}},{"message_id":"m018","after_start":362,"actor_id":"zimo","reply_to":null,"typing_duration":2,"content":{"text":"换我估计脸红","parse_mode":null}},{"message_id":"m019","after_start":416,"actor_id":"linhao","reply_to":null,"typing_duration":1,"content":{"text":"哈哈我也是","parse_mode":null}},{"message_id":"m020","after_start":423,"actor_id":"achen","reply_to":null,"typing_duration":2,"content":{"text":"后来就习惯了","parse_mode":null}},{"message_id":"m021","after_start":430,"actor_id":"zimo","reply_to":null,"typing_duration":2,"content":{"text":"主要得双方愿意","parse_mode":null}},{"message_id":"m022","after_start":484,"actor_id":"linhao","reply_to":"m021","typing_duration":1,"content":{"text":"这个肯定","parse_mode":null}},{"message_id":"m023","after_start":491,"actor_id":"achen","reply_to":null,"typing_duration":2,"content":{"text":"边界也得说清楚","parse_mode":null}},{"message_id":"m024","after_start":498,"actor_id":"zimo","reply_to":null,"typing_duration":2,"content":{"text":"不然朋友难做","parse_mode":null}},{"message_id":"m025","after_start":552,"actor_id":"linhao","reply_to":null,"typing_duration":2,"content":{"text":"大学这种多吗","parse_mode":null}},{"message_id":"m026","after_start":559,"actor_id":"achen","reply_to":"m025","typing_duration":2,"content":{"text":"看人吧，不一定","parse_mode":null}},{"message_id":"m027","after_start":566,"actor_id":"zimo","reply_to":null,"typing_duration":2,"content":{"text":"身边很少聊这个","parse_mode":null}},{"message_id":"m028","after_start":620,"actor_id":"linhao","reply_to":null,"typing_duration":2,"content":{"text":"确实太私密了","parse_mode":null}},{"message_id":"m029","after_start":627,"actor_id":"achen","reply_to":null,"typing_duration":1,"content":{"text":"嗯别乱传就行","parse_mode":null}},{"message_id":"m030","after_start":634,"actor_id":"zimo","reply_to":"m029","typing_duration":2,"content":{"text":"尊重别人隐私","parse_mode":null}},{"message_id":"m031","after_start":688,"actor_id":"linhao","reply_to":null,"typing_duration":1,"content":{"text":"有道理","parse_mode":null}},{"message_id":"m032","after_start":695,"actor_id":"achen","reply_to":null,"typing_duration":2,"content":{"text":"感情别弄复杂","parse_mode":null}},{"message_id":"m033","after_start":702,"actor_id":"zimo","reply_to":null,"typing_duration":2,"content":{"text":"这个最难哈哈","parse_mode":null}}]}
+
+    script ={"version":"1","script":{"script_id":"puberty_chat_8","title":"第一次发现自己长阴毛的时候","start_at":"2026-01-01T00:00:00+08:00"},"chat":{"chat_id":0,"message_thread_id":null},"participants":[{"actor_id":"lin","name":"阿林","sender_type":"user","sender_id":1001},{"actor_id":"hao","name":"浩子","sender_type":"user","sender_id":1002},{"actor_id":"yu","name":"小宇","sender_type":"user","sender_id":1003},{"actor_id":"chen","name":"陈哥","sender_type":"user","sender_id":1004},{"actor_id":"kai","name":"凯子","sender_type":"user","sender_id":1005},{"actor_id":"mo","name":"阿墨","sender_type":"user","sender_id":1006},{"actor_id":"dong","name":"冬瓜","sender_type":"user","sender_id":1007},{"actor_id":"fei","name":"老飞","sender_type":"user","sender_id":1008}],"messages":[{"message_id":"m001","after_start":3,"actor_id":"lin","reply_to":null,"typing_duration":2,"content":{"text":"突然想起个事","parse_mode":null}},{"message_id":"m002","after_start":9,"actor_id":"lin","reply_to":null,"typing_duration":2,"content":{"text":"你们青春期尴尬吗","parse_mode":null}},{"message_id":"m003","after_start":17,"actor_id":"hao","reply_to":"m002","typing_duration":2,"content":{"text":"哪方面啊","parse_mode":null}},{"message_id":"m004","after_start":25,"actor_id":"yu","reply_to":null,"typing_duration":2,"content":{"text":"这范围可大了","parse_mode":null}},{"message_id":"m005","after_start":34,"actor_id":"lin","reply_to":null,"typing_duration":3,"content":{"text":"第一次长阴毛","parse_mode":null}},{"message_id":"m006","after_start":42,"actor_id":"chen","reply_to":"m005","typing_duration":1,"content":{"text":"草","parse_mode":null}},{"message_id":"m007","after_start":49,"actor_id":"chen","reply_to":null,"typing_duration":2,"content":{"text":"这么突然","parse_mode":null}},{"message_id":"m008","after_start":58,"actor_id":"kai","reply_to":null,"typing_duration":3,"content":{"text":"我真有印象","parse_mode":null}},{"message_id":"m009","after_start":67,"actor_id":"mo","reply_to":null,"typing_duration":2,"content":{"text":"我也记得","parse_mode":null}},{"message_id":"m010","after_start":75,"actor_id":"dong","reply_to":null,"typing_duration":2,"content":{"text":"这都能记住啊","parse_mode":null}},{"message_id":"m011","after_start":84,"actor_id":"fei","reply_to":"m010","typing_duration":2,"content":{"text":"有的人记性怪","parse_mode":null}},{"message_id":"m012","after_start":96,"actor_id":"hao","reply_to":null,"typing_duration":3,"content":{"text":"我当时还挺懵","parse_mode":null}},{"message_id":"m013","after_start":108,"actor_id":"yu","reply_to":"m012","typing_duration":2,"content":{"text":"以为出啥事了？","parse_mode":null}},{"message_id":"m014","after_start":119,"actor_id":"hao","reply_to":"m013","typing_duration":2,"content":{"text":"差不多哈哈","parse_mode":null}},{"message_id":"m015","after_start":131,"actor_id":"lin","reply_to":null,"typing_duration":3,"content":{"text":"我第一反应也是","parse_mode":null}},{"message_id":"m016","after_start":143,"actor_id":"chen","reply_to":null,"typing_duration":2,"content":{"text":"我完全没慌","parse_mode":null}},{"message_id":"m017","after_start":151,"actor_id":"chen","reply_to":null,"typing_duration":2,"content":{"text":"甚至有点新奇","parse_mode":null}},{"message_id":"m018","after_start":163,"actor_id":"kai","reply_to":"m017","typing_duration":2,"content":{"text":"观察型选手","parse_mode":null}},{"message_id":"m019","after_start":176,"actor_id":"mo","reply_to":null,"typing_duration":3,"content":{"text":"我那会最怕被发现","parse_mode":null}},{"message_id":"m020","after_start":187,"actor_id":"dong","reply_to":"m019","typing_duration":2,"content":{"text":"谁会检查你啊","parse_mode":null}},{"message_id":"m021","after_start":198,"actor_id":"mo","reply_to":null,"typing_duration":2,"content":{"text":"不知道啊","parse_mode":null}},{"message_id":"m022","after_start":205,"actor_id":"mo","reply_to":null,"typing_duration":2,"content":{"text":"当时脑子就这样","parse_mode":null}},{"message_id":"m023","after_start":219,"actor_id":"fei","reply_to":null,"typing_duration":3,"content":{"text":"青春期脑回路正常","parse_mode":null}},{"message_id":"m024","after_start":233,"actor_id":"yu","reply_to":null,"typing_duration":2,"content":{"text":"我倒是很淡定","parse_mode":null}},{"message_id":"m025","after_start":245,"actor_id":"hao","reply_to":"m024","typing_duration":2,"content":{"text":"真的假的","parse_mode":null}},{"message_id":"m026","after_start":257,"actor_id":"yu","reply_to":null,"typing_duration":3,"content":{"text":"课上讲过青春期","parse_mode":null}},{"message_id":"m027","after_start":269,"actor_id":"lin","reply_to":null,"typing_duration":2,"content":{"text":"你们课这么靠谱","parse_mode":null}},{"message_id":"m028","after_start":282,"actor_id":"kai","reply_to":null,"typing_duration":3,"content":{"text":"我们老师直接略过","parse_mode":null}},{"message_id":"m029","after_start":294,"actor_id":"dong","reply_to":"m028","typing_duration":2,"content":{"text":"经典略过","parse_mode":null}},{"message_id":"m030","after_start":306,"actor_id":"fei","reply_to":null,"typing_duration":3,"content":{"text":"一句自行阅读","parse_mode":null}},{"message_id":"m031","after_start":313,"actor_id":"fei","reply_to":null,"typing_duration":1,"content":{"text":"然后翻页","parse_mode":null}},{"message_id":"m032","after_start":328,"actor_id":"chen","reply_to":null,"typing_duration":3,"content":{"text":"老师比学生还尴尬","parse_mode":null}},{"message_id":"m033","after_start":342,"actor_id":"mo","reply_to":"m032","typing_duration":2,"content":{"text":"全班突然安静","parse_mode":null}},{"message_id":"m034","after_start":356,"actor_id":"hao","reply_to":null,"typing_duration":3,"content":{"text":"越安静越想笑","parse_mode":null}},{"message_id":"m035","after_start":368,"actor_id":"kai","reply_to":"m034","typing_duration":2,"content":{"text":"对对对","parse_mode":null}},{"message_id":"m036","after_start":380,"actor_id":"lin","reply_to":null,"typing_duration":3,"content":{"text":"我当时没人能问","parse_mode":null}},{"message_id":"m037","after_start":391,"actor_id":"yu","reply_to":"m036","typing_duration":2,"content":{"text":"你没上网搜？","parse_mode":null}},{"message_id":"m038","after_start":404,"actor_id":"lin","reply_to":null,"typing_duration":2,"content":{"text":"那会哪敢搜","parse_mode":null}},{"message_id":"m039","after_start":417,"actor_id":"dong","reply_to":null,"typing_duration":3,"content":{"text":"搜索记录像罪证","parse_mode":null}},{"message_id":"m040","after_start":429,"actor_id":"fei","reply_to":"m039","typing_duration":2,"content":{"text":"太真实了","parse_mode":null}},{"message_id":"m041","after_start":442,"actor_id":"mo","reply_to":null,"typing_duration":3,"content":{"text":"还会立刻清记录","parse_mode":null}},{"message_id":"m042","after_start":455,"actor_id":"chen","reply_to":"m041","typing_duration":2,"content":{"text":"清完才安心","parse_mode":null}},{"message_id":"m043","after_start":469,"actor_id":"hao","reply_to":null,"typing_duration":3,"content":{"text":"其实就是正常发育","parse_mode":null}},{"message_id":"m044","after_start":482,"actor_id":"yu","reply_to":"m043","typing_duration":2,"content":{"text":"现在当然知道","parse_mode":null}},{"message_id":"m045","after_start":495,"actor_id":"kai","reply_to":null,"typing_duration":3,"content":{"text":"当年可不这么想","parse_mode":null}},{"message_id":"m046","after_start":508,"actor_id":"dong","reply_to":null,"typing_duration":2,"content":{"text":"当年啥都吓人","parse_mode":null}},{"message_id":"m047","after_start":522,"actor_id":"lin","reply_to":null,"typing_duration":3,"content":{"text":"声音变了也吓人","parse_mode":null}},{"message_id":"m048","after_start":535,"actor_id":"fei","reply_to":"m047","typing_duration":2,"content":{"text":"突然破音更吓人","parse_mode":null}},{"message_id":"m049","after_start":548,"actor_id":"chen","reply_to":null,"typing_duration":2,"content":{"text":"破音是真的社死","parse_mode":null}},{"message_id":"m050","after_start":561,"actor_id":"mo","reply_to":null,"typing_duration":3,"content":{"text":"尤其回答问题时","parse_mode":null}},{"message_id":"m051","after_start":574,"actor_id":"hao","reply_to":"m050","typing_duration":2,"content":{"text":"全班憋笑那种","parse_mode":null}},{"message_id":"m052","after_start":587,"actor_id":"yu","reply_to":null,"typing_duration":3,"content":{"text":"青春期全是随机事件","parse_mode":null}},{"message_id":"m053","after_start":600,"actor_id":"kai","reply_to":"m052","typing_duration":2,"content":{"text":"身体自动更新","parse_mode":null}},{"message_id":"m054","after_start":608,"actor_id":"kai","reply_to":null,"typing_duration":1,"content":{"text":"还不给说明书","parse_mode":null}},{"message_id":"m055","after_start":622,"actor_id":"dong","reply_to":"m054","typing_duration":2,"content":{"text":"更新日志都没有","parse_mode":null}},{"message_id":"m056","after_start":635,"actor_id":"lin","reply_to":null,"typing_duration":2,"content":{"text":"笑死这个形容","parse_mode":null}},{"message_id":"m057","after_start":648,"actor_id":"fei","reply_to":null,"typing_duration":3,"content":{"text":"家长也很少细讲","parse_mode":null}},{"message_id":"m058","after_start":661,"actor_id":"chen","reply_to":"m057","typing_duration":2,"content":{"text":"我家完全不聊","parse_mode":null}},{"message_id":"m059","after_start":674,"actor_id":"mo","reply_to":null,"typing_duration":3,"content":{"text":"我家也是回避型","parse_mode":null}},{"message_id":"m060","after_start":687,"actor_id":"hao","reply_to":null,"typing_duration":2,"content":{"text":"所以全靠自己懂","parse_mode":null}},{"message_id":"m061","after_start":700,"actor_id":"yu","reply_to":"m060","typing_duration":3,"content":{"text":"还有同学瞎科普","parse_mode":null}},{"message_id":"m062","after_start":713,"actor_id":"dong","reply_to":null,"typing_duration":2,"content":{"text":"这个最危险哈哈","parse_mode":null}},{"message_id":"m063","after_start":726,"actor_id":"kai","reply_to":null,"typing_duration":3,"content":{"text":"一个比一个能编","parse_mode":null}},{"message_id":"m064","after_start":739,"actor_id":"fei","reply_to":"m063","typing_duration":2,"content":{"text":"还说得特别肯定","parse_mode":null}},{"message_id":"m065","after_start":752,"actor_id":"lin","reply_to":null,"typing_duration":3,"content":{"text":"我以前真信过","parse_mode":null}},{"message_id":"m066","after_start":765,"actor_id":"hao","reply_to":"m065","typing_duration":2,"content":{"text":"谁没信过几次","parse_mode":null}},{"message_id":"m067","after_start":778,"actor_id":"chen","reply_to":null,"typing_duration":3,"content":{"text":"现在想想挺好笑","parse_mode":null}},{"message_id":"m068","after_start":791,"actor_id":"mo","reply_to":"m067","typing_duration":2,"content":{"text":"当时可认真了","parse_mode":null}},{"message_id":"m069","after_start":804,"actor_id":"yu","reply_to":null,"typing_duration":3,"content":{"text":"主要没人解释嘛","parse_mode":null}},{"message_id":"m070","after_start":817,"actor_id":"kai","reply_to":null,"typing_duration":2,"content":{"text":"知识全靠拼图","parse_mode":null}},{"message_id":"m071","after_start":830,"actor_id":"dong","reply_to":"m070","typing_duration":2,"content":{"text":"还是缺块的拼图","parse_mode":null}},{"message_id":"m072","after_start":843,"actor_id":"fei","reply_to":null,"typing_duration":3,"content":{"text":"互联网后来救场了","parse_mode":null}},{"message_id":"m073","after_start":856,"actor_id":"hao","reply_to":"m072","typing_duration":2,"content":{"text":"前提是搜对地方","parse_mode":null}},{"message_id":"m074","after_start":869,"actor_id":"lin","reply_to":null,"typing_duration":3,"content":{"text":"别搜进奇怪论坛","parse_mode":null}},{"message_id":"m075","after_start":882,"actor_id":"chen","reply_to":"m074","typing_duration":2,"content":{"text":"越看越迷糊","parse_mode":null}},{"message_id":"m076","after_start":895,"actor_id":"mo","reply_to":null,"typing_duration":2,"content":{"text":"还容易自己吓自己","parse_mode":null}},{"message_id":"m077","after_start":908,"actor_id":"yu","reply_to":null,"typing_duration":3,"content":{"text":"正规科普最省事","parse_mode":null}},{"message_id":"m078","after_start":921,"actor_id":"kai","reply_to":"m077","typing_duration":2,"content":{"text":"现在看确实","parse_mode":null}},{"message_id":"m079","after_start":934,"actor_id":"dong","reply_to":null,"typing_duration":3,"content":{"text":"以前哪懂正规不正规","parse_mode":null}},{"message_id":"m080","after_start":947,"actor_id":"fei","reply_to":"m079","typing_duration":2,"content":{"text":"标题越吓人越点","parse_mode":null}},{"message_id":"m081","after_start":960,"actor_id":"lin","reply_to":null,"typing_duration":3,"content":{"text":"然后彻夜担心","parse_mode":null}},{"message_id":"m082","after_start":973,"actor_id":"hao","reply_to":"m081","typing_duration":2,"content":{"text":"经典症状全对上","parse_mode":null}},{"message_id":"m083","after_start":986,"actor_id":"chen","reply_to":null,"typing_duration":3,"content":{"text":"搜啥都像绝症","parse_mode":null}},{"message_id":"m084","after_start":999,"actor_id":"mo","reply_to":null,"typing_duration":2,"content":{"text":"跑题到医学了","parse_mode":null}},{"message_id":"m085","after_start":1012,"actor_id":"yu","reply_to":"m084","typing_duration":2,"content":{"text":"群聊传统艺能","parse_mode":null}},{"message_id":"m086","after_start":1025,"actor_id":"kai","reply_to":null,"typing_duration":3,"content":{"text":"原题是长阴毛吧","parse_mode":null}},{"message_id":"m087","after_start":1038,"actor_id":"dong","reply_to":"m086","typing_duration":2,"content":{"text":"终于有人拉回来","parse_mode":null}},{"message_id":"m088","after_start":1051,"actor_id":"fei","reply_to":null,"typing_duration":3,"content":{"text":"总结就是都挺懵","parse_mode":null}},{"message_id":"m089","after_start":1064,"actor_id":"lin","reply_to":"m088","typing_duration":2,"content":{"text":"而且不好意思问","parse_mode":null}},{"message_id":"m090","after_start":1077,"actor_id":"hao","reply_to":null,"typing_duration":3,"content":{"text":"其实早点科普就好","parse_mode":null}},{"message_id":"m091","after_start":1090,"actor_id":"chen","reply_to":"m090","typing_duration":2,"content":{"text":"少很多莫名焦虑","parse_mode":null}},{"message_id":"m092","after_start":1103,"actor_id":"mo","reply_to":null,"typing_duration":3,"content":{"text":"也不会觉得奇怪","parse_mode":null}},{"message_id":"m093","after_start":1116,"actor_id":"yu","reply_to":null,"typing_duration":2,"content":{"text":"本来就正常变化","parse_mode":null}},{"message_id":"m094","after_start":1129,"actor_id":"kai","reply_to":null,"typing_duration":2,"content":{"text":"身体升级罢了","parse_mode":null}},{"message_id":"m095","after_start":1142,"actor_id":"dong","reply_to":"m094","typing_duration":2,"content":{"text":"又开始更新梗了","parse_mode":null}},{"message_id":"m096","after_start":1155,"actor_id":"fei","reply_to":null,"typing_duration":2,"content":{"text":"版本青春期1.0","parse_mode":null}},{"message_id":"m097","after_start":1168,"actor_id":"lin","reply_to":"m096","typing_duration":1,"content":{"text":"bug巨多","parse_mode":null}},{"message_id":"m098","after_start":1181,"actor_id":"hao","reply_to":null,"typing_duration":2,"content":{"text":"情绪系统也乱跳","parse_mode":null}},{"message_id":"m099","after_start":1194,"actor_id":"chen","reply_to":null,"typing_duration":2,"content":{"text":"这个最难绷","parse_mode":null}},{"message_id":"m100","after_start":1207,"actor_id":"mo","reply_to":null,"typing_duration":3,"content":{"text":"突然就烦得不行","parse_mode":null}},{"message_id":"m101","after_start":1220,"actor_id":"yu","reply_to":null,"typing_duration":3,"content":{"text":"过几年再看像喜剧","parse_mode":null}},{"message_id":"m102","after_start":1233,"actor_id":"kai","reply_to":"m101","typing_duration":2,"content":{"text":"当事人当时很严肃","parse_mode":null}},{"message_id":"m103","after_start":1246,"actor_id":"dong","reply_to":null,"typing_duration":2,"content":{"text":"严肃得要命哈哈","parse_mode":null}},{"message_id":"m104","after_start":1259,"actor_id":"fei","reply_to":null,"typing_duration":3,"content":{"text":"成长就是大型误会","parse_mode":null}},{"message_id":"m105","after_start":1272,"actor_id":"lin","reply_to":"m104","typing_duration":2,"content":{"text":"这句可以结题","parse_mode":null}},{"message_id":"m106","after_start":1285,"actor_id":"hao","reply_to":null,"typing_duration":2,"content":{"text":"批准结题","parse_mode":null}},{"message_id":"m107","after_start":1298,"actor_id":"chen","reply_to":null,"typing_duration":2,"content":{"text":"下次聊点正常的","parse_mode":null}},{"message_id":"m108","after_start":1311,"actor_id":"mo","reply_to":"m107","typing_duration":1,"content":{"text":"你先定义正常","parse_mode":null}},{"message_id":"m109","after_start":1324,"actor_id":"yu","reply_to":null,"typing_duration":2,"content":{"text":"这群没有正常话题","parse_mode":null}},{"message_id":"m110","after_start":1337,"actor_id":"kai","reply_to":"m109","typing_duration":2,"content":{"text":"确实","parse_mode":null}},{"message_id":"m111","after_start":1350,"actor_id":"dong","reply_to":null,"typing_duration":2,"content":{"text":"散会散会","parse_mode":null}},{"message_id":"m112","after_start":1363,"actor_id":"fei","reply_to":"m111","typing_duration":2,"content":{"text":"五分钟后继续跑题","parse_mode":null}}]}
+    script["version"] = "1.0"
+    script.pop("chat", None)
+    script["script"]["start_at"] = (
+        datetime.now(ZoneInfo("Asia/Shanghai")) + timedelta(seconds=10)
+    ).isoformat()
+
+    session_set={}
+    #Mathis
+    session_set[0] = "1AZWarzwBu1w3WOHI3EDinm3r-9WaUwkgZdSciQu5IQ68VlSHdCinfnY29Z2fwOcJdv-pnqwDfiiRX-q9xyYvNHQ_kM8zRLdrHeRf3vokmUvqCMuaQu_DqguAhE-i4G0BNfeLSJLyb_M8QdMu663tuF_sutdztJ3V4yBKKHpblNxNzaIYX4Slljuc0bpjlMMYhCUf3bGXiEw7boHm-lW5gVvCg14oQUmoDYmRyuT6GEc5XivvYt4Lel9VPz7z84s3qp1ZDzsAq9OOHclufoU2RbkOE5ZtUdbws-cjqbd6MeOhwmVy-JmdgnktcIT4TiB4JY9g6BDoQb3JTayqjpf7A7AAmrr8HwI="
+
+    #https://t.me/smith238134
+    session_set[1] = "1AZWarzwBu2J2UQ80TXTVK4wxI48_toH794Jjo9PKYKYcfMfKSxfAK1k232o4Vtsm2FY-cdI68aW07YcNdGxyuj1XBB8ICVF1kg7vqhgjH2PsLlF3A6NmfS1fgzh3G3Pg8Sp-1ES-e0qn8G-Z3S8RkkRIPTzcdphUnrr54fOps9qqNUuWvIxaZLIzuggftjctVG5B3BsnYZ9VCD4RtnSt-mXimq3B8TECTJjEtfe-6N2qwLAzi9IYsUdfgQ9r_VjFkMAM4Q_W5EaPA2QKja0fpj1F3EkhM1M4S0f3xHCObwnI5h2e8paJiSoQ-Qvk3uCdzp0_ShlSI9RMlzsZKXLwvGCU68z6ob4="
+
+    #https://t.me/allan04823223
+    session_set[2] = "1AZWarzwBu62evXgabN1UcaLS6U-BzlyMvuudHnOv0PTTREZRTebs6QVb3qbrC1gI-MGLc41ySY2DJqvgpj3wFQ-aGpP1ckahf0lyVlsXx6pgpZMFw5HKQ0PUjHteiJe8O39TDrvWwXJO-47IrWSI-tiaU4BZImq7-SxR3IFbRnwqxhUvGjmWWLMlD0pUJFQM8KJGBVVS9INvRh7NzV1xliTrsp6JLfushhB3XJQQ45_dm1c3CLsDrhJIT27ejmC7Uro9XyQh8EiveRSTaJDZvctRQRmNvCeKlTf6anGqN4cFLfhvg98R8Fo1Y-hS4yuvfMBlHHpaaLnvoO9ayAUVoEu9-8Dvbx8="
+
+    #https://t.me/egg47223
+    session_set[3] = "1AZWarzwBu5FSUp6B7qadq0JoWosPjs2dcx1EtY3kqWMXIoSzkwsoC2LIMqFD42AjthfBCSFzJ1sFlqN8d5bMHXpqKzqVwt1s7EWEJ8TTbEfbtlCC4HDuODsB2rYb_3HhdOs7WQA59GbJyUK_LbVeL2kKNNFGIDsSB77D019tVvEk949NIbM6Bod-iST0fu1zMb4olE3emuxMZgNkzJc0R_Szv0HjQ2E080zMND1uNSOITHgRHuGBkZmPAZaYDRuNjvhSHIVwlzRmCgz6HoLFbEBd1S9gerGCM3g_mrxXS9yeKQ6ygAR4cKye0j9OnlO-noUB-BbzGGfGK4_4H_1Whs7QF6TeHb0="
+
+    #十八
+    session_set[4] = "1AZWarzwBu7TJWcxVufZpeo6YadubO3GNEsEaQdIPvqpOxnP3F4N4oO0hJ1kNj1_gPYZtMQ7XYUnGu-lhWEYzB33J0CNJyxvClFWfP41M6n3EUSS-zb_4L1_WCmTx362Y3uBavlmcqHiz9ipO3oonQyzhkwRqJpLx-zDhL5VTAA_bNeHzSQhc_xR2yCinJ9WIUxBtm5UmSimglQiL4ULpFJ3dlenPKQpe-MSesfDX9iARDbrrmSGIfeFVt0XhwodfD-Bxu4yn3Xm7XOXSxmuI6K9X1lgIhMBNBVrw2BYe49r4IJUOOoJd4mV6Hre0fUe6x2CYxPnKjjXX4hBI6fws6_A9nqbGumU="
+
+    #Hello
+    session_set[5] = "1AZWarzwBu4Eo7yprGWduZowwJK9vvd4ZvQ_BpiDtjFzzSARgK0X2Ac8LjKlKk5puxzMNi4I-gOJKTL7NM03wPrV2p3n0KozyV9tDNtbazkeEQSTpMFJ4WlGISO-U8SIBmdi3-oRwSlrNotAdsZq90vZDJXkyMjP_TKR3l079KG3x1QYySyOAHpxdSIi0xhK4EhWUKjU56HSod0jFR0WS4gZPB5kkIFCdYkjUmvcROuzbFZ6ifFExoqGF9SVGSeeA7nPU5Ruo-xiH2xt-Zg9UhLFVToC2-NGICLZe8mj4ynqCVmEPbeQ2HLB6D0_A6qYUMbUbKhH8HhiJ13FkJahGZazA0RaB8o8="
+
+    #Jbujphcr
+    session_set[6] = "1AZWarzwBu49w-0TDtzH44lzjM_2ycNo2nHAMvtfYBi7cvz54zDmVLtMWDP3x9EgwgOwdn9reuqtnRZE1DDpzl-aFvNmKDvPn8l8d8LC4gNakUEjOtNpVP3DvSYLKBOqyyZPNus7Fwxm5tXnqRPEY0hpYj1OEgD29LEtzrczVvNAcfzlHgmK4f5mtD0l3tHLXNEbFPtgjc7wO0nvY6BgZuIDqvL22FzyHT3rvTp-nApTC3mFoOTFbzMK6NOeHkjJYFX5y2t9_MzdRlxaCBGLMHG42fbvEGCZNU4b8oB9YswGyVXI2NpGXIWlIggwfoMn9AF9zJRRJTSCPoh2-M5ALOMAH1pmIDcQ="
+
+    #PXM
+    session_set[7] = "1BVtsOGcBu4pM7veqeWVCl8hblhIp9aczOpz0McRxcBT8hTr3GvQ24Jm8Vx-cHx63yoBna1iJ74ZCikAS4cC--nMN4FliAGHn5MDP_FLJkD_jxS4oJAW09U8kQuP0DMEF3wAtuRWzkMbgSQUtRUyDuL1jz1VkSNcvLcbILNweq-W5C-qDLSGyEia_WGxs17agmk9btuJgz0OnXPQu2TgMiAJgZbNxN9gebIPZUwNpMEqxkgfmtmvrT0MG4AOMVL8dtVRPq_jCiMYGqhND1KvTAjWnZFWbR38xxGYTfULPQNN49vbZM3sOnoktseyWooUZpWrLD8Vp2aCLaLKek2I95VuY2KWVgNs="
+
+
+    account_configs = {}
+    participant_count = len(script["participants"])
+    if len(session_set) < participant_count:
+        raise RuntimeError(
+            f"StringSession 数量不足：需要 {participant_count} 个，只有 {len(session_set)} 个"
+        )
+
+    for participant, session_string in zip(
+        script["participants"],
+        session_set.values(),
+    ):
+        account_configs[str(participant["sender_id"])] = {
+            "api_id": int(os.environ["API_ID"]),
+            "api_hash": os.environ["API_HASH"],
+            "session_string": session_string,
+        }
+    chat_id = -1004335920222
+    chat_invite_link = os.getenv("CHAT_INVITE_LINK", "").strip() or None
+
+   
+    # chat_id: int | str = os.environ["CHAT_ID"].strip()
+    # if chat_id.lstrip("-").isdigit():
+    #     chat_id = int(chat_id)
+
+    try:
+        result = await HumanBotOperator.run_chat_script(
+            script_json=script,
+            chat_id=chat_id,
+            message_thread_id=None,
+            account_configs=account_configs,
+            chat_invite_link=chat_invite_link,
+            fast_mode=False,
+        )
+        print(f"聊天脚本执行结果：{result}", flush=True)
+    finally:
+        await MySQLPool.close()
+
+
+async def run_telethon_bot(
+    config: dict | None = None,
+    *,
+    configure_mysql: bool = True,
+) -> None:
+    print("正在启动 Telethon 用户账号流程...", flush=True)
+    if config is None:
+        account_manager = UserAccountManager()
+        config = account_manager.load_config()
+    if configure_mysql:
+        configure_mysql_pool(config)
+    try:
+        session_set = {}
+
+        #Mathis
+        session_set[0] = "1AZWarzwBu1w3WOHI3EDinm3r-9WaUwkgZdSciQu5IQ68VlSHdCinfnY29Z2fwOcJdv-pnqwDfiiRX-q9xyYvNHQ_kM8zRLdrHeRf3vokmUvqCMuaQu_DqguAhE-i4G0BNfeLSJLyb_M8QdMu663tuF_sutdztJ3V4yBKKHpblNxNzaIYX4Slljuc0bpjlMMYhCUf3bGXiEw7boHm-lW5gVvCg14oQUmoDYmRyuT6GEc5XivvYt4Lel9VPz7z84s3qp1ZDzsAq9OOHclufoU2RbkOE5ZtUdbws-cjqbd6MeOhwmVy-JmdgnktcIT4TiB4JY9g6BDoQb3JTayqjpf7A7AAmrr8HwI="
+
+        #https://t.me/smith238134
+        session_set[1] = "1AZWarzwBu2J2UQ80TXTVK4wxI48_toH794Jjo9PKYKYcfMfKSxfAK1k232o4Vtsm2FY-cdI68aW07YcNdGxyuj1XBB8ICVF1kg7vqhgjH2PsLlF3A6NmfS1fgzh3G3Pg8Sp-1ES-e0qn8G-Z3S8RkkRIPTzcdphUnrr54fOps9qqNUuWvIxaZLIzuggftjctVG5B3BsnYZ9VCD4RtnSt-mXimq3B8TECTJjEtfe-6N2qwLAzi9IYsUdfgQ9r_VjFkMAM4Q_W5EaPA2QKja0fpj1F3EkhM1M4S0f3xHCObwnI5h2e8paJiSoQ-Qvk3uCdzp0_ShlSI9RMlzsZKXLwvGCU68z6ob4="
+
+        #https://t.me/allan04823223
+        session_set[2] = "1AZWarzwBu62evXgabN1UcaLS6U-BzlyMvuudHnOv0PTTREZRTebs6QVb3qbrC1gI-MGLc41ySY2DJqvgpj3wFQ-aGpP1ckahf0lyVlsXx6pgpZMFw5HKQ0PUjHteiJe8O39TDrvWwXJO-47IrWSI-tiaU4BZImq7-SxR3IFbRnwqxhUvGjmWWLMlD0pUJFQM8KJGBVVS9INvRh7NzV1xliTrsp6JLfushhB3XJQQ45_dm1c3CLsDrhJIT27ejmC7Uro9XyQh8EiveRSTaJDZvctRQRmNvCeKlTf6anGqN4cFLfhvg98R8Fo1Y-hS4yuvfMBlHHpaaLnvoO9ayAUVoEu9-8Dvbx8="
+
+        #https://t.me/egg47223
+        session_set[3] = "1AZWarzwBu5FSUp6B7qadq0JoWosPjs2dcx1EtY3kqWMXIoSzkwsoC2LIMqFD42AjthfBCSFzJ1sFlqN8d5bMHXpqKzqVwt1s7EWEJ8TTbEfbtlCC4HDuODsB2rYb_3HhdOs7WQA59GbJyUK_LbVeL2kKNNFGIDsSB77D019tVvEk949NIbM6Bod-iST0fu1zMb4olE3emuxMZgNkzJc0R_Szv0HjQ2E080zMND1uNSOITHgRHuGBkZmPAZaYDRuNjvhSHIVwlzRmCgz6HoLFbEBd1S9gerGCM3g_mrxXS9yeKQ6ygAR4cKye0j9OnlO-noUB-BbzGGfGK4_4H_1Whs7QF6TeHb0="
+
+        #十八
+        session_set[4] = "1AZWarzwBu7TJWcxVufZpeo6YadubO3GNEsEaQdIPvqpOxnP3F4N4oO0hJ1kNj1_gPYZtMQ7XYUnGu-lhWEYzB33J0CNJyxvClFWfP41M6n3EUSS-zb_4L1_WCmTx362Y3uBavlmcqHiz9ipO3oonQyzhkwRqJpLx-zDhL5VTAA_bNeHzSQhc_xR2yCinJ9WIUxBtm5UmSimglQiL4ULpFJ3dlenPKQpe-MSesfDX9iARDbrrmSGIfeFVt0XhwodfD-Bxu4yn3Xm7XOXSxmuI6K9X1lgIhMBNBVrw2BYe49r4IJUOOoJd4mV6Hre0fUe6x2CYxPnKjjXX4hBI6fws6_A9nqbGumU="
+
+        #Hello
+        session_set[5] = "1AZWarzwBu4Eo7yprGWduZowwJK9vvd4ZvQ_BpiDtjFzzSARgK0X2Ac8LjKlKk5puxzMNi4I-gOJKTL7NM03wPrV2p3n0KozyV9tDNtbazkeEQSTpMFJ4WlGISO-U8SIBmdi3-oRwSlrNotAdsZq90vZDJXkyMjP_TKR3l079KG3x1QYySyOAHpxdSIi0xhK4EhWUKjU56HSod0jFR0WS4gZPB5kkIFCdYkjUmvcROuzbFZ6ifFExoqGF9SVGSeeA7nPU5Ruo-xiH2xt-Zg9UhLFVToC2-NGICLZe8mj4ynqCVmEPbeQ2HLB6D0_A6qYUMbUbKhH8HhiJ13FkJahGZazA0RaB8o8="
+
+        #Jbujphcr
+        session_set[6] = "1AZWarzwBu49w-0TDtzH44lzjM_2ycNo2nHAMvtfYBi7cvz54zDmVLtMWDP3x9EgwgOwdn9reuqtnRZE1DDpzl-aFvNmKDvPn8l8d8LC4gNakUEjOtNpVP3DvSYLKBOqyyZPNus7Fwxm5tXnqRPEY0hpYj1OEgD29LEtzrczVvNAcfzlHgmK4f5mtD0l3tHLXNEbFPtgjc7wO0nvY6BgZuIDqvL22FzyHT3rvTp-nApTC3mFoOTFbzMK6NOeHkjJYFX5y2t9_MzdRlxaCBGLMHG42fbvEGCZNU4b8oB9YswGyVXI2NpGXIWlIggwfoMn9AF9zJRRJTSCPoh2-M5ALOMAH1pmIDcQ="
+        
+
+        #PXM
+        session_set[7] = "1BVtsOGcBu4pM7veqeWVCl8hblhIp9aczOpz0McRxcBT8hTr3GvQ24Jm8Vx-cHx63yoBna1iJ74ZCikAS4cC--nMN4FliAGHn5MDP_FLJkD_jxS4oJAW09U8kQuP0DMEF3wAtuRWzkMbgSQUtRUyDuL1jz1VkSNcvLcbILNweq-W5C-qDLSGyEia_WGxs17agmk9btuJgz0OnXPQu2TgMiAJgZbNxN9gebIPZUwNpMEqxkgfmtmvrT0MG4AOMVL8dtVRPq_jCiMYGqhND1KvTAjWnZFWbR38xxGYTfULPQNN49vbZM3sOnoktseyWooUZpWrLD8Vp2aCLaLKek2I95VuY2KWVgNs="
+
+        operator = {}
+
+        # 随机从 session_set 中选择，形成另外的子集合
+        selected_sessions = random.sample(list(session_set.values()), 8)
+
+        # selected_sessions[0] = session_set[7]
+
+        # 遍循 selected_sessions
+        
+        for i, session in enumerate(selected_sessions):
+            try:
+                operator_length = len(operator)
+
+                operator[(operator_length)] = await HumanBotOperator.login_with_session(session_string=session, api_id=API_ID, api_hash=API_HASH)
+                #将 operator_opp 添加到 operator 字典中
+                # operator[i] = operator_opp
+            except Exception as e:
+                print(f"Failed to login with session {i} {session}: {e}", flush=True)
+
+            
+            # await operator.join_chat("https://t.me/+i5S7P-Dol4dhNzA5")  #加入布吉岛主 1004335920222
+            # await operator.join_chat("https://t.me/+iHyXV6FFCQAxN2Ix")  #加入布吉岛
+            # https://t.me/+LmR0F1WpnFQ0Y2Ix
+        
+        for i, session in enumerate(operator):
+            op = operator[i] 
+
+            await op.update_profile(first_name="Mathis ",last_name="")
+
+            # await op.join_chat("https://t.me/+LmR0F1WpnFQ0Y2Ix")  #测试群
+        
+            
+            # await op.send_random_message(chat_id=[-1004335920222, -1004372020134])
+
+            await op.tracking_message_range(chat=-1004335920222)
+            await op.tracking_message_range(chat=-1004372020134)
+            # while True:
+            # for i in range(5):
+                # r = await op.extract()
+                # 随机休息 10~25 秒
+                # print(f"提取结果: {r}", flush=True)
+
+                # sleep_time = random.randint(10, 25)
+                # await asyncio.sleep(sleep_time)
+            # await op.send_first_video_to_bot(source_chat=7613284106,target_bot="@di5k2bot",search_limit=5000)
+
+
+            # await op.join_chat("https://t.me/+HYvGBwaTSUEyYzkx")  #正太方舟
+            # await op.client.send_message("@posterre_bot", "/checkin")
+
+            # sleep_time = random.randint(5, 15)
+            # await asyncio.sleep(sleep_time)
+        
+       
+        # for i, session in enumerate(operator):
+            await op.disconnect()
+        # await account_manager.check_all_userbot(config)
+        # await account_manager.rec_new_account(
+        #     phone_number="+15809565862",
+        #     pw2fa="z4422404",
+        # )
+        # await account_manager.check_phone("+18157706388")
+    finally:
+        await MySQLPool.close()
+
+
+def configure_mysql_pool(config: dict) -> None:
+    """使用统一配置初始化 MySQLPool。"""
+    MySQLPool.configure(
+        host=config.get("db_host", os.getenv("MYSQL_DB_HOST", "localhost")),
+        user=config.get("db_user", os.getenv("MYSQL_DB_USER", "")),
+        password=config.get("db_password", os.getenv("MYSQL_DB_PASSWORD", "")),
+        database=config.get("db_name", os.getenv("MYSQL_DB_NAME", "")),
+        port=int(config.get("db_port", os.getenv("MYSQL_DB_PORT", 3306))),
+    )
+
+
+async def main2() -> None:
+    """同时执行 Telethon 用户账号流程与 Aiogram Bot polling。"""
+    account_manager = UserAccountManager()
+    config = account_manager.load_config()
+    configure_mysql_pool(config)
+    print("正在并发启动 Aiogram 与 Telethon...", flush=True)
+    aiogram_operator = AiogramBotOperator(config)
+    aiogram_task = asyncio.create_task(
+        aiogram_operator.run(),
+        name="aiogram-bot-polling",
+    )
+    telethon_task = asyncio.create_task(
+        run_telethon_bot(config, configure_mysql=False),
+        name="telethon-user-flow",
+    )
+
+    try:
+        await asyncio.gather(aiogram_task, telethon_task)
+    finally:
+        tasks = [aiogram_task, telethon_task]
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(main2())
