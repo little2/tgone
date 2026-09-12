@@ -45,6 +45,7 @@ class HumanBotOperator:
 
     MONITOR_FORWARD_CHAT_ID = 5334310434
     SORA_CODE_BOT_ID = 8981033979
+
     DEFAULT_TIMEZONE = ZoneInfo("Asia/Shanghai")
     TIME_PERIODS = (
         (5, 11, "morning"),
@@ -81,8 +82,13 @@ class HumanBotOperator:
         (0x1F000, 0x1FAFF),
     )
 
-    def __init__(self, client: TelegramClient) -> None:
+    def __init__(
+        self,
+        client: TelegramClient,
+        taobao_bot_username: str | None = None,
+    ) -> None:
         self.client = client
+        self.taobao_bot_username = None
         self._next_message_id_by_chat: dict[int, int] = {}
         self.time_greetings = {
             "morning": [
@@ -112,6 +118,7 @@ class HumanBotOperator:
         session_string: str,
         api_id: int,
         api_hash: str,
+        taobao_bot_username: str | None = None,
     ) -> "HumanBotOperator":
         """使用 Telethon StringSession 登录并返回操作实例。"""
         session_string = (session_string or "").strip()
@@ -139,7 +146,7 @@ class HumanBotOperator:
             await client.disconnect()
             raise
 
-        return cls(client)
+        return cls(client, taobao_bot_username=taobao_bot_username)
 
     @classmethod
     async def login_with_bot_token(
@@ -147,6 +154,7 @@ class HumanBotOperator:
         bot_token: str,
         api_id: int,
         api_hash: str,
+        taobao_bot_username: str | None = None,
     ) -> "HumanBotOperator":
         """使用 Bot Token 登录，并返回与用户账号相同的操作接口。"""
         bot_token = (bot_token or "").strip()
@@ -160,7 +168,7 @@ class HumanBotOperator:
         except Exception:
             await client.disconnect()
             raise
-        return cls(client)
+        return cls(client, taobao_bot_username=taobao_bot_username)
 
     @classmethod
     async def run_chat_script(
@@ -1048,6 +1056,8 @@ class HumanBotOperator:
     async def extract(
         self,
         secret_id: int|None = None,
+        code: str | None = None,
+        bot_id: int | None = None,
         timeout: float = 60,
     ) -> Any:
         """发送指定密文，并逐条监听机器人回应直到出现终止内容。"""
@@ -1055,26 +1065,33 @@ class HumanBotOperator:
             raise TypeError("timeout 必须是数字")
         if timeout <= 0:
             raise ValueError("timeout 必须大于 0")
+        
+        if code is not None and bot_id is not None:
+            target_bot = await self._resolve_input_entity(bot_id)
 
-        if secret_id is None:
-            # 从数据表 sora_codde 中随机找一笔 extract_status = 0 的 record, 令 secret_id 为该记录的 ID
-            row = await MySQLPool.fetchone(
-                "SELECT `id` FROM `sora_code` WHERE `extract_status` = 0 ORDER BY RAND() LIMIT 1",
-                error_tag="human_bot_operator.extract.get_random_secret_id",
-            )
-            if row is None:
-                raise LookupError("找不到 extract_status = 0 的 sora_code 记录")
-            secret_id = int(row["id"])
+            pass
+        else:    
+            if secret_id is None:
+                # 从数据表 sora_codde 中随机找一笔 extract_status = 0 的 record, 令 secret_id 为该记录的 ID
+                row = await MySQLPool.fetchone(
+                    "SELECT `id` FROM `sora_code` WHERE `extract_status` = 0 ORDER BY RAND() LIMIT 1",
+                    error_tag="human_bot_operator.extract.get_random_secret_id",
+                )
+                if row is None:
+                    raise LookupError("找不到 extract_status = 0 的 sora_code 记录")
+                secret_id = int(row["id"])
 
-        record = await self.get_secret(secret_id)
-        if record is None:
-            raise LookupError(f"找不到 sora_code.id={secret_id} 的记录")
+            record = await self.get_secret(secret_id)
+            if record is None:
+                raise LookupError(f"找不到 sora_code.id={secret_id} 的记录")
 
-        code = str(record.get("code") or "").strip()
-        if not code:
-            raise ValueError(f"sora_code.id={secret_id} 的 code 为空")
+            code = str(record.get("code") or "").strip()
+            if not code:
+                raise ValueError(f"sora_code.id={secret_id} 的 code 为空")
 
-        target_bot = await self._resolve_input_entity(self.SORA_CODE_BOT_ID)
+            target_bot = await self._resolve_input_entity(record.get("bot_id"))
+
+        
         response_queue: asyncio.Queue[tuple[str, Any]] = asyncio.Queue()
         new_message_event = events.NewMessage(
             chats=target_bot,
@@ -1111,7 +1128,7 @@ class HumanBotOperator:
                     )
                 except asyncio.TimeoutError as exc:
                     raise TimeoutError(
-                        f"等待机器人 {self.SORA_CODE_BOT_ID} 的终止回应超过 "
+                        f"等待机器人 {target_bot} 的终止回应超过 "
                         f"{timeout} 秒"
                     ) from exc
 
@@ -1124,15 +1141,19 @@ class HumanBotOperator:
                     if callable(get_buttons)
                     else getattr(response, "buttons", None)
                 ) or []
-                has_get_file_button = any(
-                    "📥 获取文件" in str(getattr(button, "text", "") or "")
+
+                # 合并按钮文字检查，避免重复遍历同一组按钮。
+                button_texts = {
+                    str(getattr(button, "text", "") or "")
                     for button in self._iter_buttons(buttons)
-                )
+                }
+                has_complaint_button = any("🚩 投诉" in text for text in button_texts)
+                has_get_file_button = any("📥 获取文件" in text for text in button_texts)
 
                 response_content = await self._format_bot_response(response)
                 print(
                     f"[密文提取回应 #{response_count}] update={update_type} "
-                    f"secret_id={secret_id} bot={self.SORA_CODE_BOT_ID} "
+                    f"secret_id={secret_id} bot={target_bot} "
                     f"message_id={response.id} "
                     f"chat_id={getattr(response, 'chat_id', None)} "
                     f"sender_id={getattr(response, 'sender_id', None)} "
@@ -1144,14 +1165,15 @@ class HumanBotOperator:
                 if callable(stringify):
                     print(f"[回应原始资料]\n{stringify()}", flush=True)
 
-                if "该文件组的查看次数已用完" in response_message:
-                    await self._mark_extract_status(secret_id, 11)
-                    print("该文件组的查看次数已用完", flush=True)
-                    return response
-                if "该文件组当前不可用" in response_message:
-                    await self._mark_extract_status(secret_id, 12)
-                    print("该文件组当前不可用", flush=True)
-                    return response
+                if secret_id:
+                    if "该文件组的查看次数已用完" in response_message:
+                        await self._mark_extract_status(secret_id, 11)
+                        print("该文件组的查看次数已用完", flush=True)
+                        return response
+                    if "该文件组当前不可用" in response_message:
+                        await self._mark_extract_status(secret_id, 12)
+                        print("该文件组当前不可用", flush=True)
+                        return response
 
                 
 
@@ -1166,12 +1188,17 @@ class HumanBotOperator:
                     )
                     continue
 
-                if media is not None and has_get_file_button:
+                if media is not None and (has_get_file_button or has_complaint_button):
                     # 得到预览图。
-                    purchase_bot = await self._resolve_input_entity("@taobao67bot")
+                    purchase_bot = await self._resolve_input_entity(
+                        f"@{self.taobao_bot_username}"
+                    )
                     try:
                         await self.client.forward_messages(purchase_bot, response)
-                        print("已直接转发给 @taobao67bot", flush=True)
+                        print(
+                            f"已直接转发给 @{self.taobao_bot_username}",
+                            flush=True,
+                        )
                     except ChatForwardsRestrictedError:
                         await self._resend_protected_message(
                             purchase_bot,
@@ -1179,7 +1206,7 @@ class HumanBotOperator:
                         )
                         print(
                             "来源消息禁止转发，已下载媒体并重新上传给 "
-                            "@taobao67bot；Telegram 不允许保留原始按钮。",
+                            f"@{self.taobao_bot_username}；Telegram 不允许保留原始按钮。",
                             flush=True,
                         )
 
@@ -1246,7 +1273,9 @@ class HumanBotOperator:
 
 
                 # 机器人直接发送媒体，或点击按钮后发送实际文件。
-                purchase_bot = await self._resolve_input_entity("@taobao67bot")
+                purchase_bot = await self._resolve_input_entity(
+                    f"@{self.taobao_bot_username}"
+                )
                 await self._send_pack_item_media(
                     purchase_bot,
                     response,
@@ -1347,7 +1376,7 @@ class HumanBotOperator:
                 caption=caption,
             )
             print(
-                "已使用 send_file 发送 table=pack_item 给 @taobao67bot",
+                f"已使用 send_file 发送 table=pack_item 给 @{self.taobao_bot_username}",
                 flush=True,
             )
             return sent_message
@@ -1362,7 +1391,7 @@ class HumanBotOperator:
                 caption=caption,
             )
             print(
-                "已下载并重新上传 table=pack_item 给 @taobao67bot",
+                f"已下载并重新上传 table=pack_item 给 @{self.taobao_bot_username}",
                 flush=True,
             )
             return sent_message
@@ -1728,8 +1757,23 @@ class HumanBotOperator:
         self,
         first_name: str | None = None,
         last_name: str | None = None,
+        random_name: bool = False,
     ) -> None:
         """按需更新姓名、清空用户名，并将电话和在线状态设为 Nobody。"""
+        if random_name:
+            name_row = await MySQLPool.fetchone(
+                "SELECT `first_name`, `last_name` FROM `user` Where `first_name` IS NOT NULL "
+                "ORDER BY RAND() LIMIT 1",
+                error_tag="human_bot_operator.update_profile.random_name",
+            )
+            if name_row is None:
+                raise LookupError("user 表中没有可供随机选择的姓名")
+
+            first_name = name_row.get("first_name")
+            last_name = name_row.get("last_name")
+
+            print(f"随机选择的姓名: {first_name} {last_name}", flush=True)
+
         if first_name is not None or last_name is not None:
             try:
                 await self.client(

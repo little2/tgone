@@ -19,8 +19,18 @@ from tgone_mysql import MySQLPool
 class AiogramBotOperator:
     """管理 Aiogram Bot，并处理收到的 Pack 媒体消息。"""
 
-    def __init__(self, config: dict):
+    def __init__(
+        self,
+        config: dict,
+        taobao_bot_username: str | None = None,
+    ):
         self.config = config
+        self.taobao_bot_username = (
+            (taobao_bot_username or config.get("taobao_bot_username") or "")
+            .strip()
+            .removeprefix("@")
+            or "taobao67bot"
+        )
 
     async def print_bot_message(self, message: Message) -> None:
         """打印 Aiogram Bot 收到的消息摘要与完整内容。"""
@@ -403,6 +413,7 @@ class AiogramBotOperator:
 
     async def run(self) -> None:
         """使用 Aiogram 长轮询并打印 Bot 收到的所有消息。"""
+       
         config = self.config
         bot_token = str(
             config.get("bot_token") or os.getenv("BOT_TOKEN", "")
@@ -415,7 +426,8 @@ class AiogramBotOperator:
             or os.getenv("TELEGRAM_BOT_PROXY", "")
         ).strip()
         session = AiohttpSession(proxy=proxy_url or None)
-        bot = Bot(token=bot_token, session=session)
+        self.bot = Bot(token=bot_token, session=session)
+        bot = self.bot
         dispatcher = Dispatcher()
         dispatcher.message.register(self.print_bot_message)
 
@@ -437,9 +449,14 @@ class AiogramBotOperator:
                         flush=True,
                     )
                     await asyncio.sleep(5)
+            bot_username = str(getattr(bot_info, "username", "") or "").strip()
+            bot_username = bot_username.removeprefix("@")
+            if bot_username:
+                self.taobao_bot_username = bot_username
+                self.config["taobao_bot_username"] = bot_username
             print(
                 f"Aiogram Bot 已启动：id={bot_info.id} "
-                f"username=@{bot_info.username or ''}",
+                f"username=@{self.taobao_bot_username}",
                 flush=True,
             )
             await dispatcher.start_polling(bot)
