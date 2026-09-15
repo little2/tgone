@@ -25,6 +25,19 @@ class AiogramBotOperator:
         taobao_bot_username: str | None = None,
     ):
         self.config = config
+        self.connected_event = asyncio.Event()
+        self.media_forward_queue: asyncio.Queue[tuple[int, int]] = asyncio.Queue()
+        configured_channel_id = str(
+            config.get("media_forward_channel_id")
+            or os.getenv("MEDIA_FORWARD_CHANNEL_ID", "")
+        ).strip()
+        if configured_channel_id.isdigit():
+            configured_channel_id = f"-100{configured_channel_id}"
+        self.media_forward_channel_id: int | str = (
+            int(configured_channel_id)
+            if configured_channel_id.lstrip("-").isdigit()
+            else configured_channel_id
+        )
         self.taobao_bot_username = (
             (taobao_bot_username or config.get("taobao_bot_username") or "")
             .strip()
@@ -35,11 +48,15 @@ class AiogramBotOperator:
     async def print_bot_message(self, message: Message) -> None:
         """打印 Aiogram Bot 收到的消息摘要与完整内容。"""
         media_info = self.get_message_media_info(message)
+        # print(f"media_info=>{message.caption}\n")
         caption_payload = (
             self.parse_json_caption(message.caption)
             if media_info is not None
             else None
         )
+
+        # print(f"\ncaption_payload=>{caption_payload}\n")
+
         process_result = None
         if caption_payload is not None and "table" in caption_payload:
             if caption_payload["table"] == "pack":
@@ -58,6 +75,10 @@ class AiogramBotOperator:
                     f"已写入 sora_pack.id={item_result['pack_id']}，"
                     f"sora_pack_item.id={item_result['item_id']}"
                 )
+                
+                self.media_forward_queue.put_nowait(
+                     (message.chat.id, message.message_id)
+                )
 
         sender = message.from_user
         # print(
@@ -71,8 +92,32 @@ class AiogramBotOperator:
         #     flush=True,
         # )
         print(message.model_dump_json(indent=2, exclude_none=True), flush=True)
-        if process_result is not None:
-            print(process_result, flush=True)
+
+
+    async def _forward_media_worker(self) -> None:
+        """依照接收顺序在背景复制媒体到指定频道。"""
+        while True:
+            source_chat_id, message_id = await self.media_forward_queue.get()
+            try:
+                await self.bot.copy_message(
+                    chat_id=self.media_forward_channel_id,
+                    from_chat_id=source_chat_id,
+                    message_id=message_id,
+                )
+                # print(
+                #     f"媒体 message_id={message_id} 已传到频道 "
+                #     f"{self.media_forward_channel_id}",
+                #     flush=True,
+                # )
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                print(
+                    f"媒体 message_id={message_id} 传送失败：{exc}",
+                    flush=True,
+                )
+            finally:
+                self.media_forward_queue.task_done()
 
 
     def parse_json_caption(self, caption: str | None) -> dict | None:
@@ -147,12 +192,14 @@ class AiogramBotOperator:
             raise ValueError("pack caption 的 tags 必须是字符串数组")
 
         normalized_code = unicodedata.normalize("NFC", file_code.strip())
-        extracted_code = HumanBotOperator._extract_consecutive_emojis(
-            normalized_code,
-            count=8,
-        )
-        if extracted_code is None:
-            raise ValueError("pack caption 的 file_code 必须包含连续 8 个 Emoji")
+        # extracted_code = HumanBotOperator._extract_consecutive_emojis(
+        #     normalized_code,
+        #     count=8,
+        # )
+
+        # if extracted_code is None:
+        #     raise ValueError("pack caption 的 file_code 必须包含连续 8 个 Emoji")
+
 
         normalized_tags = [tag.strip() for tag in tags if tag.strip()]
         tag_value = ", ".join(normalized_tags)
@@ -160,7 +207,7 @@ class AiogramBotOperator:
             raise ValueError("pack caption 的 tags 总长度不可超过 500")
         return {
             "description": description.strip(),
-            "file_code": extracted_code,
+            "file_code": file_code,
             "tag": tag_value or None,
         }
 
@@ -171,6 +218,7 @@ class AiogramBotOperator:
             return None
 
         pack_data = self.parse_pack_caption(message.caption)
+        print(f"{pack_data}")
         if pack_data is None:
             return None
 
@@ -181,8 +229,8 @@ class AiogramBotOperator:
         async def transaction(cur):
             await cur.execute(
                 "SELECT `pack_id` FROM `sora_code` "
-                "WHERE `code` = %s AND `bot_id` = %s LIMIT 1 FOR UPDATE",
-                (pack_data["file_code"], HumanBotOperator.SORA_CODE_BOT_ID),
+                "WHERE `code` = %s  LIMIT 1 FOR UPDATE",
+                (pack_data["file_code"]),
             )
             code_row = await cur.fetchone()
             if code_row is None:
@@ -231,11 +279,10 @@ class AiogramBotOperator:
 
             await cur.execute(
                 "UPDATE `sora_code` SET `pack_id` = %s, `extract_status` = 2 "
-                "WHERE `code` = %s AND `bot_id` = %s",
+                "WHERE `code` = %s ",
                 (
                     pack_id,
-                    pack_data["file_code"],
-                    HumanBotOperator.SORA_CODE_BOT_ID,
+                    pack_data["file_code"]
                 ),
             )
             return int(pack_id)
@@ -430,6 +477,7 @@ class AiogramBotOperator:
         bot = self.bot
         dispatcher = Dispatcher()
         dispatcher.message.register(self.print_bot_message)
+        media_forward_worker = None
 
         try:
             print(
@@ -454,12 +502,22 @@ class AiogramBotOperator:
             if bot_username:
                 self.taobao_bot_username = bot_username
                 self.config["taobao_bot_username"] = bot_username
+            self.connected_event.set()
             print(
                 f"Aiogram Bot 已启动：id={bot_info.id} "
                 f"username=@{self.taobao_bot_username}",
                 flush=True,
             )
+            media_forward_worker = asyncio.create_task(
+                self._forward_media_worker(),
+                name="aiogram-media-forward-worker",
+            )
             await dispatcher.start_polling(bot)
         finally:
+            if media_forward_worker is not None:
+                media_forward_worker.cancel()
+                await asyncio.gather(
+                    media_forward_worker,
+                    return_exceptions=True,
+                )
             await bot.session.close()
-
