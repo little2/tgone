@@ -5,7 +5,7 @@ extract_status
 3   关连pack_item成功 (已完成)
 11  该文件组的查看次数已用完
 12  该文件组当前不可用
-
+13  该文件是保护状态且 > 20MB
 
 stage(sora_park)
 

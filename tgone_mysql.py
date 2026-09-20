@@ -241,17 +241,40 @@ class MySQLPool:
     # ==================================================
 
     @classmethod
+    @reconnecting
     async def execute(cls, sql: str, params=None, error_tag: str = "", raise_on_error: bool = False) -> bool:
         conn, cur = await cls.get_conn_cursor()
         try:
             await cur.execute(sql, params or ())
             return True
+        except aiomysql.OperationalError as e:
+            code = e.args[0] if e.args else None
+            if code in (2006, 2013):
+                if error_tag:
+                    tag = error_tag
+                else:
+                    tag = _caller_info()
+                print(
+                    f"⚠️ [{tag}] 检测到 MySQL 连接丢失，交给重连逻辑重试: {e} | sql={sql} | params={params}",
+                    flush=True,
+                )
+                raise
+            if error_tag:
+                tag = error_tag
+            else:
+                tag = _caller_info()
+            print(
+                f"⚠️ [{tag}] SQL 执行出错 execute: {e} | \nsql={sql} | \nparams={params}",
+                flush=True,
+            )
+            if raise_on_error:
+                raise
+            return False
         except Exception as e:
             if error_tag:
                 tag = error_tag
             else:
-                tag = _caller_info()   # 自动提取调用来源
-            
+                tag = _caller_info()
             print(
                 f"⚠️ [{tag}] SQL 执行出错 execute: {e} | \nsql={sql} | \nparams={params}",
                 flush=True,
@@ -263,21 +286,40 @@ class MySQLPool:
             await cls.release(conn, cur)
 
     @classmethod
+    @reconnecting
     async def fetchone(cls, sql: str, params=None, error_tag: str = "") -> Optional[Dict[str, Any]]:
-        
         conn, cur = await cls.get_conn_cursor()
         try:
             await cur.execute(sql, params or ())
             return await cur.fetchone()
-        except Exception as e:
-            print(f"{e}", flush=True)
+        except aiomysql.OperationalError as e:
+            code = e.args[0] if e.args else None
+            if code in (2006, 2013):
+                if error_tag:
+                    tag = error_tag
+                else:
+                    tag = _caller_info()
+                print(
+                    f"⚠️ [{tag}] 检测到 MySQL 连接丢失，交给重连逻辑重试: {e} | sql={sql} | params={params}",
+                    flush=True,
+                )
+                raise
             if error_tag:
                 tag = error_tag
             else:
-                tag = _caller_info()   # 自动提取调用来源
-            
+                tag = _caller_info()
             print(
-                f"⚠️ [{tag}] SQL 执行出错fetchone: {e} | sql={sql} | params={params}",
+                f"⚠️ [{tag}] SQL 执行出错 fetchone: {e} | sql={sql} | params={params}",
+                flush=True,
+            )
+            return None
+        except Exception as e:
+            if error_tag:
+                tag = error_tag
+            else:
+                tag = _caller_info()
+            print(
+                f"⚠️ [{tag}] SQL 执行出错 fetchone: {e} | sql={sql} | params={params}",
                 flush=True,
             )
             return None
@@ -285,17 +327,38 @@ class MySQLPool:
             await cls.release(conn, cur)
 
     @classmethod
+    @reconnecting
     async def fetchall(cls, sql: str, params=None, error_tag: str = "") -> List[Dict[str, Any]]:
         conn, cur = await cls.get_conn_cursor()
         try:
             await cur.execute(sql, params or ())
             return await cur.fetchall()
+        except aiomysql.OperationalError as e:
+            code = e.args[0] if e.args else None
+            if code in (2006, 2013):
+                if error_tag:
+                    tag = error_tag
+                else:
+                    tag = _caller_info()
+                print(
+                    f"⚠️ [{tag}] 检测到 MySQL 连接丢失，交给重连逻辑重试: {e} | sql={sql} | params={params}",
+                    flush=True,
+                )
+                raise
+            if error_tag:
+                tag = error_tag
+            else:
+                tag = _caller_info()
+            print(
+                f"⚠️ [{tag}] SQL 执行出错 fetchall: {e} | sql={sql} | params={params}",
+                flush=True,
+            )
+            return []
         except Exception as e:
             if error_tag:
                 tag = error_tag
             else:
-                tag = _caller_info()   # 自动提取调用来源
-            
+                tag = _caller_info()
             print(
                 f"⚠️ [{tag}] SQL 执行出错 fetchall: {e} | sql={sql} | params={params}",
                 flush=True,

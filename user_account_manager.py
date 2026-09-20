@@ -5,7 +5,7 @@ import os
 import asyncio
 import re
 import time
-from datetime import timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from html import escape
 from typing import Any
 
@@ -125,6 +125,7 @@ class UserAccountManager:
         status_code = 1
         phone_number = bot_info.get("phone")
         session_string = bot_info.get("bot_token")
+        bot_title = bot_info.get("bot_title")
         config = self.load_config()
         if pw2fa is None:
             pw2fa = config.get("default_pw2fa", None)
@@ -183,7 +184,7 @@ class UserAccountManager:
                     bot_info,
                 )
 
-            print(f"User is not authorized, starting the login process...  {phone_number} ,bot_id= {bot_info.get('bot_id')} ", flush=True)
+            print(f"User is not authorized, starting the login process...  {bot_title}  {phone_number} ,bot_id= {bot_info.get('bot_id')} ", flush=True)
             result = await self.tg_login(user_client, phone_number, pw2fa)
 
             if isinstance(result, FloodWaitError):
@@ -229,7 +230,7 @@ class UserAccountManager:
         return user_client, status_code,  bot_info
 
 
-    async def forward_latest_group_messages(self, user_client, target_user_id, group_id, limit=3):
+    async def forward_latest_group_messages(self, user_client, target_user_id, group_id, limit=5):
         """Forward the latest messages from the configured group to the target user."""
         if not group_id:
             print("未配置 self.TGSOURCE_CHAT_ID，跳过群组消息转发", flush=True)
@@ -263,10 +264,32 @@ class UserAccountManager:
                     re.IGNORECASE,
                 )
 
-                if match:
+                # 如果 received_time 是三天的，则打印
+                if received_at is not None:
+                    now = datetime.now(timezone(timedelta(hours=8)))
+                    three_days_ago = now - timedelta(days=3)
+                    if received_at >= three_days_ago:
+                    
+                        await user_client.send_message(
+                            target,
+                            f"‼️ 三天前的消息:（id={msg.id}）{safe_text}"
+                            f"\n收到时间：{received_time}（",
+                            parse_mode="html",
+                        )
+
+                elif "IMPORTANT" in safe_text:
+                    await user_client.send_message(
+                        target,
+                        f"‼️ ‼️ 捕获到重要消息:（id={msg.id}）{safe_text}"
+                        f"\n收到时间：{received_time}（",
+                        parse_mode="html",
+                    )
+                    
+
+                elif match:
                     code = match.group(1)
                     print(
-                        f"捕获到 login code: {code}，收到时间：{received_time}（Asia/Taipei）",
+                        f"捕获到 login code: {code}，收到时间：{received_time}（",
                         flush=True,
                     )
 
@@ -276,7 +299,7 @@ class UserAccountManager:
                     await user_client.send_message(
                         target,
                         f"捕获到 code:（id={msg.id}）{fullwidth_code}"
-                        f"\n收到时间：{received_time}（Asia/Taipei）",
+                        f"\n收到时间：{received_time}（",
                         parse_mode="html",
                     )
 
@@ -407,13 +430,21 @@ class UserAccountManager:
                 # 1. 列出当前帐号所有 active sessions
                 auths = await user_client(GetAuthorizationsRequest())
 
+                device_model_str = ""
                 for a in auths.authorizations:
+                    device_model_str += a.device_model + "\n"
                     if a.hash == 0:
+                        
                         print(f"✅ 保留本身 id={a.hash}  device={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created}")
                         continue  # 跳过主会话
                     elif a.device_model not in WHITELIST:
                         try:
-                            if a.device_model in BLACKLIST:
+                            # 如果 a.date_created 在七天之内的
+                            seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+                            if a.date_created >= seven_days_ago:
+                                print(f"❗️ 最近七天内创建的会话 id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created}")
+
+                            elif a.device_model in BLACKLIST:
                                 print(f"❌ 已删除 id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created} (已删除)")
                                 await user_client(ResetAuthorizationRequest(hash=a.hash))
                             elif a.hash == -212406687192506612 or a.hash == -6894703599540223408:
@@ -421,7 +452,7 @@ class UserAccountManager:
                                 await user_client(ResetAuthorizationRequest(hash=a.hash))
                             else:
                                 # await client(ResetAuthorizationRequest(hash=a.hash))
-                                print(f"❗️ 建議删除 id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created}")
+                                print(f"⚠️ 建議删除 id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created}")
                                 # ❗️ 建議删除 id=-2622773520313404250  device_model=Desktop  platform=  ip=  date=2026-05-08 15:57:28+00:00
                                 # ❗️ 建議删除 id=985113455830527986  device_model=Desktop  platform=  ip=  date=2026-01-03 08:01:27+00:00
                                 # ❗️ 建議删除 id=3145982375868211614  device_model=Desktop  platform=  ip=  date=2026-05-08 15:55:32+00:00
@@ -429,6 +460,16 @@ class UserAccountManager:
                             print(f"❌ 删除 {a.hash} 失败: {e}")
                     else:
                         print(f"✅ 保留 id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created}")
+
+                await user_client.send_message(
+                    target,
+                    f"[RESET] 你好, 我是 <code>{me.id}</code> - "
+                    f"{me.first_name} {me.last_name or ''} +{me.phone} "
+                    f"\nrestricted={me.restricted}\nscam={me.scam}\nfake={me.fake}"
+                    f"\ndevice_model={device_model_str}",
+                    parse_mode="HTML",
+                )
+
 
                 if pw2fa:
                     try:

@@ -19,6 +19,7 @@ from aiohttp import web
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from utils import MediaUtils
 from tgone_mysql import MySQLPool
+from human_bot_operator import HumanBotOperator
 from telethon.tl.functions.contacts import ImportContactsRequest
 from telethon.tl.types import InputPhoneContact
 from telethon.tl.functions.account import GetAuthorizationsRequest, ResetAuthorizationRequest
@@ -510,6 +511,11 @@ async def aiogram_handle_private_media(message: types.Message):
 @dp.message(F.chat.id == TARGET_GROUP_ID, F.content_type.in_({ContentType.PHOTO, ContentType.DOCUMENT, ContentType.VIDEO, ContentType.ANIMATION}))
 async def aiogram_handle_group_media(message: types.Message):
     await media_utils.aiogram_handle_group_media(message)
+    return
+
+@dp.callback_query(F.data.startswith("ca:"))
+async def aiogram_handle_captcha_callback(callback_query: types.CallbackQuery):
+    await HumanBotOperator.handle_captcha_callback(callback_query)
     return
    
 async def say_hello():

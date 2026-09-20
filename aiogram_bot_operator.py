@@ -4,13 +4,15 @@ import asyncio
 import hashlib
 import json
 import os
+import re
 import unicodedata
 from datetime import datetime
+from urllib.parse import quote
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.exceptions import TelegramNetworkError
-from aiogram.types import Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from human_bot_operator import HumanBotOperator
 from tgone_mysql import MySQLPool
@@ -26,7 +28,11 @@ class AiogramBotOperator:
     ):
         self.config = config
         self.connected_event = asyncio.Event()
-        self.media_forward_queue: asyncio.Queue[tuple[int, int]] = asyncio.Queue()
+        self.media_forward_queue: asyncio.Queue[
+            tuple[Message, int | str, str, bool]
+        ] = (
+            asyncio.Queue()
+        )
         configured_channel_id = str(
             config.get("media_forward_channel_id")
             or os.getenv("MEDIA_FORWARD_CHANNEL_ID", "")
@@ -38,6 +44,19 @@ class AiogramBotOperator:
             if configured_channel_id.lstrip("-").isdigit()
             else configured_channel_id
         )
+
+        store_channel_id = str(
+            config.get("store_channel_id")
+            or os.getenv("STORE_CHANNEL_ID", "")
+        ).strip()
+        if store_channel_id.isdigit():
+            store_channel_id = f"-100{store_channel_id}"
+        self.store_channel_id: int | str = (
+            int(store_channel_id)
+            if store_channel_id.lstrip("-").isdigit()
+            else store_channel_id
+        )
+
         self.taobao_bot_username = (
             (taobao_bot_username or config.get("taobao_bot_username") or "")
             .strip()
@@ -56,6 +75,9 @@ class AiogramBotOperator:
         )
 
         # print(f"\ncaption_payload=>{caption_payload}\n")
+        # line 75 只有在私信时才会继续
+        if message.chat.type != "private":
+            return
 
         process_result = None
         if caption_payload is not None and "table" in caption_payload:
@@ -65,6 +87,16 @@ class AiogramBotOperator:
                     f"已写入 sora_pack.id={pack_id}，"
                     "并更新对应 sora_code.extract_status=2"
                 )
+                # pack 媒体转到存储频道。
+                self.media_forward_queue.put_nowait(
+                    (
+                        message,
+                        self.store_channel_id,
+                        self._build_forward_caption(caption_payload),
+                        True,
+                    )
+                )
+
             elif caption_payload["table"] == "pack_item":
                 item_result = await self.upsert_pack_item_from_media_message(
                     message,
@@ -75,9 +107,15 @@ class AiogramBotOperator:
                     f"已写入 sora_pack.id={item_result['pack_id']}，"
                     f"sora_pack_item.id={item_result['item_id']}"
                 )
-                
+
+                # pack_item 媒体转到媒体转发频道。
                 self.media_forward_queue.put_nowait(
-                     (message.chat.id, message.message_id)
+                    (
+                        message,
+                        self.media_forward_channel_id,
+                        self._build_forward_caption(caption_payload),
+                        False,
+                    )
                 )
 
         sender = message.from_user
@@ -91,18 +129,123 @@ class AiogramBotOperator:
         #     f"date={message.date}",
         #     flush=True,
         # )
-        print(message.model_dump_json(indent=2, exclude_none=True), flush=True)
+        # print(message.model_dump_json(indent=2, exclude_none=True), flush=True)
 
+    async def handle_callback_query(self, callback_query: CallbackQuery) -> None:
+        """处理 Bot 收到的按钮回调。"""
+        handled = await HumanBotOperator.handle_captcha_callback(callback_query)
+        if handled:
+            return
+
+
+    def _build_forward_caption(self, payload: dict) -> str:
+        """将媒体 JSON caption 转为频道展示用的三行文本。"""
+        description = payload.get("description", "")
+        description_line = (
+            re.sub(r"\s+", " ", description).strip()
+            if isinstance(description, str)
+            else ""
+        )
+        file_code = str(payload.get("file_code") or "").strip()
+        tags = payload.get("tags", [])
+        if isinstance(tags, str):
+            tags = re.split(r"[,，]", tags)
+        tag_line = " ".join(
+            f"#{tag.removeprefix('#').strip()}"
+            for tag in tags
+            if isinstance(tag, str) and tag.removeprefix("#").strip()
+        )
+        lines = [description_line, file_code]
+        if tag_line:
+            lines.append(tag_line)
+        return "\n".join(lines)
+
+    async def _send_file(
+        self,
+        destination_chat_id: int | str,
+        message: Message,
+        caption: str,
+        include_portal_button: bool = False,
+    ) -> None:
+        """以原媒体 file_id 重发文件，并使用指定 caption。"""
+        reply_markup = None
+        if include_portal_button:
+            payload = self.parse_json_caption(message.caption) or {}
+            file_code = str(payload.get("file_code") or "").strip()
+            if file_code:
+                reply_markup = InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text="🧊传送门1",
+                                url=(
+                                    "https://t.me/di5k31bot?text="
+                                    f"{quote(file_code, safe='')}"
+                                ),
+                            )
+                        ]
+                    ]
+                )
+        if message.photo:
+            await self.bot.send_photo(
+                chat_id=destination_chat_id,
+                photo=message.photo[-1].file_id,
+                caption=caption,
+                reply_markup=reply_markup,
+            )
+        elif message.video:
+            await self.bot.send_video(
+                chat_id=destination_chat_id,
+                video=message.video.file_id,
+                caption=caption,
+                reply_markup=reply_markup,
+            )
+        elif message.animation:
+            await self.bot.send_animation(
+                chat_id=destination_chat_id,
+                animation=message.animation.file_id,
+                caption=caption,
+                reply_markup=reply_markup,
+            )
+        elif message.document:
+            await self.bot.send_document(
+                chat_id=destination_chat_id,
+                document=message.document.file_id,
+                caption=caption,
+                reply_markup=reply_markup,
+            )
+        elif message.audio:
+            await self.bot.send_audio(
+                chat_id=destination_chat_id,
+                audio=message.audio.file_id,
+                caption=caption,
+                reply_markup=reply_markup,
+            )
+        elif message.voice:
+            await self.bot.send_voice(
+                chat_id=destination_chat_id,
+                voice=message.voice.file_id,
+                caption=caption,
+                reply_markup=reply_markup,
+            )
+        else:
+            raise ValueError("不支持以带 caption 的方式重发此媒体类型")
 
     async def _forward_media_worker(self) -> None:
-        """依照接收顺序在背景复制媒体到指定频道。"""
+        """依照接收顺序在背景重发媒体到指定频道。"""
         while True:
-            source_chat_id, message_id = await self.media_forward_queue.get()
+            (
+                source_message,
+                destination_chat_id,
+                caption,
+                include_portal_button,
+            ) = await self.media_forward_queue.get()
             try:
-                await self.bot.copy_message(
-                    chat_id=self.media_forward_channel_id,
-                    from_chat_id=source_chat_id,
-                    message_id=message_id,
+                await self._send_file(
+                    destination_chat_id,
+                    source_message,
+                    caption,
+                    include_portal_button,
                 )
                 # print(
                 #     f"媒体 message_id={message_id} 已传到频道 "
@@ -113,7 +256,7 @@ class AiogramBotOperator:
                 raise
             except Exception as exc:
                 print(
-                    f"媒体 message_id={message_id} 传送失败：{exc}",
+                    f"媒体 message_id={source_message.message_id} 传送失败：{exc}",
                     flush=True,
                 )
             finally:
@@ -185,7 +328,9 @@ class AiogramBotOperator:
         if not isinstance(description, str):
             raise ValueError("pack caption 的 description 必须是字符串")
         if not isinstance(file_code, str) or not file_code.strip():
-            raise ValueError("pack caption 的 file_code 不可为空")
+            print("pack caption 的 file_code 为空或无效", flush=True)
+            return None
+            # raise ValueError("pack caption 的 file_code 不可为空")
         if isinstance(tags, str):
             tags = [tag.strip() for tag in tags.replace("，", ",").split(",")]
         if not isinstance(tags, list) or not all(isinstance(tag, str) for tag in tags):
@@ -218,7 +363,7 @@ class AiogramBotOperator:
             return None
 
         pack_data = self.parse_pack_caption(message.caption)
-        print(f"{pack_data}")
+        # print(f"{pack_data}")
         if pack_data is None:
             return None
 
@@ -327,7 +472,7 @@ class AiogramBotOperator:
             await cur.execute(
                 "SELECT `id`, `pack_id` FROM `sora_code` "
                 "WHERE `bot_id` = %s AND `code_hash` = %s LIMIT 1 FOR UPDATE",
-                (HumanBotOperator.SORA_CODE_BOT_ID, code_hash),
+                (HumanBotOperator.BJD_CODE_BOT_ID, code_hash),
             )
             code_row = await cur.fetchone()
             if code_row is None:
@@ -339,7 +484,7 @@ class AiogramBotOperator:
                     (
                         file_code,
                         code_hash,
-                        HumanBotOperator.SORA_CODE_BOT_ID,
+                        HumanBotOperator.BJD_CODE_BOT_ID,
                         now_ts,
                         message.chat.id,
                         message.message_id,
@@ -458,6 +603,41 @@ class AiogramBotOperator:
         return await MySQLPool.transaction(transaction)
 
 
+    async def _check_channel_admin_permissions(self, bot_id: int) -> None:
+        """检查 Bot 是否拥有两个媒体频道的管理员权限。"""
+        channels = (
+            ("store_channel_id", self.store_channel_id),
+            ("media_forward_channel_id", self.media_forward_channel_id),
+        )
+        for setting_name, channel_id in channels:
+            if not channel_id:
+                print(f"⚠️ {setting_name} 未配置，跳过管理员权限检查。", flush=True)
+                continue
+            try:
+                member = await self.bot.get_chat_member(
+                    chat_id=channel_id,
+                    user_id=bot_id,
+                )
+            except Exception as exc:
+                print(
+                    f"❌ 无法检查 {setting_name}={channel_id} 的管理员权限：{exc}",
+                    flush=True,
+                )
+                continue
+
+            status = getattr(member.status, "value", member.status)
+            if status in {"administrator", "creator", "owner"}:
+                print(
+                    f"✅ Bot 是 {setting_name}={channel_id} 的管理员。",
+                    flush=True,
+                )
+            else:
+                print(
+                    f"❌ Bot 不是 {setting_name}={channel_id} 的管理员 "
+                    f"（当前身份：{status}）。",
+                    flush=True,
+                )
+
     async def run(self) -> None:
         """使用 Aiogram 长轮询并打印 Bot 收到的所有消息。"""
        
@@ -477,6 +657,7 @@ class AiogramBotOperator:
         bot = self.bot
         dispatcher = Dispatcher()
         dispatcher.message.register(self.print_bot_message)
+        dispatcher.callback_query.register(self.handle_callback_query)
         media_forward_worker = None
 
         try:
@@ -502,6 +683,7 @@ class AiogramBotOperator:
             if bot_username:
                 self.taobao_bot_username = bot_username
                 self.config["taobao_bot_username"] = bot_username
+            await self._check_channel_admin_permissions(bot_info.id)
             self.connected_event.set()
             print(
                 f"Aiogram Bot 已启动：id={bot_info.id} "
