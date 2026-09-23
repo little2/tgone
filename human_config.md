@@ -6,6 +6,7 @@ extract_status
 11  该文件组的查看次数已用完
 12  该文件组当前不可用
 13  该文件是保护状态且 > 20MB
+14  该文件没有反应(可能不合法的emoji)
 
 stage(sora_park)
 

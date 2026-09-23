@@ -7,6 +7,8 @@ import json
 import os
 import random
 import re
+import threading
+import uuid
 from urllib.parse import unquote
 import time
 import unicodedata
@@ -55,9 +57,21 @@ class HumanBotOperator:
 
     MONITOR_FORWARD_CHAT_ID = 5334310434
     BJD_CODE_BOT_ID = 8915213940
-    PROTECTED_MEDIA_TRANSFER_TIMEOUT_SECONDS = 5 * 60
+    PROTECTED_MEDIA_TRANSFER_TIMEOUT_SECONDS = 30
     CAPTCHA_SELECTION_TIMEOUT_SECONDS = 30
+    CAPTCHA_STATUS_IDLE = "idle"
+    CAPTCHA_STATUS_PENDING = "pending"
+    CAPTCHA_STATUS_SENT = "sent"
+    CAPTCHA_STATUS_WAITING_USER = "waiting_user"
+    CAPTCHA_STATUS_SELECTED = "selected"
+    CAPTCHA_STATUS_CONFIRMED = "confirmed"
+    CAPTCHA_STATUS_EXPIRED = "expired"
+    CAPTCHA_STATUS_FAILED = "failed"
+
     _captcha_selection_waiters: dict[str, asyncio.Future[str]] = {}
+    _captcha_bridge: dict[str, dict[str, Any]] = {}
+    _bot_cache: dict[str, Bot] = {}
+    _bot_cache_lock = threading.Lock()
 
     DEFAULT_TIMEZONE = ZoneInfo("Asia/Shanghai")
     TIME_PERIODS = (
@@ -1087,10 +1101,12 @@ class HumanBotOperator:
         ask_like: bool = False
     ) -> Any:
         """发送指定密文，并逐条监听机器人回应直到出现终止内容。"""
+   
         if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
             raise TypeError("timeout 必须是数字")
         if timeout <= 0:
             raise ValueError("timeout 必须大于 0")
+
         
         if code is not None and bot_id is not None:
             try:
@@ -1101,18 +1117,26 @@ class HumanBotOperator:
 
             pass
         else:    
+            # print(f"Resolving secret_id={secret_id}", flush=True)
             record = None
             if secret_id is None:
+                # print(f"No secret_id provided, selecting a random one from recent records", flush=True)
                 # 只从最新 30 笔待提取记录中随机选择，避免 ORDER BY RAND() 全表扫描。
                 rows = await MySQLPool.fetchall(
                     "SELECT * FROM `sora_code` "
-                    "WHERE `extract_status` = 0 ORDER BY `id` DESC LIMIT 30",
+                    "WHERE `extract_status` IN (0,2) ORDER BY `id` DESC LIMIT 30",
                     error_tag="human_bot_operator.extract.get_random_secret_id",
                 )
+
+                print(f"Fetched {len(rows)} recent sora_code records for random selection", flush=True)
                 if not rows:
+                    print(f"No sora_code records found for random selection", flush=True)
+                    return None
                     raise LookupError("找不到 extract_status = 0 的 sora_code 记录")
+            
                 record = random.choice(rows)
                 secret_id = int(record["id"])
+                print(f"Selected random secret_id={secret_id} from recent records", flush=True)
             else:
                 record = await self.get_secret(secret_id)
 
@@ -1120,11 +1144,13 @@ class HumanBotOperator:
                 raise LookupError(f"找不到 sora_code.id={secret_id} 的记录")
 
             code = str(record.get("code") or "").strip()
+            # print(f"Extracted code from record: {code}", flush=True)
             if not code:
                 raise ValueError(f"sora_code.id={secret_id} 的 code 为空")
 
             target_bot = await self._resolve_input_entity(record.get("bot_id"))
 
+        # print(f"Resolved target bot: {target_bot}", flush=True)
         
         response_queue: asyncio.Queue[tuple[str, Any]] = asyncio.Queue()
         new_message_event = events.NewMessage(
@@ -1160,7 +1186,7 @@ class HumanBotOperator:
             #     f"message_id={sent_message.id}，开始监听机器人回应。",
             #     flush=True,
             # )
-
+           
             while True:
                 wait_timeout = float(timeout)
                 if media_idle_deadline is not None:
@@ -1192,6 +1218,10 @@ class HumanBotOperator:
                                 return last_processed_media
                         else: 
                             print(f"❗️ 等待机器人 {target_bot} 的终止回应超过 {timeout} 秒", flush=True)
+                            if secret_id is not None:
+                                await self._mark_extract_status(secret_id, 14)
+                           
+                              
                             return False
                             # raise TimeoutError(
                             #     f"等待机器人 {target_bot} 的终止回应超过 "
@@ -1302,19 +1332,19 @@ class HumanBotOperator:
 
                     # 得到预览图。
                     if hasattr(media, "photo"):
-                        await self._forward_media_with_json_caption(
-                            target=self.taobao_bot_username,
-                            message=response,
-                            file_code=code,
-                        )
+                        if(record['extract_status'] == 0):
+                            await self._forward_media_with_json_caption(
+                                target=self.taobao_bot_username,
+                                message=response,
+                                file_code=code,
+                            )
 
                     if has_complaint_button:
                         return True
 
 
                     if has_get_file_button:
-                        # 不要再往下
-                        return
+                       
                         await asyncio.sleep(1)  # Yield control to the event loop
                         callback_result = await response.click(
                             text=lambda button_text: (
@@ -1332,6 +1362,8 @@ class HumanBotOperator:
                             "继续等待机器人回覆。",
                             flush=True,
                         )
+                        await asyncio.sleep(1)  # Yield control to the event loop
+
                         continue
                    
 
@@ -1372,8 +1404,12 @@ class HumanBotOperator:
                 if media is None:
                     # 如果 消息是纯文字，则打印出来
                     text = getattr(response, "text", None)
+                    alert = getattr(callback_result, "alert", None)
                     #如果 text 中包括字串 "验证码"
-                    if isinstance(text, str) and "请先完成当前验证码" in text:
+                    if alert:
+                        print(f"收到 alert={alert}，停止等待媒体。", flush=True)
+                        return False
+                    elif isinstance(text, str) and "请先完成当前验证码" in text:
                         print("‼️ 收到包含验证码的文字回应，继续等待媒体。", flush=True)
                         return False
                     elif isinstance(text, str) and "获取文件组过" in text:
@@ -1388,7 +1424,7 @@ class HumanBotOperator:
 
                 # 如果收到的媒体消息是图片，且 caption 的字串包括 "只数清晰的大图案"
                 is_photo = getattr(response, "photo", None) is not None
-                if is_photo and "只数清晰的大图案" in response_message:
+                if is_photo and ("上方物体相同" in response_message or "只数清晰的大图案" in response_message):
                     print("❗️ 收到符合条件的图片媒体消息(验证码)。", flush=True)
                    
                     await self.handle_captcha(response)
@@ -1428,11 +1464,89 @@ class HumanBotOperator:
                 edited_message_event,
             )
 
+    @classmethod
+    async def _cleanup_captcha_task(
+        cls,
+        task_id: str | None,
+        *,
+        sent_message: Any | None = None,
+        user_id: int | None = None,
+        selection_future: asyncio.Future[str] | None = None,
+        bot: Bot | None = None,
+    ) -> None:
+        """统一清理验证码任务状态，并删除已发出的验证码消息。"""
+        if not task_id:
+            return
+
+        bridge = cls._captcha_bridge.get(task_id)
+        waiter = cls._captcha_selection_waiters.get(task_id)
+        if waiter is selection_future or waiter is None:
+            cls._captcha_selection_waiters.pop(task_id, None)
+        if bridge is not None:
+            bridge["status"] = bridge.get("status") or cls.CAPTCHA_STATUS_IDLE
+            if bridge.get("status") in {cls.CAPTCHA_STATUS_IDLE, cls.CAPTCHA_STATUS_PENDING}:
+                bridge["status"] = cls.CAPTCHA_STATUS_FAILED
+
+        cls._captcha_bridge.pop(task_id, None)
+
+        if sent_message is not None and user_id is not None:
+            delete_bot = bot
+            if delete_bot is None:
+                token = (os.getenv("BOT_TOKEN") or "").strip()
+                if token:
+                    delete_bot = cls._get_bot(token)
+            if delete_bot is not None:
+                try:
+                    await delete_bot.delete_message(
+                        chat_id=user_id,
+                        message_id=getattr(sent_message, "message_id", None),
+                    )
+                except Exception as exc:
+                    message = str(exc).lower()
+                    if "not found" not in message and "message to delete" not in message:
+                        print(f"清理验证码消息失败：{exc}", flush=True)
+
+    @classmethod
+    def _get_bot(cls, token: str) -> Bot:
+        """在同一进程中复用单例 Bot 实例，避免重复初始化带来的额外加载时间。"""
+        token = (token or "").strip()
+        if not token:
+            raise ValueError("BOT_TOKEN 不可为空")
+
+        with cls._bot_cache_lock:
+            bot = cls._bot_cache.get(token)
+            if bot is None:
+                bot = Bot(token=token)
+                cls._bot_cache[token] = bot
+            return bot
+
+    @staticmethod
+    async def _answer_group_callback_query(
+        callback_query_id: str | None,
+        text: str,
+        *,
+        show_alert: bool = False,
+    ) -> None:
+        """通过 bot token 回覆群组中的 callback query，通知最终结果。"""
+        if not callback_query_id:
+            return
+        bot_token = (os.getenv("BOT_TOKEN") or "").strip()
+        if not bot_token:
+            return
+        bot = HumanBotOperator._get_bot(bot_token)
+        try:
+            await bot.answer_callback_query(
+                callback_query_id=callback_query_id,
+                text=text,
+                show_alert=show_alert,
+            )
+        except Exception as exc:
+            print(f"回应验证码群组回调失败：{exc}", flush=True)
+
     async def handle_captcha(self, response: Any, user_id: int | None = None) -> None:
-        """处理验证码响应。"""
-        # print("处理验证码...", flush=True)
+        """处理验证码响应，并将验证码桥接到指定群组回调。"""
         if user_id is None:
-            user_id = 7485812665  # 默认用户 ID
+            user_id = -1004380843996
         user_id = int(user_id)
 
         bot_token = (os.getenv("BOT_TOKEN") or "").strip()
@@ -1440,12 +1554,42 @@ class HumanBotOperator:
             print("⚠️ 未配置 BOT_TOKEN，无法转发验证码图片到指定用户。", flush=True)
             return
 
+        bot = self._get_bot(bot_token)
+        sent_captcha = await bot.send_message(
+            chat_id=user_id,
+            text="🏄 即将请求 captcha 验证",
+        )
+
+        async def auto_delete_captcha_prompt() -> None:
+            try:
+                await asyncio.sleep(10)
+                if sent_captcha is not None:
+                    try:
+                        await bot.delete_message(
+                            chat_id=user_id,
+                            message_id=getattr(sent_captcha, "message_id", None),
+                        )
+                    except Exception as exc:
+                        message = str(exc).lower()
+                        if "not found" not in message and "message to delete" not in message:
+                            print(f"自动删除验证码提示消息失败：{exc}", flush=True)
+            except asyncio.CancelledError:
+                raise
+
+        asyncio.create_task(auto_delete_captcha_prompt())
+
+        captcha_timeout_seconds = max(15, self.CAPTCHA_SELECTION_TIMEOUT_SECONDS + 10)
+        captcha_deadline = asyncio.get_running_loop().time() + captcha_timeout_seconds
+        print(f"[captcha] start user_id={user_id} task_id={task_id} origin_message_id={getattr(response, 'id', 'unknown')} timeout={captcha_timeout_seconds}s", flush=True)
+
         try:
             media_buffer = io.BytesIO()
+            print(f"[captcha] begin download_media user_id={user_id} message_id={getattr(response, 'id', 'unknown')}", flush=True)
             downloaded = await asyncio.wait_for(
                 self.client.download_media(response, file=media_buffer),
-                timeout=self.PROTECTED_MEDIA_TRANSFER_TIMEOUT_SECONDS,
+                timeout=min(self.PROTECTED_MEDIA_TRANSFER_TIMEOUT_SECONDS, max(5, captcha_timeout_seconds // 2)),
             )
+            print(f"[captcha] download_media finished user_id={user_id} size={media_buffer.tell()} bytes", flush=True)
         except asyncio.TimeoutError:
             print(
                 f"❗️ 验证码图片下载超时，user_id={user_id}，message_id={getattr(response, 'id', 'unknown')}",
@@ -1472,110 +1616,249 @@ class HumanBotOperator:
         media_file = BufferedInputFile(media_buffer.getvalue(), filename=file_name)
 
         caption = str(getattr(response, "raw_text", "") or "").strip() or None
-        bot = Bot(token=bot_token)
-        selection_future = None
-        task_id = None
+       
+        selection_future: asyncio.Future[str] | None = None
+        task_id: str | None = None
+        sent_message: Any | None = None
+        bridge: dict[str, Any] | None = None
+        finished = False
+
         
 
+        def is_transient_bot_error(exc: Exception) -> bool:
+            message_text = str(exc)
+            return (
+                "ClientConnectorError" in message_text
+                or "Cannot connect to host" in message_text
+                or "Connection reset" in message_text
+                or "Connection closed" in message_text
+                or "Server closed the connection" in message_text
+                or "ConnectionError" in type(exc).__name__
+            )
+
         try:
-            if getattr(response, "photo", None) is not None:
-                task_id = str(getattr(response, "id", "captcha"))
-                selection_future = asyncio.get_running_loop().create_future()
-                self._captcha_selection_waiters[task_id] = selection_future
-
-                keyboard = [
-                    [
-                        InlineKeyboardButton(text="1", callback_data=f"ca:{task_id}:1"),
-                        InlineKeyboardButton(text="2", callback_data=f"ca:{task_id}:2"),
-                        InlineKeyboardButton(text="3", callback_data=f"ca:{task_id}:3"),
-                        InlineKeyboardButton(text="4", callback_data=f"ca:{task_id}:4"),
-                    ],
-                    [
-                        InlineKeyboardButton(text="5", callback_data=f"ca:{task_id}:5"),
-                        InlineKeyboardButton(text="6", callback_data=f"ca:{task_id}:6"),
-                        InlineKeyboardButton(text="7", callback_data=f"ca:{task_id}:7"),
-                        InlineKeyboardButton(text="8", callback_data=f"ca:{task_id}:8"),
-                    ],
-                ]
-
-                sent_message = await bot.send_photo(
-                    chat_id=user_id,
-                    photo=media_file,
-                    caption=caption,
-                    reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard),
-                )
-                # print(
-                #     f"验证码按钮等待中：task_id={task_id} "
-                #     f"message_id={sent_message.message_id}",
-                #     flush=True,
-                # )
-            elif getattr(response, "document", None) is not None:
-                await bot.send_document(
-                    chat_id=user_id,
-                    document=media_file,
-                    caption=caption,
-                )
-            else:
-                await bot.send_document(
-                    chat_id=user_id,
-                    document=media_file,
-                    caption=caption,
-                )
-            print(f"✅ 已将验证码图片转发给用户 {user_id}", flush=True)
-            if selection_future is not None:
+            for attempt in range(1, 4):
                 try:
-                    selected = await asyncio.wait_for(
-                        selection_future,
-                        timeout=self.CAPTCHA_SELECTION_TIMEOUT_SECONDS,
-                    )
-                    # print(
-                    #     f"验证码按钮选择结果：user_id={user_id} "
-                    #     f"task_id={task_id} selected={selected}",
-                    #     flush=True,
-                    # )
+                    if getattr(response, "photo", None) is not None:
+                        task_id = uuid.uuid4().hex
+                        selection_future = asyncio.get_running_loop().create_future()
+                        self._captcha_selection_waiters[task_id] = selection_future
+                        bridge = {
+                            "task_id": task_id,
+                            "origin_chat_id": getattr(response, "chat_id", None),
+                            "origin_message_id": getattr(response, "id", None),
+                            "group_chat_id": user_id,
+                            "callback_query_id": None,
+                            "selected": None,
+                            "confirmed": False,
+                            "status": self.CAPTCHA_STATUS_PENDING,
+                        }
+                        self._captcha_bridge[task_id] = bridge
+
+                        keyboard = [
+                            [
+                                InlineKeyboardButton(text="1", callback_data=f"ca:{task_id}:1"),
+                                InlineKeyboardButton(text="2", callback_data=f"ca:{task_id}:2"),
+                                InlineKeyboardButton(text="3", callback_data=f"ca:{task_id}:3"),
+                                InlineKeyboardButton(text="4", callback_data=f"ca:{task_id}:4"),
+                            ],
+                            [
+                                InlineKeyboardButton(text="5", callback_data=f"ca:{task_id}:5"),
+                                InlineKeyboardButton(text="6", callback_data=f"ca:{task_id}:6"),
+                                InlineKeyboardButton(text="7", callback_data=f"ca:{task_id}:7"),
+                                InlineKeyboardButton(text="8", callback_data=f"ca:{task_id}:8"),
+                            ],
+                        ]
+
+                        remaining_timeout = max(5.0, captcha_deadline - asyncio.get_running_loop().time())
+                        print(f"[captcha] begin send_photo user_id={user_id} task_id={task_id} timeout={remaining_timeout:.1f}s", flush=True)
+                        try:
+                            sent_message = await asyncio.wait_for(
+                                bot.send_photo(
+                                    chat_id=user_id,
+                                    photo=media_file,
+                                    caption=caption,
+                                    reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard),
+                                ),
+                                timeout=remaining_timeout,
+                            )
+                        except asyncio.TimeoutError:
+                            print(f"❗️ [captcha] send_photo timeout user_id={user_id} task_id={task_id}", flush=True)
+                            return
+                        print(f"[captcha] send_photo success user_id={user_id} task_id={task_id}", flush=True)
+                    elif getattr(response, "document", None) is not None:
+                        remaining_timeout = max(5.0, captcha_deadline - asyncio.get_running_loop().time())
+                        print(f"[captcha] begin send_document user_id={user_id} task_id={task_id} timeout={remaining_timeout:.1f}s", flush=True)
+                        try:
+                            sent_message = await asyncio.wait_for(
+                                bot.send_document(
+                                    chat_id=user_id,
+                                    document=media_file,
+                                    caption=caption,
+                                ),
+                                timeout=remaining_timeout,
+                            )
+                        except asyncio.TimeoutError:
+                            print(f"❗️ [captcha] send_document timeout user_id={user_id} task_id={task_id}", flush=True)
+                            return
+                        print(f"[captcha] send_document success user_id={user_id} task_id={task_id}", flush=True)
+                    else:
+                        remaining_timeout = max(5.0, captcha_deadline - asyncio.get_running_loop().time())
+                        print(f"[captcha] begin fallback send_document user_id={user_id} task_id={task_id} timeout={remaining_timeout:.1f}s", flush=True)
+                        try:
+                            sent_message = await asyncio.wait_for(
+                                bot.send_document(
+                                    chat_id=user_id,
+                                    document=media_file,
+                                    caption=caption,
+                                ),
+                                timeout=remaining_timeout,
+                            )
+                        except asyncio.TimeoutError:
+                            print(f"❗️ [captcha] fallback send_document timeout user_id={user_id} task_id={task_id}", flush=True)
+                            return
+                        print(f"[captcha] fallback send_document success user_id={user_id} task_id={task_id}", flush=True)
+
+                    if bridge is not None:
+                        bridge["status"] = self.CAPTCHA_STATUS_SENT
+                    print(f"✅ 已将验证码图片转发给用户 {user_id}", flush=True)
+                    break
+                except Exception as exc:
+                    if attempt < 3 and is_transient_bot_error(exc):
+                        delay = 2 ** (attempt - 1)
+                        print(
+                            f"⚠️ 发送验证码到 user_id={user_id} 时遇到临时连接错误，重试 {attempt + 1}/3（{delay}s）：{exc}",
+                            flush=True,
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+                    if bridge is not None:
+                        bridge["status"] = self.CAPTCHA_STATUS_FAILED
+                    raise
+
+            if selection_future is not None and sent_message is not None:
+                bridge["status"] = self.CAPTCHA_STATUS_WAITING_USER
+                try:
+                    remaining_timeout = max(5.0, captcha_deadline - asyncio.get_running_loop().time())
+                    print(f"[captcha] waiting user selection user_id={user_id} task_id={task_id} timeout={remaining_timeout:.1f}s", flush=True)
+                    try:
+                        selected = await asyncio.wait_for(
+                            selection_future,
+                            timeout=min(self.CAPTCHA_SELECTION_TIMEOUT_SECONDS, remaining_timeout),
+                        )
+                    except asyncio.TimeoutError:
+                        print(f"❗️ [captcha] user selection timeout user_id={user_id} task_id={task_id}", flush=True)
+                        raise
+                    print(f"[captcha] received user selection user_id={user_id} task_id={task_id} selected={selected}", flush=True)
+                    if bridge is not None:
+                        bridge["selected"] = selected
+                        bridge["status"] = self.CAPTCHA_STATUS_SELECTED
 
                     try:
+                        original_message_id = getattr(response, "id", None)
+                        buttons = getattr(response, "buttons", None) or []
+                        has_target_button = any(
+                            str(getattr(button, "text", "")).strip() == str(selected)
+                            for row in buttons
+                            for button in (row if isinstance(row, (list, tuple)) else [row])
+                        )
+
+                        if original_message_id is None or not has_target_button:
+                            raise ValueError("原始验证码消息已失效或按钮不存在")
+
                         click_result = await response.click(
                             text=lambda button_text: str(button_text or "").strip() == str(selected)
                         )
-                        '''
-                        click_result=BotCallbackAnswer(cache_time=0, alert=False, has_url=False, native_ui=True, message='验证成功。', url=None)
-                        '''
-                        if click_result and click_result.message == '验证成功。':
+
+                        if click_result and getattr(click_result, "message", None) == "验证成功。":
                             print(f"✅ 验证码验证成功：user_id={user_id} task_id={task_id}", flush=True)
+                            if bridge is not None:
+                                bridge["confirmed"] = True
+                                bridge["status"] = self.CAPTCHA_STATUS_CONFIRMED
+                            if bridge is not None and bridge.get("callback_query_id"):
+                                await self._answer_group_callback_query(
+                                    bridge["callback_query_id"],
+                                    "验证码验证成功",
+                                    show_alert=True,
+                                )
                         else:
-                            print(f"❌ 验证码验证失败：user_id={user_id} task_id={task_id}", flush=True)
-                
+                            print(f"✅ 用户已完成验证码选择：user_id={user_id} task_id={task_id} selected={selected}", flush=True)
+                            if bridge is not None:
+                                bridge["confirmed"] = True
+                                bridge["status"] = self.CAPTCHA_STATUS_CONFIRMED
+                            if bridge is not None and bridge.get("callback_query_id"):
+                                await self._answer_group_callback_query(
+                                    bridge["callback_query_id"],
+                                    "验证码已处理",
+                                    show_alert=True,
+                                )
+
                     except Exception as exc:
-                        print(
-                            f"❌ 点击验证码原始按钮失败：selected={selected} error={exc}",
-                            flush=True,
-                        )
+                        message_text = str(exc)
+                        if (
+                            "invalid or you can't do that operation" in message_text
+                            or "message ID is invalid" in message_text.lower()
+                            or "can't do that operation" in message_text.lower()
+                            or "原始验证码消息已失效或按钮不存在" in message_text
+                        ):
+                            print(
+                                f"⚠️ 原始验证码按钮已失效，按已收到用户选择继续处理：selected={selected} error={exc}",
+                                flush=True,
+                            )
+                            if bridge is not None:
+                                bridge["confirmed"] = True
+                                bridge["status"] = self.CAPTCHA_STATUS_CONFIRMED
+                            if bridge is not None and bridge.get("callback_query_id"):
+                                await self._answer_group_callback_query(
+                                    bridge["callback_query_id"],
+                                    "验证码已处理",
+                                    show_alert=True,
+                                )
+                        else:
+                            print(
+                                f"❌ 点击验证码原始按钮失败：selected={selected} error={exc}",
+                                flush=True,
+                            )
+                            if bridge is not None:
+                                bridge["status"] = self.CAPTCHA_STATUS_FAILED
+                            if bridge is not None and bridge.get("callback_query_id"):
+                                await self._answer_group_callback_query(
+                                    bridge["callback_query_id"],
+                                    "验证码处理失败",
+                                    show_alert=True,
+                                )
+
+                    finished = True
 
                 except asyncio.TimeoutError:
+                    if bridge is not None:
+                        bridge["status"] = self.CAPTCHA_STATUS_EXPIRED
                     print(
                         f"等待验证码按钮选择超时：user_id={user_id} task_id={task_id}",
                         flush=True,
                     )
-                # 超时后也要移除等待器 并 删除验证码消息
-                if task_id is not None:
-                    waiter = self._captcha_selection_waiters.get(task_id)
-                    if waiter is selection_future:
-                        self._captcha_selection_waiters.pop(task_id, None)
-                try:
-                    await bot.delete_message(chat_id=user_id, message_id=sent_message.message_id)
-                except Exception as exc:
-                    if "not found" not in str(exc).lower() and "message to delete" not in str(exc).lower():
-                        # print(f"删除验证码消息失败：{exc}", flush=True)
-                        pass
+                finally:
+                    if task_id is not None:
+                        await self._cleanup_captcha_task(
+                            task_id,
+                            sent_message=sent_message,
+                            user_id=user_id,
+                            selection_future=selection_future,
+                            bot=bot,
+                        )
         except Exception as exc:
+            if bridge is not None:
+                bridge["status"] = self.CAPTCHA_STATUS_FAILED
             print(f"❗️ 发送验证码到 user_id={user_id} 失败：{exc}", flush=True)
         finally:
-            if task_id is not None:
-                waiter = self._captcha_selection_waiters.get(task_id)
-                if waiter is selection_future:
-                    self._captcha_selection_waiters.pop(task_id, None)
-            await bot.session.close()
+            if task_id is not None and not finished:
+                await self._cleanup_captcha_task(
+                    task_id,
+                    sent_message=sent_message,
+                    user_id=user_id,
+                    selection_future=selection_future,
+                    bot=bot,
+                )
 
     @classmethod
     async def handle_captcha_callback(cls, callback_query: Any) -> bool:
@@ -1590,16 +1873,15 @@ class HumanBotOperator:
             return True
 
         _, task_id, selected = parts
-        from_user = getattr(callback_query, "from_user", None)
-        message = getattr(callback_query, "message", None)
-        user_id = getattr(from_user, "id", None)
-        message_id = getattr(message, "message_id", None)
-        
-        # print(
-        #     f"验证码按钮已选择：user_id={user_id} "
-        #     f"message_id={message_id} task_id={task_id} selected={selected}",
-        #     flush=True,
-        # )
+        bridge = cls._captcha_bridge.get(task_id)
+        if bridge is not None:
+            bridge["callback_query_id"] = getattr(callback_query, "id", None)
+            bridge["selected"] = selected
+            bridge["group_chat_id"] = (
+                getattr(getattr(callback_query, "message", None), "chat_id", None)
+                or bridge.get("group_chat_id")
+            )
+            bridge["status"] = cls.CAPTCHA_STATUS_SELECTED
 
         waiter = cls._captcha_selection_waiters.get(task_id)
         if waiter is not None and not waiter.done():
@@ -1608,16 +1890,18 @@ class HumanBotOperator:
         answer = getattr(callback_query, "answer", None)
         if callable(answer):
             try:
-                await answer(f"已选择 {selected}")
+                await answer(f"已选择 {selected}", show_alert=False)
             except Exception as exc:
                 print(f"回应验证码按钮选择失败：{exc}", flush=True)
-            # 无论是否成功回应，都删除这个信息和等待器
-            cls._captcha_selection_waiters.pop(task_id, None)
-            try:
-                await message.delete()
-            except Exception as exc:
-                pass
-                # print(f"删除验证码消息失败：{exc}", flush=True)
+
+        cls._captcha_selection_waiters.pop(task_id, None)
+        message = getattr(callback_query, "message", None)
+        try:
+            await message.delete()
+        except Exception:
+            pass
+        if bridge is not None:
+            bridge["status"] = cls.CAPTCHA_STATUS_CONFIRMED
         return True
 
 
@@ -2006,6 +2290,9 @@ class HumanBotOperator:
                     or "0 bytes read" in message_text
                     or "Connection reset" in message_text
                     or "Connection closed" in message_text
+                    or "Cannot connect to host" in message_text
+                    or "ClientConnectorError" in message_text
+                    or "ClientConnectorError" in type(exc).__name__
                     or "ConnectionError" in type(exc).__name__
                 )
 
@@ -2146,11 +2433,11 @@ class HumanBotOperator:
                     media_buffer,
                     caption=caption,
                 ),
-                timeout=(timeout*2),
+                timeout=(timeout),
             )
         except TimeoutError as exc:
             print(
-                f" ❗️ 受保护媒体 message_id={message_id} 重新上传超时（{(timeout*2)} 秒）{exc}",
+                f" ❗️ 受保护媒体 message_id={message_id} 重新上传超时（{(timeout)} 秒）{exc}",
                 flush=True,
             )
             return False
@@ -2173,7 +2460,7 @@ class HumanBotOperator:
     async def _mark_extract_status_by_file_code(self, file_code: str, status: int ) -> None:
         """将 sora_code 的 extract_status 更新为指定状态。"""
         await MySQLPool.execute(
-            "UPDATE `sora_code` SET `extract_status` = %s WHERE `file_code` = %s",
+            "UPDATE `sora_code` SET `extract_status` = %s WHERE `code` = %s",
             (status, file_code),
             error_tag="human_bot_operator.mark_extract_status_by_file_code",
         )

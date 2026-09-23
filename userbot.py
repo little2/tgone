@@ -130,8 +130,28 @@ async def run_telethon_bot(
     if configure_mysql:
         configure_mysql_pool(config)
     try:
-        from session import session_set
+        session_rows = await MySQLPool.fetchall(
+            "SELECT `bot_token` FROM `bot` "
+            "WHERE check_group=1 ",
         
+            error_tag="userbot.random_session_tokens",
+        )
+        
+        if not session_rows:
+            raise RuntimeError(
+                "从数据库中获取到的 session_rows 为空"
+            )
+        if len(session_rows) < 1:
+            raise RuntimeError(
+                f"数据库中的 bot_token 数量不足：需要 1 个，实际只有 {len(session_rows)} 个"
+            )
+       
+
+        session_set = {
+            index: str(row["bot_token"]).strip()
+            for index, row in enumerate(session_rows)
+        }
+
         operator = {}
 
         # 随机从 session_set 中选择，形成另外的子集合
@@ -321,7 +341,7 @@ async def main() -> None:
 
 if __name__ == "__main__":
     async def _run_all() -> None:
-        # await main_auto_talk()
+        await main_auto_talk()
         await main()
 
     asyncio.run(_run_all())
