@@ -39,14 +39,14 @@ async def main_check_user() -> None:
    
 
     try:
-        await account_manager.check_all_userbot(config)
+        # await account_manager.check_all_userbot(config)
         # await account_manager.rec_new_account(
         #     phone_number="+15809565862",
         #     pw2fa="z4422404",
         # )
-        # await account_manager.check_phone("+6282127381599")
-        # await account_manager.check_phone("+6282127491912")
-        # await account_manager.check_phone("+916295379623")
+        # await account_manager.check_phone("+254784808106")
+        # await account_manager.check_phone("+254784812293")
+        await account_manager.check_phone("+573502927050") 
 
     finally:
         await MySQLPool.close()
@@ -341,7 +341,8 @@ async def main() -> None:
 
 if __name__ == "__main__":
     async def _run_all() -> None:
-        await main_auto_talk()
-        await main()
+        await main_check_user()
+        # await main_auto_talk()
+        # await main()
 
     asyncio.run(_run_all())

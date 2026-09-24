@@ -237,6 +237,7 @@ class UserAccountManager:
             return
 
         try:
+            warning_tag = ""
             group = await user_client.get_entity(int(group_id))
             messages = await user_client.get_messages(group, limit=limit)
             messages = list(reversed(messages))
@@ -269,7 +270,7 @@ class UserAccountManager:
                     now = datetime.now(timezone(timedelta(hours=8)))
                     three_days_ago = now - timedelta(days=3)
                     if received_at >= three_days_ago:
-                    
+                        
                         await user_client.send_message(
                             target,
                             f"‼️ 三天前的消息:（id={msg.id}）{safe_text}"
@@ -277,13 +278,47 @@ class UserAccountManager:
                             parse_mode="html",
                         )
 
-                elif "IMPORTANT" in safe_text:
+
+                if "IMPORTANT. Request to reset password." in safe_text:
+                    warning_tag = "‼️‼️  "
                     await user_client.send_message(
                         target,
                         f"‼️ ‼️ 捕获到重要消息:（id={msg.id}）{safe_text}"
                         f"\n收到时间：{received_time}（",
                         parse_mode="html",
                     )
+
+                    try:
+                        buttons = await msg.get_buttons() if hasattr(msg, "get_buttons") else None
+                        if not buttons:
+                            print("消息中没有按钮，无法点击 Cancel Reset Request", flush=True)
+                            continue
+
+                        clicked = False
+                        for row in buttons:
+                            for button in row:
+                                button_text = str(getattr(button, "text", "") or "").strip()
+                                if "Cancel Reset Request" in button_text:
+                                    print(f"找到按钮：{button_text}，开始点击", flush=True)
+                                    click_result = await msg.click(
+                                        text=lambda text: "Cancel Reset Request" in str(text or "")
+                                    )
+                                    print(f"点击结果：{click_result}", flush=True)
+                                    print(
+                                        f"alert={getattr(click_result, 'alert', None)}",
+                                        f"message={getattr(click_result, 'message', None)}",
+                                        f"url={getattr(click_result, 'url', None)}",
+                                        flush=True,
+                                    )
+                                    clicked = True
+                                    break
+                            if clicked:
+                                break
+
+                        if not clicked:
+                            print("未找到名为 Cancel Reset Request 的按钮", flush=True)
+                    except Exception as exc:
+                        print(f"点击 Cancel Reset Request 失败：{exc}", flush=True)
                     
 
                 elif match:
@@ -379,11 +414,11 @@ class UserAccountManager:
                         f"\nrestricted={me.restricted}\nscam={me.scam}\nfake={me.fake}",
                         parse_mode="HTML",
                     )
-                    await self.forward_latest_group_messages(
-                        user_client,
-                        TARGET_USER_ID,
-                        self.TGSOURCE_CHAT_ID,
-                    )
+                    # await self.forward_latest_group_messages(
+                    #     user_client,
+                    #     TARGET_USER_ID,
+                    #     self.TGSOURCE_CHAT_ID,
+                    # )
                 except PeerFloodError as exc:
                     warning = f"Telegram 限制發送通知（PeerFloodError）：{exc}"
                     print(f"⚠️ {warning}", flush=True)
@@ -466,8 +501,14 @@ class UserAccountManager:
                     f"[RESET] 你好, 我是 <code>{me.id}</code> - "
                     f"{me.first_name} {me.last_name or ''} +{me.phone} "
                     f"\nrestricted={me.restricted}\nscam={me.scam}\nfake={me.fake}"
-                    f"\ndevice_model={device_model_str}",
+                    f"\ndevice_model=\n{device_model_str}",
                     parse_mode="HTML",
+                )
+
+                await self.forward_latest_group_messages(
+                    user_client,
+                    TARGET_USER_ID,
+                    self.TGSOURCE_CHAT_ID,
                 )
 
 
