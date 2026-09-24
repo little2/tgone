@@ -132,7 +132,7 @@ async def run_telethon_bot(
     try:
         session_rows = await MySQLPool.fetchall(
             "SELECT `bot_token` FROM `bot` "
-            "WHERE check_group=1 ",
+            "WHERE check_group>=1 ",
         
             error_tag="userbot.random_session_tokens",
         )
@@ -341,8 +341,8 @@ async def main() -> None:
 
 if __name__ == "__main__":
     async def _run_all() -> None:
-        await main_check_user()
+        # await main_check_user()
         # await main_auto_talk()
-        # await main()
+        await main()
 
     asyncio.run(_run_all())

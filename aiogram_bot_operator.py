@@ -108,6 +108,14 @@ class AiogramBotOperator:
                     f"sora_pack_item.id={item_result['item_id']}"
                 )
 
+                # 从table sora_pack 查出 sora_pack.id = item_result['pack_id] 的record, 令 caption_payload 更新为最新的 description 和 tags
+                pack_record = await self.get_pack_by_id(item_result['pack_id'])
+                if pack_record:
+                    caption_payload['description'] = pack_record.get('description', '')
+                    caption_payload['tags'] = pack_record.get('tags', [])
+
+                print(f"Updated caption_payload: {caption_payload}")
+
                 # pack_item 媒体转到媒体转发频道。
                 self.media_forward_queue.put_nowait(
                     (
@@ -314,6 +322,49 @@ class AiogramBotOperator:
                 ),
             }
         return None
+
+    async def get_pack_by_id(self, pack_id: int) -> dict | None:
+        """根据 pack_id 从数据库中获取 sora_pack 记录，并归一化返回字段。"""
+        if isinstance(pack_id, bool) or not isinstance(pack_id, int):
+            raise TypeError("pack_id 必须是整数")
+        if pack_id <= 0:
+            raise ValueError("pack_id 必须大于 0")
+
+        row = await MySQLPool.fetchone(
+            "SELECT `id`, `pack_type`, `pack_content`, `tag`, `thumb_file_unique_id`, "
+            "`owner_user_id`, `channel_chat_id`, `channel_message_id`, `created_ts`, "
+            "`updated_ts` FROM `sora_pack` WHERE `id` = %s LIMIT 1",
+            (pack_id,),
+            error_tag="aiogram_bot_operator.get_pack_by_id",
+        )
+        if row is None:
+            return None
+
+        description = row.get("pack_content")
+        if description is None:
+            description = ""
+        elif not isinstance(description, str):
+            description = str(description)
+
+        raw_tags = row.get("tag")
+        tags: list[str] = []
+        if isinstance(raw_tags, str):
+            tags = [
+                token.strip().removeprefix("#")
+                for token in re.split(r"[,，]", raw_tags)
+                if token and token.strip()
+            ]
+        elif isinstance(raw_tags, (list, tuple, set)):
+            tags = [
+                str(token).strip().removeprefix("#")
+                for token in raw_tags
+                if str(token).strip()
+            ]
+
+        normalized_row = dict(row)
+        normalized_row["description"] = description.strip()
+        normalized_row["tags"] = tags
+        return normalized_row
 
 
     def parse_pack_caption(self, caption: str | None) -> dict | None:
