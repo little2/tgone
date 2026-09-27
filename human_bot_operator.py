@@ -2455,19 +2455,19 @@ class HumanBotOperator:
     ) -> None:
         """将 Emoji 密文及其 Unicode NFC SHA-256 写入 sora_code。"""
         normalized_code = unicodedata.normalize("NFC", code)
-        code_hash = hashlib.sha256(normalized_code.encode("utf-8")).digest()
+        code_hash_hex = hashlib.sha256(normalized_code.encode("utf-8")).hexdigest()
         await MySQLPool.execute(
             "INSERT INTO `sora_code` "
             "(`code`, `code_hash`, `bot_id`, `created_ts`, "
             "`source_chat_id`, `source_message_id`, `extract_status`) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s) "
+            "VALUES (%s, UNHEX(%s), %s, %s, %s, %s, %s) "
             "ON DUPLICATE KEY UPDATE "
             "`code` = VALUES(`code`), "
             "`source_chat_id` = VALUES(`source_chat_id`), "
             "`source_message_id` = VALUES(`source_message_id`)",
             (
                 code,
-                code_hash,
+                code_hash_hex,
                 self.BJD_CODE_BOT_ID,
                 int(time.time()),
                 source_chat_id,

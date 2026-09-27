@@ -5,6 +5,7 @@ import os
 from datetime import datetime, timedelta
 from pathlib import Path
 import random
+from aiohttp import web
 from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 
@@ -319,11 +320,33 @@ def configure_mysql_pool(config: dict) -> None:
         port=int(config.get("db_port", os.getenv("MYSQL_DB_PORT", 3306))),
     )
 
+
+async def _start_health_server() -> tuple[web.AppRunner, str]:
+    """启动用于 Render 端口探测的轻量 HTTP 服务。"""
+    host = os.getenv("HOST", "0.0.0.0").strip() or "0.0.0.0"
+    port = int(os.getenv("PORT", "10000") or 10000)
+
+    app = web.Application()
+
+    async def health(_request: web.Request) -> web.Response:
+        return web.json_response({"ok": True, "service": "tgone-userbot"})
+
+    app.router.add_get("/", health)
+    app.router.add_get("/health", health)
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, host=host, port=port)
+    await site.start()
+    return runner, f"http://{host}:{port}"
+
 async def main() -> None:
     """同时执行 Telethon 用户账号流程与 Aiogram Bot polling。"""
     account_manager = UserAccountManager()
     config = account_manager.load_config()
     configure_mysql_pool(config)
+    health_runner, bind_address = await _start_health_server()
+    print(f"HTTP 健康检查服务已启动：{bind_address}", flush=True)
     print("正在并发启动 Aiogram 与 Telethon...", flush=True)
 
     aiogram_operator = AiogramBotOperator(config)
@@ -353,6 +376,10 @@ async def main() -> None:
             run_telethon_bot(config, configure_mysql=False),
             name="telethon-user-flow",
         )
+
+
+
+
         await asyncio.gather(aiogram_task, telethon_task)
     finally:
         tasks = [aiogram_task, aiogram_connected_task]
@@ -362,6 +389,7 @@ async def main() -> None:
             if not task.done():
                 task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
+        await health_runner.cleanup()
 
 
 if __name__ == "__main__":
@@ -369,5 +397,7 @@ if __name__ == "__main__":
         # await main_check_user()
         # await main_auto_talk()
         await main()
+
+
 
     asyncio.run(_run_all())

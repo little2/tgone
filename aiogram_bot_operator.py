@@ -555,15 +555,15 @@ class AiogramBotOperator:
         if file_code is None:
             raise ValueError("pack_item caption 的 file_code 必须包含连续 8 个 Emoji")
 
-        code_hash = hashlib.sha256(file_code.encode("utf-8")).digest()
+        code_hash_hex = hashlib.sha256(file_code.encode("utf-8")).hexdigest()
         now_ts = int(datetime.now().timestamp())
         sender_id = getattr(message.from_user, "id", None)
 
         async def transaction(cur):
             await cur.execute(
                 "SELECT `id`, `pack_id` FROM `sora_code` "
-                "WHERE `bot_id` = %s AND `code_hash` = %s LIMIT 1 FOR UPDATE",
-                (HumanBotOperator.BJD_CODE_BOT_ID, code_hash),
+                "WHERE `bot_id` = %s AND `code_hash` = UNHEX(%s) LIMIT 1 FOR UPDATE",
+                (HumanBotOperator.BJD_CODE_BOT_ID, code_hash_hex),
             )
             code_row = await cur.fetchone()
             if code_row is None:
@@ -571,10 +571,10 @@ class AiogramBotOperator:
                     "INSERT INTO `sora_code` "
                     "(`code`, `code_hash`, `pack_id`, `bot_id`, `valid_state`, "
                     "`created_ts`, `source_chat_id`, `source_message_id`, "
-                    "`extract_status`) VALUES (%s, %s, NULL, %s, 1, %s, %s, %s, 3)",
+                    "`extract_status`) VALUES (%s, UNHEX(%s), NULL, %s, 1, %s, %s, %s, 3)",
                     (
                         file_code,
-                        code_hash,
+                        code_hash_hex,
                         HumanBotOperator.BJD_CODE_BOT_ID,
                         now_ts,
                         message.chat.id,
