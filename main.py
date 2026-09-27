@@ -83,7 +83,8 @@ async def ping_keepalive_task():
         "https://tgone-ah13.onrender.com",  # Rely
         "https://hb-lp3a.onrender.com",     # HB  
         "https://lz-upload.onrender.com",   # LZ-No2
-        "https://lz-pbtb.onrender.com"      # LZ-1002
+        "https://lz-pbtb.onrender.com",      # LZ-1002
+        "https://tgone.onrender.com"
     ]
 
     timeout = aiohttp.ClientTimeout(total=10)

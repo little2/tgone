@@ -304,10 +304,10 @@ class CaptchaBotOperator:
                         '''
 
 
-                        print(
-                            f"click_result={click_result} clicked_user_id={clicked_user_id}",
-                            flush=True,
-                        )
+                        # print(
+                        #     f"click_result={click_result} clicked_user_id={clicked_user_id}",
+                        #     flush=True,
+                        # )
                         if click_result and getattr(click_result, "message", None) == "验证成功。":
 
 
@@ -438,6 +438,7 @@ class CaptchaBotOperator:
                 if waiter is selection_future:
                     self._captcha_selection_waiters.pop(task_id, None)
                 self._captcha_bridge.pop(task_id, None)
+        return True
 
     @classmethod
     async def handle_captcha_callback(cls, callback_query: Any) -> bool:
