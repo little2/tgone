@@ -1351,7 +1351,7 @@ class HumanBotOperator:
                             )
 
                  
-                        print(f"callback_result={callback_result}", flush=True)
+                        # print(f"callback_result={callback_result}", flush=True)
 
                         msg = getattr(callback_result, "message", None) or getattr(callback_result, "alert", None)
                         if msg is not None:
