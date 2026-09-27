@@ -14,6 +14,7 @@ from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.exceptions import TelegramNetworkError
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
+from captcha_bot_operator import CaptchaBotOperator
 from human_bot_operator import HumanBotOperator
 from tgone_mysql import MySQLPool
 
@@ -114,7 +115,7 @@ class AiogramBotOperator:
                     caption_payload['description'] = pack_record.get('description', '')
                     caption_payload['tags'] = pack_record.get('tags', [])
 
-                print(f"Updated caption_payload: {caption_payload}")
+                print("Updated caption_payload")
 
                 # pack_item 媒体转到媒体转发频道。
                 self.media_forward_queue.put_nowait(
@@ -141,9 +142,48 @@ class AiogramBotOperator:
 
     async def handle_callback_query(self, callback_query: CallbackQuery) -> None:
         """处理 Bot 收到的按钮回调。"""
-        handled = await HumanBotOperator.handle_captcha_callback(callback_query)
+        handled = await CaptchaBotOperator.handle_captcha_callback(callback_query)
         if handled:
             return
+
+    async def _run_captcha_callback_polling(self, proxy_url: str) -> None:
+        """当验证码由另一个 Bot 发送时，单独监听该 Bot 的 callback query。"""
+        free_bot_token = str(
+            self.config.get("free_bot_token") or os.getenv("FREE_BOT_TOKEN", "")
+        ).strip()
+        main_bot_token = str(
+            self.config.get("bot_token") or os.getenv("BOT_TOKEN", "")
+        ).strip()
+        if not free_bot_token or free_bot_token == main_bot_token:
+            return
+
+        free_session = AiohttpSession(proxy=proxy_url or None)
+        free_bot = Bot(token=free_bot_token, session=free_session)
+        free_dispatcher = Dispatcher()
+        free_dispatcher.callback_query.register(self.handle_callback_query)
+
+        try:
+            print("正在连接验证码 Bot（FREE_BOT_TOKEN）...", flush=True)
+            while True:
+                try:
+                    free_bot_info = await asyncio.wait_for(free_bot.me(), timeout=15)
+                    break
+                except (asyncio.TimeoutError, TelegramNetworkError) as exc:
+                    print(
+                        f"验证码 Bot 网络连接失败：{exc}；5 秒后重试。",
+                        flush=True,
+                    )
+                    await asyncio.sleep(5)
+
+            print(
+                f"验证码 Bot 已启动：id={free_bot_info.id} "
+                f"username=@{getattr(free_bot_info, 'username', '')}",
+                flush=True,
+            )
+
+            await free_dispatcher.start_polling(free_bot)
+        finally:
+            await free_bot.session.close()
 
 
     def _build_forward_caption(self, payload: dict) -> str:
@@ -187,7 +227,7 @@ class AiogramBotOperator:
                             InlineKeyboardButton(
                                 text="🧊传送门1",
                                 url=(
-                                    "https://t.me/di5k31bot?text="
+                                    "https://t.me/yundiaodubot?text="
                                     f"{quote(file_code, safe='')}"
                                 ),
                             )
@@ -710,6 +750,7 @@ class AiogramBotOperator:
         dispatcher.message.register(self.print_bot_message)
         dispatcher.callback_query.register(self.handle_callback_query)
         media_forward_worker = None
+        captcha_polling_task = None
 
         try:
             print(
@@ -745,8 +786,18 @@ class AiogramBotOperator:
                 self._forward_media_worker(),
                 name="aiogram-media-forward-worker",
             )
+            captcha_polling_task = asyncio.create_task(
+                self._run_captcha_callback_polling(proxy_url),
+                name="captcha-bot-callback-polling",
+            )
             await dispatcher.start_polling(bot)
         finally:
+            if captcha_polling_task is not None:
+                captcha_polling_task.cancel()
+                await asyncio.gather(
+                    captcha_polling_task,
+                    return_exceptions=True,
+                )
             if media_forward_worker is not None:
                 media_forward_worker.cancel()
                 await asyncio.gather(

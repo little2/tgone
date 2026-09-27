@@ -75,7 +75,30 @@ async def main_auto_talk() -> None:
         datetime.now(ZoneInfo("Asia/Shanghai")) + timedelta(seconds=10)
     ).isoformat()
 
-    from session import session_set
+    
+
+    session_rows = await MySQLPool.fetchall(
+        "SELECT `bot_token` FROM `bot` "
+        "WHERE check_group>=1 ",
+    
+        error_tag="userbot.random_session_tokens",
+    )
+    
+    if not session_rows:
+        raise RuntimeError(
+            "从数据库中获取到的 session_rows 为空"
+        )
+    if len(session_rows) < 1:
+        raise RuntimeError(
+            f"数据库中的 bot_token 数量不足：需要 1 个，实际只有 {len(session_rows)} 个"
+        )
+    
+
+    session_set = {
+        index: str(row["bot_token"]).strip()
+        for index, row in enumerate(session_rows)
+    }
+
 
 
     #Mathis
@@ -178,9 +201,9 @@ async def run_telethon_bot(
                 # await op.join_chat("https://t.me/+_Pz9_6udznFlMDhi") #玉树花
 
                 # await op.join_chat("https://t.me/+HYvGBwaTSUEyYzkx")  #正太方舟
-                await op.client.send_message("@posterre_bot", "/checkin")      
+                # await op.client.send_message("@posterre_bot", "/checkin")      
                 # await op.join_chat("https://t.me/+LmR0F1WpnFQ0Y2Ix")
-                # await op.client.send_message("@yunupan1bot", "/start") 
+                await op.client.send_message("@ztFreeJJBOT", "/start") 
             except Exception as e:
                 print(f"Failed to login with session {i} {session}: {e}", flush=True)
 
@@ -262,6 +285,8 @@ async def run_telethon_bot(
                 # await asyncio.sleep(sleep_time)
                 # await op.send_first_video_to_bot(source_chat=7613284106,target_bot="@di5k7bot",search_limit=5000)
 
+                # 模拟按 Ctrl 键 以避免进入休眠状态
+                await op.simulate_ctrl_press()
 
 
 
