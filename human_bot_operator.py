@@ -1179,11 +1179,11 @@ class HumanBotOperator:
                 send_code = f"/start {send_code}"
 
             sent_message = await self.client.send_message(target_bot, send_code)
-            # print(
-            #     f"已发送密文：code={send_code} "
-            #     f"message_id={sent_message.id}，开始监听机器人回应。",
-            #     flush=True,
-            # )
+            print(
+                f"已发送密文：code={send_code} "
+                f"message_id={sent_message.id}，开始监听机器人回应。",
+                flush=True,
+            )
 
             while True:
                 wait_timeout = float(timeout)
