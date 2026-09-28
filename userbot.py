@@ -78,48 +78,37 @@ async def main_auto_talk() -> None:
 
     
 
+    participants = script["participants"]
+    actor_ids = [str(participant["actor_id"]) for participant in participants]
+    placeholders = ", ".join("%s" for _ in actor_ids)
     session_rows = await MySQLPool.fetchall(
-        "SELECT `bot_token` FROM `bot` "
-        "WHERE check_group>=1 ",
-    
-        error_tag="userbot.random_session_tokens",
+        "SELECT `bot_id`, `bot_token` FROM `bot` "
+        f"WHERE check_group>=1 AND `bot_id` IN ({placeholders}) "
+        "AND `bot_token` IS NOT NULL AND `bot_token` != ''",
+        tuple(int(actor_id) if actor_id.isdigit() else actor_id for actor_id in actor_ids),
+        error_tag="userbot.script_session_tokens_by_actor",
     )
-    
-    if not session_rows:
-        raise RuntimeError(
-            "从数据库中获取到的 session_rows 为空"
-        )
-    if len(session_rows) < 1:
-        raise RuntimeError(
-            f"数据库中的 bot_token 数量不足：需要 1 个，实际只有 {len(session_rows)} 个"
-        )
-    
-
-    session_set = {
-        index: str(row["bot_token"]).strip()
-        for index, row in enumerate(session_rows)
+    sessions_by_bot_id = {
+        str(row["bot_id"]): str(row["bot_token"]).strip()
+        for row in session_rows
     }
-
-
-
-    #Mathis
-
-    account_configs = {}
-    participant_count = len(script["participants"])
-    if len(session_set) < participant_count:
+    missing_actor_ids = [
+        actor_id for actor_id in actor_ids if actor_id not in sessions_by_bot_id
+    ]
+    if missing_actor_ids:
         raise RuntimeError(
-            f"StringSession 数量不足：需要 {participant_count} 个，只有 {len(session_set)} 个"
+            "bot 表中找不到这些 actor_id 对应的可用 bot_id/StringSession："
+            + ", ".join(missing_actor_ids)
         )
 
-    for participant, session_string in zip(
-        script["participants"],
-        session_set.values(),
-    ):
-        account_configs[str(participant["sender_id"])] = {
+    account_configs = {
+        str(participant["sender_id"]): {
             "api_id": int(os.environ["API_ID"]),
             "api_hash": os.environ["API_HASH"],
-            "session_string": session_string,
+            "session_string": sessions_by_bot_id[str(participant["actor_id"])],
         }
+        for participant in participants
+    }
     chat_id = -1004335920222
     # chat_id = -1004303617422
     chat_invite_link = os.getenv("CHAT_INVITE_LINK", "").strip() or None

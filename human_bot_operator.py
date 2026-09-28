@@ -459,12 +459,15 @@ class HumanBotOperator:
             if not isinstance(participant, dict):
                 raise ValueError("participants 每一项必须是 object")
             actor_id = participant.get("actor_id")
+            if isinstance(actor_id, bool) or not isinstance(actor_id, (int, str)):
+                raise ValueError("participants.actor_id 不可为空或重复")
+            actor_id = str(actor_id).strip()
             if (
-                not isinstance(actor_id, str)
-                or not actor_id.strip()
+                not actor_id
                 or actor_id in actor_ids
             ):
                 raise ValueError("participants.actor_id 不可为空或重复")
+            participant["actor_id"] = actor_id
             actor_ids.add(actor_id)
             if not isinstance(participant.get("name"), str):
                 raise ValueError(f"{actor_id}.name 必须是字符串")
@@ -490,8 +493,15 @@ class HumanBotOperator:
                 or message_id in message_ids
             ):
                 raise ValueError("messages.message_id 不可为空或重复")
-            if message.get("actor_id") not in actor_ids:
+            message_actor_id = message.get("actor_id")
+            if isinstance(message_actor_id, bool) or not isinstance(
+                message_actor_id, (int, str)
+            ):
                 raise ValueError(f"{message_id}.actor_id 不存在")
+            message_actor_id = str(message_actor_id).strip()
+            if message_actor_id not in actor_ids:
+                raise ValueError(f"{message_id}.actor_id 不存在")
+            message["actor_id"] = message_actor_id
 
             after_start = message.get("after_start")
             typing_duration = message.get("typing_duration")
