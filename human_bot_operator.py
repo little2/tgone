@@ -1525,8 +1525,17 @@ class HumanBotOperator:
                 if is_photo and ("只数清晰的大图案" in response_message or "与上方物体相同" in response_message):
                     print("❗️ 收到符合条件的图片媒体消息(验证码)。", flush=True)
                     print(f"{self.FREE_CHAT_ID} {self.REWARD_BOT_NAME} 已处理。")
-                    await self.handle_captcha(response, user_id=self.FREE_CHAT_ID, reward_bot_name=self.REWARD_BOT_NAME)
-                    continue    #这条消息不算有效媒体，忽略它
+
+                    result = await self.handle_captcha(
+                        response,
+                        user_id=self.FREE_CHAT_ID,
+                        reward_bot_name=self.REWARD_BOT_NAME,
+                    )
+                    if result is True:
+                        continue    # 验证成功，继续等待后续媒体
+
+                    print("⚠️ 验证码处理失败，不等待媒体，结束此轮处理。", flush=True)
+                    return False
 
 
                 # 机器人直接发送媒体，或点击按钮后发送实际文件。
@@ -1574,10 +1583,14 @@ class HumanBotOperator:
             HumanBotOperator._bot_cache[token] = bot
         return bot
 
-    async def handle_captcha(self, response: Any, user_id: int | None = None, reward_bot_name: str | None = None):
-        """委托给独立的验证码处理器执行。"""
+    async def handle_captcha(self, response: Any, user_id: int | None = None, reward_bot_name: str | None = None) -> bool:
+        """委托给独立的验证码处理器执行，并返回是否成功处理。"""
         captcha_operator = CaptchaBotOperator(client=self.client)
-        await captcha_operator.handle_captcha(response=response, user_id=user_id, reward_bot_name=reward_bot_name)
+        return await captcha_operator.handle_captcha(
+            response=response,
+            user_id=user_id,
+            reward_bot_name=reward_bot_name,
+        )
 
     @classmethod
     async def handle_captcha_callback(cls, callback_query: Any) -> bool:

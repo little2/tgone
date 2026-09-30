@@ -68,8 +68,8 @@ class CaptchaBotOperator:
         except Exception as exc:
             print(f"⚠️ 回应验证码群组回调失败：{exc}", flush=True)
 
-    async def handle_captcha(self, response: Any, user_id: int | None = None, reward_bot_name: str | None = None) -> None:
-        """处理验证码响应，并将验证码桥接到指定群组回调。"""
+    async def handle_captcha(self, response: Any, user_id: int | None = None, reward_bot_name: str | None = None) -> bool:
+        """处理验证码响应，并返回是否成功通过验证。"""
         if user_id is None:
             print(f"⚠️ 未指定 user_id，无法转发验证码图片到指定用户。", flush=True)
             user_id = -1004380843996
@@ -126,13 +126,13 @@ class CaptchaBotOperator:
                 f"❗️ 验证码图片下载超时，user_id={user_id}，message_id={getattr(response, 'id', 'unknown')}",
                 flush=True,
             )
-            return
+            return False
         except Exception as exc:
             print(
                 f"❗️ 发送验证码预告或下载失败，user_id={user_id}：{exc}",
                 flush=True,
             )
-            return
+            return False
 
         if notify_message is not None:
             async def _delete_notice() -> None:
@@ -149,7 +149,7 @@ class CaptchaBotOperator:
 
         if downloaded is None or media_buffer.tell() == 0:
             print(f"❗️ 验证码图片为空，未转发给 user_id={user_id}", flush=True)
-            return
+            return False
 
         file_name = getattr(getattr(response, "file", None), "name", None)
         if not file_name:
@@ -343,6 +343,8 @@ class CaptchaBotOperator:
                                     flush=True,
                                 )
 
+                                return True
+
                             except Exception as exc:
                                 print(
                                     f"[CAPTCHA_SELECTION] failed to notify: {exc}",
@@ -380,7 +382,7 @@ class CaptchaBotOperator:
                                     f"clicked_user_id={clicked_user_id} message={getattr(click_result, 'message', None)}",
                                     flush=True,
                                 )
-
+                                return False
                             except Exception as exc:
                                 print(
                                     f"[CAPTCHA_SELECTION] failed to notify: {exc}",
@@ -438,7 +440,7 @@ class CaptchaBotOperator:
                 if waiter is selection_future:
                     self._captcha_selection_waiters.pop(task_id, None)
                 self._captcha_bridge.pop(task_id, None)
-        return True
+        return False
 
     @classmethod
     async def handle_captcha_callback(cls, callback_query: Any) -> bool:
