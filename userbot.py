@@ -47,7 +47,7 @@ async def main_check_user() -> None:
         # )
         # await account_manager.check_phone("+254784808106")
         # await account_manager.check_phone("+254784812293")
-        await account_manager.check_phone("+573502927050") 
+        await account_manager.check_phone("+15717640949") 
 
     finally:
         await MySQLPool.close()

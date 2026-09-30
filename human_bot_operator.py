@@ -488,11 +488,14 @@ class HumanBotOperator:
                 raise ValueError("messages 每一项必须是 object")
             message_id = message.get("message_id")
             if (
-                not isinstance(message_id, str)
-                or not message_id.strip()
-                or message_id in message_ids
+                isinstance(message_id, bool)
+                or not isinstance(message_id, (int, str))
             ):
                 raise ValueError("messages.message_id 不可为空或重复")
+            message_id = str(message_id).strip()
+            if not message_id or message_id in message_ids:
+                raise ValueError("messages.message_id 不可为空或重复")
+            message["message_id"] = message_id
             message_actor_id = message.get("actor_id")
             if isinstance(message_actor_id, bool) or not isinstance(
                 message_actor_id, (int, str)
@@ -521,8 +524,13 @@ class HumanBotOperator:
                 raise ValueError(f"{message_id}.typing_duration 必须是非负数")
 
             reply_to = message.get("reply_to")
-            if reply_to is not None and not isinstance(reply_to, str):
-                raise ValueError(f"{message_id}.reply_to 必须是字符串或 null")
+            if reply_to is not None:
+                if isinstance(reply_to, bool) or not isinstance(reply_to, (int, str)):
+                    raise ValueError(
+                        f"{message_id}.reply_to 必须是字符串、整数或 null"
+                    )
+                reply_to = str(reply_to).strip()
+                message["reply_to"] = reply_to
             if reply_to is not None and (
                 reply_to not in message_ids
                 or message_ids[reply_to] >= float(after_start)
