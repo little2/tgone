@@ -7,6 +7,7 @@ import os
 import re
 import unicodedata
 from datetime import datetime
+from html import escape as html_escape
 from urllib.parse import quote
 
 from aiogram import Bot, Dispatcher
@@ -187,8 +188,10 @@ class AiogramBotOperator:
 
 
     def _build_forward_caption(self, payload: dict) -> str:
-        """将媒体 JSON caption 转为频道展示用的三行文本。"""
+        """将媒体 JSON caption 转为频道展示用的三行文本（HTML 格式，须以 parse_mode="HTML" 发送）。"""
         description = payload.get("description", "")
+        # description 已经是 Telegram 可用的 HTML（保留原始 Blockquote/加粗等格式设定），
+        # 这里只合并多余空白，不对标签做转义。
         description_line = (
             re.sub(r"\s+", " ", description).strip()
             if isinstance(description, str)
@@ -203,17 +206,19 @@ class AiogramBotOperator:
             for tag in tags
             if isinstance(tag, str) and tag.removeprefix("#").strip()
         )
-        lines = [description_line, file_code]
+        # file_code 与 tag_line 是纯文字，需转义以免破坏 HTML 结构或被误判为标签。
+        lines = [description_line, html_escape(file_code)]
         if tag_line:
-            lines.append(tag_line)
+            lines.append(html_escape(tag_line))
         return "\n".join(lines)
 
     async def _send_file(
         self,
         destination_chat_id: int | str,
-        message: Message,
+        message: Message, 
         caption: str,
         include_portal_button: bool = False,
+        parse_mode: str | None = "HTML",
     ) -> None:
         """以原媒体 file_id 重发文件，并使用指定 caption。"""
         reply_markup = None
@@ -240,6 +245,7 @@ class AiogramBotOperator:
                 photo=message.photo[-1].file_id,
                 caption=caption,
                 reply_markup=reply_markup,
+                parse_mode=parse_mode,
             )
         elif message.video:
             await self.bot.send_video(
@@ -247,6 +253,7 @@ class AiogramBotOperator:
                 video=message.video.file_id,
                 caption=caption,
                 reply_markup=reply_markup,
+                parse_mode=parse_mode,
             )
         elif message.animation:
             await self.bot.send_animation(
@@ -254,6 +261,7 @@ class AiogramBotOperator:
                 animation=message.animation.file_id,
                 caption=caption,
                 reply_markup=reply_markup,
+                parse_mode=parse_mode,
             )
         elif message.document:
             await self.bot.send_document(
@@ -261,6 +269,7 @@ class AiogramBotOperator:
                 document=message.document.file_id,
                 caption=caption,
                 reply_markup=reply_markup,
+                parse_mode=parse_mode,
             )
         elif message.audio:
             await self.bot.send_audio(
@@ -268,6 +277,7 @@ class AiogramBotOperator:
                 audio=message.audio.file_id,
                 caption=caption,
                 reply_markup=reply_markup,
+                parse_mode=parse_mode,
             )
         elif message.voice:
             await self.bot.send_voice(
@@ -275,6 +285,7 @@ class AiogramBotOperator:
                 voice=message.voice.file_id,
                 caption=caption,
                 reply_markup=reply_markup,
+                parse_mode=parse_mode,
             )
         else:
             raise ValueError("不支持以带 caption 的方式重发此媒体类型")

@@ -1,6 +1,7 @@
 """已登录 Telegram 使用者账号的人型机器人操作。"""
 
 import asyncio
+import copy
 import ctypes
 import hashlib
 import io
@@ -46,6 +47,7 @@ from telethon.tl.types import (
 )
 
 from telethon import utils
+from telethon.extensions import html as telethon_html
 from aiogram import Bot
 
 from captcha_bot_operator import CaptchaBotOperator
@@ -57,6 +59,7 @@ class HumanBotOperator:
 
     MONITOR_FORWARD_CHAT_ID = 5334310434
     BJD_CODE_BOT_ID = 8915213940
+    FZ_CODE_BOT_ID = 8791594127
     REWARD_BOT_NAME = "zttower5bot"
     FREE_CHAT_ID = -1002093182221
     PROTECTED_MEDIA_TRANSFER_TIMEOUT_SECONDS = 5 * 60
@@ -623,11 +626,12 @@ class HumanBotOperator:
 
     async def routine_insert(self):
         
-        for i in range(4909, 4899, -1):  # 从 4900 往下降到 4800
+        for i in range(1412, 1, -1):  # 从 6260 往下降到 2
             await self._insert_sora_code(
                 code = f"item_{i}",
                 source_chat_id=None,
                 source_message_id=None, 
+                bot_id=self.FZ_CODE_BOT_ID,
             )
 
     async def tracking_message_range(
@@ -1148,11 +1152,14 @@ class HumanBotOperator:
                 # 只从最新 30 笔待提取记录中随机选择，避免 ORDER BY RAND() 全表扫描。
                 rows = await MySQLPool.fetchall(
                     "SELECT * FROM `sora_code` "
-                    "WHERE `extract_status` IN (0,2) ORDER BY `id` DESC LIMIT 30",
+                    "WHERE `extract_status` IN (0,2) ORDER BY `id` DESC LIMIT 100",
                     error_tag="human_bot_operator.extract.get_random_secret_id",
                 )
                 if not rows:
-                    raise LookupError("找不到 extract_status = 0 的 sora_code 记录")
+                    print("未找到 extract_status = 0 的 sora_code 记录，等待 60 秒后重试...", flush=True)
+                    await asyncio.sleep(60)
+                    return None
+                   
                 record = random.choice(rows)
                 secret_id = int(record["id"])
             else:
@@ -1196,7 +1203,20 @@ class HumanBotOperator:
             if target_bot.user_id == 8791594127:
                 send_code = f"/start {send_code}"
 
-            sent_message = await self.client.send_message(target_bot, send_code)
+            try:
+                sent_message = await asyncio.wait_for(
+                    self.client.send_message(target_bot, send_code),
+                    timeout=timeout,
+                )
+            except (TimeoutError, ConnectionError, OSError) as exc:
+                print(
+                    f"⚠️ 发送密文给机器人 {target_bot} 失败或超过 {timeout} 秒"
+                    f"（可能是连线被服务器中断）：{exc}",
+                    flush=True,
+                )
+                if secret_id is not None:
+                    await self._mark_extract_status(secret_id, 14)
+                return False
             print(
                 f"已发送密文：code={send_code} "
                 f"message_id={sent_message.id}，开始监听机器人回应。",
@@ -1300,19 +1320,40 @@ class HumanBotOperator:
                                 '''                
 
                 if secret_id:
+
                     if "该文件组的查看次数已用完" in response_message or "已用完" in response_message:
                         await self._mark_extract_status(secret_id, 11)
                         print("⚠️ 该文件组的查看次数已用完", flush=True)
                         return response
-                    if "该文件组当前不可用" in response_message or "該檔案組目前不可用" in response_message:
+                    elif "该文件组当前不可用" in response_message or "該檔案組目前不可用" in response_message:
                         await self._mark_extract_status(secret_id, 12)
                         print("⚠️ 该文件组当前不可用", flush=True)
                         return response
-                    if "该文件组仅可查看一次" in response_message or "可查看一次" in response_message:
+                    elif "资源不存在或已不可用。" in response_message:
+                        await self._mark_extract_status(secret_id, 12)
+                        print("⚠️ 资源不存在或已不可用。", flush=True)
+                        return response                    
+                    elif "该文件组仅可查看一次" in response_message or "可查看一次" in response_message:
                         await self._mark_extract_status(secret_id, 13)
                         print("⚠️ 该文件组仅可查看一次", flush=True)
-                        return response                    
-                    if "信譽等級不足" in response_message:
+                        return response      
+                    elif "此资源已由作者下架" in response_message:
+                        await self._mark_extract_status(secret_id, 15)
+                        print("⚠️ 此资源已由作者下架", flush=True)
+                        return response   
+                    elif "此资源已下架" in response_message:
+                        await self._mark_extract_status(secret_id, 12)
+                        print("⚠️ 此资源已下架", flush=True)
+                        return response
+                    elif "资源已由管理员下架" in response_message:
+                        await self._mark_extract_status(secret_id, 12)
+                        print("⚠️ 资源已由管理员下架", flush=True)
+                        return response
+                   
+
+
+                    
+                    elif "信譽等級不足" in response_message:
                         # await self._mark_extract_status(secret_id, 11)
                         print(f"⚠️ {response_message}", flush=True)
                         return response                 
@@ -1343,12 +1384,16 @@ class HumanBotOperator:
 
                     # 得到预览图。
                     if hasattr(media, "photo"):
-                        if record['extract_status'] != 2:
+                        if record['extract_status'] != 2 and record['extract_status'] != 1:
                             await self._forward_media_with_json_caption(
                                 target=self.taobao_bot_username,
                                 message=response,
                                 file_code=code,
                             )
+
+                        if has_complaint_button:
+                            await self._mark_extract_status(secret_id, 1)
+
 
                     if has_complaint_button:
                         return True
@@ -1371,29 +1416,37 @@ class HumanBotOperator:
                  
                         # print(f"callback_result={callback_result}", flush=True)
 
-                        msg = getattr(callback_result, "message", None) or getattr(callback_result, "alert", None)
+                        msg = getattr(callback_result, "message", None)
+                        if not isinstance(msg, str):
+                            msg = None
                         if msg is not None:
                             print(f"callback_result message: {msg}", flush=True)
 
-                        if msg and "今日公共文件组获取次数已用完" in msg:
-                            print(f"{msg}", flush=True)
-                            return response    
 
-                        if msg and (
-                            "操作过于频繁" in msg
-                            or "文件额度不足" in msg
-                            or ("请在" in msg and "秒后重试" in msg)
-                            or ("A wait of" in msg and "seconds is required" in msg)
-                        ):
-                            print(f"触发频繁操作或文件额度不足: {msg}", flush=True)
-                            wait_seconds = HumanBotOperator._extract_wait_seconds_from_telegram_message(msg)
-                            if wait_seconds is not None:
-                                print(
-                                    f"⚠️ 触发 Telegram 限流：{msg}，等待 {wait_seconds} 秒后继续。",
-                                    flush=True,
-                                )
-                                await asyncio.sleep(wait_seconds + 1)      
-                            return response    
+                            if "此目录及其下级内容仅限编辑员下载" in msg and secret_id:
+                                await self._mark_extract_status(secret_id, 16)
+                                print("⚠️ 此目录及其下级内容仅限编辑员下载", flush=True)
+                                return response
+
+                            if "今日公共文件组获取次数已用完" in msg:
+                                print(f"{msg}", flush=True)
+                                return response    
+
+                            if  (
+                                "操作过于频繁" in msg
+                                or "文件额度不足" in msg
+                                or ("请在" in msg and "秒后重试" in msg)
+                                or ("A wait of" in msg and "seconds is required" in msg)
+                            ):
+                                print(f"触发频繁操作或文件额度不足: {msg}", flush=True)
+                                wait_seconds = HumanBotOperator._extract_wait_seconds_from_telegram_message(msg)
+                                if wait_seconds is not None:
+                                    print(
+                                        f"⚠️ 触发 Telegram 限流：{msg}，等待 {wait_seconds} 秒后继续。",
+                                        flush=True,
+                                    )
+                                    await asyncio.sleep(wait_seconds + 1)      
+                                return response    
                         # print(
                         #     f"callback_result does not indicate frequent operation or insufficient file quota: {msg}",
                         #     flush=True,
@@ -1457,7 +1510,9 @@ class HumanBotOperator:
                     if callback_result:
                         # print(f"callback_result message: {getattr(callback_result, 'message', None)}, alert: {getattr(callback_result, 'alert', None)}", flush=True)
 
-                        msg = getattr(callback_result, "message", None) or getattr(callback_result, "alert", None)
+                        msg = getattr(callback_result, "message", None)
+                        if not isinstance(msg, str):
+                            msg = None
                         print(f"msg2={msg}",flush=True)
                         if msg and (
                             "操作过于频繁" in msg
@@ -1645,7 +1700,7 @@ class HumanBotOperator:
         json_dict = dict()
         if from_id == cls.BJD_CODE_BOT_ID:  # 示例 bot_id
             json_dict =  cls._build_extract_caption_bjd(message, file_code=file_code)
-        elif from_id == 8791594127:  # 另一个示例 bot_id
+        elif from_id == cls.FZ_CODE_BOT_ID:  # 另一个示例 bot_id
             json_dict = cls._build_extract_caption_fz(message)
 
         if not json_dict:
@@ -1743,6 +1798,56 @@ class HumanBotOperator:
 
 
     @classmethod
+    def _slice_entities(
+        cls,
+        entities: list[Any] | None,
+        start: int = 0,
+        end: int | None = None,
+    ) -> list[Any]:
+        """
+        按 UTF-16 offset 范围裁切 message entities，并将 offset 对齐到新的起点（0）。
+        与 end 边界重叠的 entity 会被裁短，完全落在范围外的 entity 会被剔除。
+        """
+        sliced: list[Any] = []
+        for entity in entities or []:
+            entity_start = entity.offset
+            entity_end = entity.offset + entity.length
+
+            if entity_end <= start:
+                continue
+            if end is not None and entity_start >= end:
+                continue
+
+            clipped_start = max(entity_start, start)
+            clipped_end = entity_end if end is None else min(entity_end, end)
+            if clipped_end <= clipped_start:
+                continue
+
+            clipped_entity = copy.copy(entity)
+            clipped_entity.offset = clipped_start - start
+            clipped_entity.length = clipped_end - clipped_start
+            sliced.append(clipped_entity)
+
+        return sliced
+
+
+    @classmethod
+    def _build_html_description(
+        cls,
+        text: str,
+        entities: list[Any] | None,
+        start: int = 0,
+        end: int | None = None,
+    ) -> str:
+        """
+        按 UTF-16 offset 范围截取文字与对应 entities，并转换为 HTML 格式字符串。
+        """
+        snippet = cls._slice_utf16(text, start, end)
+        snippet_entities = cls._slice_entities(entities, start, end)
+        return telethon_html.unparse(snippet, snippet_entities)
+
+
+    @classmethod
     def _extract_file_code(cls,message: Message) -> str | None:
         """
         从 KeyboardButtonCopy.copy_text 中提取：
@@ -1780,10 +1885,12 @@ class HumanBotOperator:
         根据 Telegram Message Entity 结构解析资源信息。
 
         规则：
-        1. 第一个 MessageEntityBlockquote 之前 = description
+        1. 第一个 MessageEntityBlockquote 之前 + 第一个 MessageEntityBlockquote 内容 (包括引用本身) = description
         2. Blockquote 后方的 MessageEntityHashtag = hashtags
         3. KeyboardButtonCopy.copy_text 中 URL 的 start= = file_code
         """
+
+        # print(f"message={message}")
 
         text = message.message or ""
         entities = message.entities or []
@@ -1806,16 +1913,17 @@ class HumanBotOperator:
         # 2. description
         # --------------------------------------------------
 
-        if blockquote:
-            description = cls._slice_utf16(
-                text,
-                0,
-                blockquote.offset
-            ).strip()
-        else:
-            # 没有 Blockquote 时，
-            # 可以视整个 caption 为 description
-            description = text.strip()
+        description_end = (
+            blockquote.offset + blockquote.length if blockquote else None
+        )
+
+        # 按 HTML 格式输出，保留原有的 MessageEntityBlockquote 等格式设定。
+        description = cls._build_html_description(
+            text,
+            entities,
+            0,
+            description_end,
+        ).strip()
 
         # --------------------------------------------------
         # 3. hashtags
@@ -1862,7 +1970,7 @@ class HumanBotOperator:
         """从机器人回应提取描述、8 Emoji 文件码与标签并生成 dict"""
         
         message_text = cls._get_response_text(message)
-        description = message_text.partition("📦 所含文件")[0].strip()
+        description = message_text.partition("🔑 文件码")[0].strip()
 
 
         if file_code is None:
@@ -1893,7 +2001,9 @@ class HumanBotOperator:
 
         return {
             "table": "pack",
-            "description": description,
+            # description 存的是纯文字，统一转成 Telegram 可用的 HTML（转义特殊字符），
+            # 与 fz 来源保持一致，下游才能安全地以 parse_mode="HTML" 发送。
+            "description": telethon_html.escape(description),
             "file_code": file_code,
             "tags": tags,
         }
@@ -1977,7 +2087,7 @@ class HumanBotOperator:
 
         if caption is None:
             caption = self._build_extract_caption_by_bot(message, file_code=file_code)
-            print(f"使用的 caption: {caption}", flush=True)
+            # print(f"使用的 caption: {caption}", flush=True)
 
         last_exc: Exception | None = None
         for attempt in range(1, 4):
@@ -2483,10 +2593,14 @@ class HumanBotOperator:
         *,
         source_chat_id: int | None,
         source_message_id: int | None,
+        bot_id: int | None = None,
     ) -> None:
         """将 Emoji 密文及其 Unicode NFC SHA-256 写入 sora_code。"""
         normalized_code = unicodedata.normalize("NFC", code)
         code_hash_hex = hashlib.sha256(normalized_code.encode("utf-8")).hexdigest()
+        if bot_id is None:
+            bot_id = self.BJD_CODE_BOT_ID
+
         await MySQLPool.execute(
             "INSERT INTO `sora_code` "
             "(`code`, `code_hash`, `bot_id`, `created_ts`, "
@@ -2499,7 +2613,7 @@ class HumanBotOperator:
             (
                 code,
                 code_hash_hex,
-                self.BJD_CODE_BOT_ID,
+                bot_id,
                 int(time.time()),
                 source_chat_id,
                 source_message_id,
