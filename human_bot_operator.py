@@ -1152,7 +1152,7 @@ class HumanBotOperator:
                 # 只从最新 30 笔待提取记录中随机选择，避免 ORDER BY RAND() 全表扫描。
                 rows = await MySQLPool.fetchall(
                     "SELECT * FROM `sora_code` "
-                    "WHERE `extract_status` IN (0,2) ORDER BY `id` DESC LIMIT 100",
+                    "WHERE `extract_status` IN (0,2) and bot_id != 8791594127 ORDER BY `id` DESC LIMIT 100",
                     error_tag="human_bot_operator.extract.get_random_secret_id",
                 )
                 if not rows:

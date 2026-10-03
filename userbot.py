@@ -191,7 +191,7 @@ async def run_telethon_bot(
                 # await op.join_chat("https://t.me/+_Pz9_6udznFlMDhi") #玉树花
 
                 # await op.join_chat("https://t.me/+HYvGBwaTSUEyYzkx")  #正太方舟
-                await op.client.send_message("@posterre_bot", "/checkin")      
+                # await op.client.send_message("@posterre_bot", "/checkin")      
                 # await op.join_chat("https://t.me/+LmR0F1WpnFQ0Y2Ix")
                 # await op.client.send_message("@ztFreeJJBOT", "/start") 
             except Exception as e:
@@ -405,7 +405,7 @@ async def main() -> None:
 if __name__ == "__main__":
     async def _run_all() -> None:
         # await main_check_user()
-        # await main_auto_talk()
+        await main_auto_talk()
         await main()
 
 
