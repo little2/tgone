@@ -1,6 +1,7 @@
 """已登录 Telegram 使用者账号的人型机器人操作。"""
 
 import asyncio
+import code
 import copy
 import ctypes
 import hashlib
@@ -921,7 +922,7 @@ class HumanBotOperator:
             click_result_content = HumanBotOperator._format_button_click_result(
                 click_result
             )
-            if click_result_content:
+            if click_result_content and HumanBotOperator.show_response:
                 print(f"[按钮回调] {click_result_content}", flush=True)
 
             done, pending = await asyncio.wait(
@@ -1069,6 +1070,14 @@ class HumanBotOperator:
                     if inline_query is not None:
                         details.append(f"inline_query={inline_query}")
 
+                    requires_password = getattr(button, "requires_password", None)
+                    if requires_password is None:
+                        requires_password = getattr(
+                            original_button, "requires_password", None
+                        )
+                    if requires_password:
+                        details.append("requires_password=True")
+
                     formatted_buttons.append(" | ".join(details))
                 content_lines.append(
                     f"  第 {row_number} 行: " + " || ".join(formatted_buttons)
@@ -1123,6 +1132,200 @@ class HumanBotOperator:
             (secret_id,),
             error_tag="human_bot_operator.get_secret",
         )
+
+    @staticmethod
+    async def get_code(code: str) -> dict[str, Any] | None:
+        """根据code 取得一笔完整的 sora_code 记录。"""
+        if isinstance(code, bool) or not isinstance(code, str):
+            raise TypeError("code 必须是文本")
+
+
+        return await MySQLPool.fetchone(
+            "SELECT `id`, `code`, `code_hash`, `pack_id`, `bot_id`, "
+            "`valid_state`, `created_ts`, `source_chat_id`, "
+            "`source_message_id`, `extract_status`, `desc_order_id` FROM `sora_code` "
+            "WHERE `code` = %s LIMIT 1",
+            (code,),
+            error_tag="human_bot_operator.get_code",
+        )
+
+    async def fetch_list(self,page:int|None = None,desc_order_id:int|None = 0):
+        '''
+        首頁    /start
+        排行榜
+        最行發布
+        
+        放大鏡
+        輸入最後一頁 （8035）
+        出現列表        
+        '''
+
+        _qty = 0
+        target_bot = await self._resolve_input_entity("@yunupan1bot")
+
+        desc_order_id = int(desc_order_id)
+
+        if desc_order_id <= 0:    
+            desc_order_id = await self._get_resume_message_id(source_chat_id='10001') or 0
+
+
+
+        # 首頁    /start
+        result = await self.capture_bot_messages(target_bot, "/start")
+        if not result:
+            print("⚠️ 沒有取得 /start 首頁訊息", flush=True)
+            return
+        menu_id = result[-1].id                      # 用最後一則，通常才是選單
+
+        result2 = await self.capture_bot_messages(
+            target_bot, click_button_title="🏆", message_id=menu_id
+        )
+        if not result2:
+            print("⚠️ 排行榜點擊後沒有取得任何輸出", flush=True)
+            return
+        board_id = result2[-1].id
+       
+    
+
+        result_most_recent = await self.capture_bot_messages(
+            target_bot, click_button_title="🆕", message_id=board_id
+        )
+        if not result_most_recent:
+            print("⚠️ 點擊「🆕 最新發布」後沒有取得任何輸出", flush=True)
+            return
+        latest_id = result_most_recent[-1].id
+
+        if result_most_recent and result_most_recent[-1].raw_text:
+            caption_text = result_most_recent[-1].raw_text
+            # 以 📦 来分割字串，再列出最后一个
+            caption_text = caption_text.split("📦")[-1]
+            
+
+            result_detail = await self.capture_bot_messages(
+                target_bot, click_button_title=caption_text, message_id=latest_id
+            )
+            if not result_detail:
+                print(f"⚠️ 點擊「{caption_text}」後沒有取得任何輸出", flush=True)
+                return
+
+            get_buttons = getattr(result_detail[-1], "get_buttons", None)
+            buttons = await get_buttons() if callable(get_buttons) else None
+            if buttons:
+                for row_number, row in enumerate(buttons, start=1):                
+                    for button in row:                   
+                        button_text = str(getattr(button, "text", "") or "[无文字]")
+                        # 使用正則式，如果 button_text 的組成是 數字/數字
+                        match = re.match(r"(\d+)/(\d+)", button_text)
+                        if match:
+                            _, max_item = map(int, match.groups())
+                            last_item = max_item - desc_order_id
+                            last_item = str(last_item)
+
+                            result_click_jump = await self.capture_bot_messages(
+                                target_bot, click_button_title=button_text, message_id=result_detail[-1].id
+                            )
+
+                            result_jump_to = await self.capture_bot_messages(target_bot, send_text=last_item)
+                            current_item = await self.parse_bot_response(result_jump_to[-1])
+                            latest_id = result_jump_to[-1].id
+            
+                            while current_item != max_item:
+                                result_loop = await self.capture_bot_messages(
+                                    target_bot, click_button_title="⬅️", message_id=latest_id
+                                )
+                                    
+                                if not result_loop:
+                                    print("⚠️ 點擊「⬅️」後沒有取得任何輸出", flush=True)
+                                    return
+                                current_item =await self.parse_bot_response(result_loop[-1])
+                                latest_id = result_loop[-1].id
+                                await asyncio.sleep(3)
+                                _qty += 1
+                                if _qty >= 30:
+                                    print("⚠️ 已達到最大嘗試次數，停止循環", flush=True)
+                                    return
+
+
+
+        
+            
+
+
+    async def parse_bot_response(
+        self,
+        message: Any
+    ) -> str:
+        """解析机器人回应，返回格式化后的文本内容。"""
+        try:
+            caption = message.raw_text
+            code = self._extract_consecutive_emojis(message.raw_text, count=8)
+            if code is None:
+                pass
+            else:
+                
+                caption = caption.replace(f"[{code}]", "")
+                caption = caption.strip()
+                if self.show_response:
+                    print(f"Extracted code: {code}\n caption={caption}", flush=True)
+               
+                
+
+
+            get_buttons = getattr(message, "get_buttons", None)
+            buttons = await get_buttons() if callable(get_buttons) else None
+            if buttons:
+                for row_number, row in enumerate(buttons, start=1):                
+                    for button in row:                   
+                        button_text = str(getattr(button, "text", "") or "[无文字]")
+                        # 使用正則式，如果 button_text 的組成是 數字/數字
+                        match = re.match(r"(\d+)/(\d+)", button_text)
+                        if match:
+                            current_item, max_item = map(int, match.groups())
+                            desc_order_id = max_item - current_item
+                            if self.show_response:
+                                print(f"Parsed pagination: current_item={current_item}, max_item={max_item}", flush=True)
+                            await self._insert_sora_code(
+                                code,
+                                source_chat_id=0,
+                                source_message_id=0,
+                                desc_order_id=desc_order_id
+                            )
+
+                            sora_code = await self.get_code(code)
+
+                            json_dict = {
+                                "table": "pack",
+                                "description": caption,
+                                "file_code": code,
+                                "tags": [],
+                            }
+
+                            if sora_code and sora_code.get("extract_status") !=1 and sora_code.get("extract_status") !=2:
+                                await self._forward_media_with_json_caption(
+                                    target=self.taobao_bot_username,
+                                    message=message,
+                                    file_code=code,
+                                    caption=json.dumps(json_dict, ensure_ascii=False),
+                                )
+
+                            await self._upsert_extra_log(source_chat_id='10001',next_message_id=desc_order_id)
+                            return current_item
+                            
+
+
+
+
+           
+        except Exception as e:
+            print(f"⚠️ 无法解析机器人回应: {e}", flush=True)
+            return ""
+       
+
+
+
+
+
+        
 
     async def extract(
         self,
@@ -1223,6 +1426,7 @@ class HumanBotOperator:
                 flush=True,
             )
 
+            
             while True:
                 wait_timeout = float(timeout)
                 if media_idle_deadline is not None:
@@ -2158,7 +2362,7 @@ class HumanBotOperator:
                 )
                 if self.show_response and sent_message:
                     print(
-                        f"重新发送媒体成功: @{target_name}",
+                        f"重新发送媒体成功: @{target_name} {caption}",
                         flush=True,
                     )
                 return sent_message
@@ -2365,6 +2569,474 @@ class HumanBotOperator:
             error_tag="human_bot_operator.upsert_extra_log",
             raise_on_error=True,
         )
+
+    async def capture_bot_messages(
+        self,
+        bot: Any,
+        send_text: str | None = None,
+        *,
+        click_button_title: str | None = None,
+        message_id: int | None = None,
+        timeout: float = 10.0,
+        idle_timeout: float | None = None,
+        poll_interval: float = 2.0,
+        stop_keywords: set[str] | None = None,
+        max_messages: int | None = 1,
+        include_edited: bool = True,
+        return_texts: bool = False,
+    ) -> list[Any]:
+        """擷取指定机器人输出的消息，可先发送触发消息或点击按钮后再收集。
+
+        参数（send_text、click_button_title 与 message_id 皆为非必填）：
+            send_text:          发送给机器人的触发消息（如 "/start" 或密文）。
+            click_button_title: 当机器人输出中出现名称符合此值的按钮时，点击
+                                该按钮一次，再继续收集之后收到的消息。
+            message_id:         指定要点击按钮的既有消息 ID；必须与
+                                click_button_title 搭配使用。有值时不再依赖
+                                新消息触发的按钮，而是直接取得该 message_id
+                                的消息、点击其中文字符合 click_button_title
+                                的按钮，再回传机器人这次点击的反馈信息。
+                                点击后会同时「轮询」该消息（见 poll_interval），
+                                即使 Telegram 没有推送编辑事件，只要内容改变
+                                也一样会被回传。
+            poll_interval:     message_id 路径下回读该消息、比对内容是否改变的
+                                间隔秒数（默认 2 秒）。仅在传入 message_id 时
+                                生效；不传 message_id 时不会产生额外请求。
+        两者皆不填时（未指定 send_text、click_button_title 与 message_id），
+        只会等待并回传该机器人在等待期间输出的消息。
+
+        用法：
+            await op.capture_bot_messages("@yunupan1bot", "/start")
+            await op.capture_bot_messages(
+                "@yunupan1bot", "/start", click_button_title="排行榜"
+            )
+            await op.capture_bot_messages(
+                "@yunupan1bot", click_button_title="排行榜"
+            )
+            await op.capture_bot_messages(
+                "@yunupan1bot",
+                click_button_title="排行榜",
+                message_id=8416,
+            )
+
+        流程：解析目标机器人 -> 注册消息事件 ->（可选）发送 send_text ->
+        （可选）点击指定 message_id 中符合 click_button_title 的按钮，并记录
+        该消息的内容指纹 -> 逐条收集该机器人的输出（事件与轮询两条来源）；
+        遇到符合 click_button_title 的按钮则点击一次，
+        直到整体超时、静默超时、命中停止关键字或达到收集上限；无论正常结束或
+        异常，都会移除事件处理器，避免事件泄漏。
+        """
+        if send_text is not None and (
+            not isinstance(send_text, str) or not send_text.strip()
+        ):
+            raise ValueError("send_text 必须是非空字符串或 None")
+        if click_button_title is not None and (
+            not isinstance(click_button_title, str)
+            or not click_button_title.strip()
+        ):
+            raise ValueError("click_button_title 必须是非空字符串或 None")
+        if message_id is not None:
+            if isinstance(message_id, bool) or not isinstance(message_id, int):
+                raise TypeError("message_id 必须是整数或 None")
+            if message_id <= 0:
+                raise ValueError("message_id 必须大于 0")
+            if click_button_title is None:
+                raise ValueError(
+                    "message_id 必须与 click_button_title 搭配使用"
+                )
+        if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
+            raise TypeError("timeout 必须是数字")
+        if timeout <= 0:
+            raise ValueError("timeout 必须大于 0")
+        if idle_timeout is not None:
+            if isinstance(idle_timeout, bool) or not isinstance(
+                idle_timeout, (int, float)
+            ):
+                raise TypeError("idle_timeout 必须是数字或 None")
+            if idle_timeout <= 0:
+                raise ValueError("idle_timeout 必须大于 0")
+        if isinstance(poll_interval, bool) or not isinstance(
+            poll_interval, (int, float)
+        ):
+            raise TypeError("poll_interval 必须是数字")
+        if poll_interval <= 0:
+            raise ValueError("poll_interval 必须大于 0")
+        if max_messages is not None:
+            if isinstance(max_messages, bool) or not isinstance(max_messages, int):
+                raise TypeError("max_messages 必须是整数或 None")
+            if max_messages <= 0:
+                raise ValueError("max_messages 必须大于 0")
+        if stop_keywords is not None:
+            stop_keywords = {str(keyword) for keyword in stop_keywords}
+
+        target_bot = await self._resolve_input_entity(bot)
+
+        response_queue: asyncio.Queue[tuple[str, Any]] = asyncio.Queue()
+        new_message_event = events.NewMessage(
+            chats=target_bot,
+            from_users=target_bot,
+            incoming=True,
+        )
+        edited_message_event = (
+            events.MessageEdited(
+                chats=target_bot,
+                from_users=target_bot,
+                incoming=True,
+            )
+            if include_edited
+            else None
+        )
+
+        async def capture_response(event: Any) -> None:
+            # NewMessage.Event 与 MessageEdited.Event 的类名都是 "Event"，
+            # 这里用 isinstance 明确标示来源，方便分辨是新消息还是编辑。
+            update_type = (
+                "EDITED" if isinstance(event, events.MessageEdited.Event) else "NEW"
+            )
+            await response_queue.put((update_type, event.message))
+
+        self.client.add_event_handler(capture_response, new_message_event)
+        if edited_message_event is not None:
+            self.client.add_event_handler(capture_response, edited_message_event)
+
+        captured_messages: list[Any] = []
+        captured_texts: list[str] = []
+        button_clicked = False
+        # message_id 路径：记录被点击消息的内容指纹，稍后用轮询比对内容变化。
+        poll_target_id: int | None = None
+        poll_baseline: tuple[str, tuple[str, ...]] | None = None
+        try:
+            if send_text is not None:
+                try:
+                    await asyncio.wait_for(
+                        self.client.send_message(target_bot, send_text),
+                        timeout=timeout,
+                    )
+                except (TimeoutError, ConnectionError, OSError) as exc:
+                    print(
+                        f"⚠️ 发送触发消息给机器人 {bot} 失败：{exc}",
+                        flush=True,
+                    )
+                    return []
+
+                print(f"已发送触发消息给机器人 {bot}：{send_text}", flush=True)
+
+            if message_id is not None:
+                # 指定既有消息 ID：直接取得该消息并点击其中的按钮，
+                # 之后继续收集机器人对这次点击的反馈。
+                try:
+                    target_message = await asyncio.wait_for(
+                        self.client.get_messages(target_bot, ids=message_id),
+                        timeout=timeout,
+                    )
+                except (TimeoutError, ConnectionError, OSError) as exc:
+                    print(
+                        f"⚠️ 取得机器人 {bot} 的消息 message_id={message_id} "
+                        f"失败：{exc}",
+                        flush=True,
+                    )
+                    target_message = None
+
+                if target_message is None:
+                    print(
+                        f"⚠️ 找不到机器人 {bot} 的消息 message_id={message_id}，"
+                        "无法点击按钮。",
+                        flush=True,
+                    )
+                else:
+                    get_buttons = getattr(target_message, "get_buttons", None)
+                    message_buttons = (
+                        await get_buttons()
+                        if callable(get_buttons)
+                        else getattr(target_message, "buttons", None)
+                    )
+                    matched_button = self._find_button_by_title(
+                        message_buttons, click_button_title
+                    )
+                    if matched_button is None:
+                        print(
+                            f"⚠️ 消息 message_id={message_id} 中找不到文字为"
+                            f"“{click_button_title}”的按钮。",
+                            flush=True,
+                        )
+                    else:
+                        # 先记住点击前的内容指纹，之后才能判断机器人是否已修改。
+                        poll_target_id = message_id
+                        poll_baseline = await self._message_signature(
+                            target_message
+                        )
+
+                        click_result = await matched_button.click()
+                        click_result_content = HumanBotOperator._format_button_click_result(
+                            click_result
+                        )
+                        if click_result_content and self.show_response:
+                            print(f"[按钮回调] {click_result_content}", flush=True)
+
+                        button_clicked = True
+                        await asyncio.sleep(1)
+                        if self.show_response:
+                            print(
+                                f"🖱️ 已点击消息 message_id={message_id} 的按钮"
+                                f"“{click_button_title}”。",
+                                flush=True,
+                            )
+
+            loop = asyncio.get_running_loop()
+            overall_deadline = loop.time() + timeout
+            idle_deadline = (
+                overall_deadline + idle_timeout
+                if idle_timeout is not None
+                else None
+            )
+            while True:
+                if max_messages is not None and len(captured_messages) >= max_messages:
+                    if self.show_response:
+                        print(
+                            f"⚠️ 已达到最大消息数 {max_messages}，结束擷取。",
+                            flush=True,
+                        )
+                    break
+
+                polling = poll_target_id is not None
+                deadlines = [overall_deadline]
+                if idle_deadline is not None:
+                    deadlines.append(idle_deadline)
+                next_deadline = min(deadlines)
+                remaining = next_deadline - loop.time()
+                # message_id 路径：把等待切成 poll_interval 小段，
+                # 让「机器人以编辑回覆但没有推送事件」也能被回读发现。
+                wait_timeout = min(remaining, poll_interval) if polling else remaining
+                if wait_timeout <= 0:
+                    if idle_deadline is not None and next_deadline == idle_deadline:
+                        print(
+                            f"⏹️ 机器人 {bot} 已静默 {idle_timeout} 秒，结束擷取。",
+                            flush=True,
+                        )
+                    else:
+                        print(
+                            f"❗️ 等待机器人 {bot} 输出超过 {timeout} 秒，结束擷取。",
+                            flush=True,
+                        )
+                    break
+
+                update_type: str | None = None
+                response = None
+                try:
+                    update_type, response = await asyncio.wait_for(
+                        response_queue.get(),
+                        timeout=wait_timeout,
+                    )
+                except asyncio.TimeoutError:
+                    # 没等到事件：若启用轮询就回读被点击的消息比对内容指纹。
+                    if polling:
+                        polled = await self._poll_clicked_message(
+                            target_bot,
+                            poll_target_id,
+                            poll_baseline,
+                        )
+                        if polled is not None:
+                            update_type = "EDITED"
+                            response = polled
+                            poll_baseline = await self._message_signature(polled)
+                            if max_messages is None:
+                                # 已回读到一次变化，停止轮询以免重复回传。
+                                poll_target_id = None
+
+                if response is None:
+                    # 这一轮既没有事件也没有变化，只有真的到期才结束。
+                    if loop.time() >= next_deadline:
+                        if idle_deadline is not None and idle_deadline <= loop.time():
+                            print(
+                                f"⏹️ 机器人 {bot} 已静默 {idle_timeout} 秒，结束擷取。",
+                                flush=True,
+                            )
+                        else:
+                            print(
+                                f"❗️ 等待机器人 {bot} 输出超过 {timeout} 秒，结束擷取。",
+                                flush=True,
+                            )
+                        break
+                    continue
+
+                if idle_timeout is not None:
+                    idle_deadline = loop.time() + idle_timeout
+
+                response_message = self._get_response_text(response)
+                captured_messages.append(response)
+                captured_texts.append(response_message)
+
+                if self.show_response:
+                    response_content = await self._format_bot_response(response)
+                    print(
+                        f"[D擷取机器人输出 #{len(captured_messages)}] "
+                        f"update={update_type} bot={bot} "
+                        f"message_id={getattr(response, 'id', None)}\n"
+                        f"{response_content}",
+                        flush=True,
+                    )
+                # else:
+                #     print(
+                #         f"[S擷取机器人输出 #{len(captured_messages)}] "
+                #         f"message_id={getattr(response, 'id', None)} "
+                #         f"{response_message}",
+                #         flush=True,
+                #     )
+
+                if click_button_title is not None and not button_clicked:
+                    get_buttons = getattr(response, "get_buttons", None)
+                    message_buttons = (
+                        await get_buttons()
+                        if callable(get_buttons)
+                        else getattr(response, "buttons", None)
+                    )
+                    matched_button = self._find_button_by_title(
+                        message_buttons, click_button_title
+                    )
+                    if matched_button is not None:
+                        # 只点一次，并顺便记录 callback answer 的内容。
+                        click_result = await matched_button.click()
+                        click_result_content = HumanBotOperator._format_button_click_result(
+                            click_result
+                        )
+                        if click_result_content and self.show_response:
+                            print(f"[按钮回调] {click_result_content}", flush=True)
+
+                        button_clicked = True
+                        await asyncio.sleep(1)
+                        if self.show_response:
+                            print(
+                                f"🖱️ 已点击按钮“{click_button_title}”"
+                                f"（message_id={getattr(response, 'id', None)}）。",
+                                flush=True,
+                            )
+
+                if stop_keywords and any(
+                    keyword in response_message for keyword in stop_keywords
+                ):
+                    print(
+                        f"✅ 命中停止关键字，结束擷取机器人 {bot} 输出。",
+                        flush=True,
+                    )
+                    break
+        finally:
+            self.client.remove_event_handler(capture_response, new_message_event)
+            if edited_message_event is not None:
+                self.client.remove_event_handler(
+                    capture_response, edited_message_event
+                )
+
+        if message_id is not None and not captured_messages:
+            # 空结果诊断：回读该消息，判断机器人到底有没有改动内容。
+            await self._report_clicked_message_state(
+                bot,
+                target_bot,
+                poll_target_id if poll_target_id is not None else message_id,
+                poll_baseline,
+            )
+
+        return captured_texts if return_texts else captured_messages
+
+    @classmethod
+    async def _message_signature(cls, message: Any) -> tuple[str, tuple[str, ...]]:
+        """取得消息文字与按钮文字的指纹，用来判断该消息内容是否改变。"""
+        text = cls._get_response_text(message)
+        button_texts: list[str] = []
+        get_buttons = getattr(message, "get_buttons", None)
+        try:
+            rows = (
+                await get_buttons()
+                if callable(get_buttons)
+                else getattr(message, "buttons", None)
+            )
+            for button in cls._iter_buttons(rows):
+                button_text = str(getattr(button, "text", "") or "").strip()
+                if button_text:
+                    button_texts.append(button_text)
+        except Exception:
+            # 指纹只用于辅助判断，取不到按钮时退回纯文字比对。
+            button_texts = []
+        return text, tuple(button_texts)
+
+    async def _poll_clicked_message(
+        self,
+        entity: Any,
+        message_id: int,
+        baseline: tuple[str, tuple[str, ...]] | None,
+    ) -> Any | None:
+        """回读被点击的消息；内容指纹已改变则回传最新消息，否则回传 None。"""
+        try:
+            latest = await self.client.get_messages(entity, ids=message_id)
+        except (TimeoutError, ConnectionError, OSError):
+            return None
+
+        if latest is None:
+            return None
+
+        signature = await self._message_signature(latest)
+        if baseline is not None and signature == baseline:
+            return None
+        return latest
+
+    async def _report_clicked_message_state(
+        self,
+        bot_label: Any,
+        entity: Any,
+        message_id: int,
+        baseline: tuple[str, tuple[str, ...]] | None,
+    ) -> None:
+        """擷取为空时回读指定消息并打印诊断，判断机器人是否真的改过内容。"""
+        try:
+            latest = await self.client.get_messages(entity, ids=message_id)
+        except (TimeoutError, ConnectionError, OSError) as exc:
+            print(
+                f"🔍 回读诊断：取得 message_id={message_id} 失败：{exc}",
+                flush=True,
+            )
+            return
+
+        if latest is None:
+            print(
+                f"🔍 回读诊断：找不到 message_id={message_id}。",
+                flush=True,
+            )
+            return
+
+        text, button_texts = await self._message_signature(latest)
+        changed = baseline is not None and (text, button_texts) != baseline
+        print(
+            f"🔍 回读诊断：bot={bot_label} message_id={message_id} "
+            f"内容是否有变化={'是' if changed else '否'}",
+            flush=True,
+        )
+        print(f"   目前文字：{text or '[无文字内容]'}", flush=True)
+        print(
+            "   目前按钮："
+            + ("、".join(button_texts) if button_texts else "[无按钮]"),
+            flush=True,
+        )
+        if not changed:
+            print(
+                "   结论：机器人没有修改这条消息，也没有推送新消息或编辑事件。",
+                flush=True,
+            )
+
+    @staticmethod
+    def _find_button_by_title(buttons: Any, title: str) -> Any:
+        """在按钮组中寻找文字等于 title 的按钮，找不到则回退到包含 title 者。"""
+        target = str(title or "").strip()
+        if not target:
+            return None
+        fallback = None
+        for button in HumanBotOperator._iter_buttons(buttons):
+            text = str(getattr(button, "text", "") or "").strip()
+            if not text:
+                continue
+            if text == target:
+                return button
+            if fallback is None and target in text:
+                fallback = button
+        return fallback
 
     async def monitor_chat(
         self,
@@ -2594,6 +3266,7 @@ class HumanBotOperator:
         source_chat_id: int | None,
         source_message_id: int | None,
         bot_id: int | None = None,
+        desc_order_id : int | None = None,
     ) -> None:
         """将 Emoji 密文及其 Unicode NFC SHA-256 写入 sora_code。"""
         normalized_code = unicodedata.normalize("NFC", code)
@@ -2604,12 +3277,13 @@ class HumanBotOperator:
         await MySQLPool.execute(
             "INSERT INTO `sora_code` "
             "(`code`, `code_hash`, `bot_id`, `created_ts`, "
-            "`source_chat_id`, `source_message_id`, `extract_status`) "
-            "VALUES (%s, UNHEX(%s), %s, %s, %s, %s, %s) "
+            "`source_chat_id`, `source_message_id`, `desc_order_id`, `extract_status`) "
+            "VALUES (%s, UNHEX(%s), %s, %s, %s, %s, %s, %s) "
             "ON DUPLICATE KEY UPDATE "
             "`code` = VALUES(`code`), "
             "`source_chat_id` = VALUES(`source_chat_id`), "
-            "`source_message_id` = VALUES(`source_message_id`)",
+            "`source_message_id` = VALUES(`source_message_id`), "
+            "`desc_order_id` = VALUES(`desc_order_id`)",
             (
                 code,
                 code_hash_hex,
@@ -2617,6 +3291,7 @@ class HumanBotOperator:
                 int(time.time()),
                 source_chat_id,
                 source_message_id,
+                desc_order_id,
                 0,
             ),
             error_tag="human_bot_operator.insert_sora_code",

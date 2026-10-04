@@ -145,7 +145,7 @@ async def run_telethon_bot(
     try:
         session_rows = await MySQLPool.fetchall(
             "SELECT `bot_token` FROM `bot` "
-            "WHERE check_group IN (1, 2) ",
+            "WHERE check_group IN (1,2,5) ",
         
             error_tag="userbot.random_session_tokens",
         )
@@ -166,6 +166,7 @@ async def run_telethon_bot(
         }
 
         operator = {}
+        operator_title = {}
 
         # 随机从 session_set 中选择，形成另外的子集合
         selected_sessions = random.sample(list(session_set.values()), len(session_set))
@@ -186,6 +187,18 @@ async def run_telethon_bot(
                     taobao_bot_username=config.get("taobao_bot_username"),
                 )
                 operator[(operator_length)] = op
+
+               
+                me = await op.client.get_me()
+                display_name = (
+                    getattr(me, "first_name", None)
+                    or getattr(me, "username", None)
+                    or f"ID:{getattr(me, 'id', i)}"
+                )
+                operator_title[(operator_length)] = display_name
+               
+
+
                 #将 operator_opp 添加到 operator 字典中
                 # operator[i] = operator_opp
                 # await op.join_chat("https://t.me/+_Pz9_6udznFlMDhi") #玉树花
@@ -225,9 +238,21 @@ async def run_telethon_bot(
 
         #         await asyncio.sleep(random.randint(3, 5))
 
-        for t in range(10000):  # Example range, adjust as needed
+        for t in range(1):  # Example range, adjust as needed
             for i, session in enumerate(operator):
                 op = operator[i] 
+                
+                try:                    
+                    await op.fetch_list()
+                except Exception as exc:
+                    print(
+                        f"第 {t + 1} 轮、账号 {i} 获取列表发生错误，"
+                        f"跳过本次并继续：{exc!r}",
+                        flush=True,
+                    )
+                    continue
+                # await op.fetch_list()
+
                 
                 # await op.join_chat("https://t.me/+i5S7P-Dol4dhNzA5")  #加入布吉岛主 1004335920222
                 # await op.join_chat("https://t.me/+iHyXV6FFCQAxN2Ix")  #加入布吉岛
@@ -255,19 +280,24 @@ async def run_telethon_bot(
                     )
                     continue
 
-                
                 try:
-                    me = await op.client.get_me()
-                    display_name = (
-                        getattr(me, "first_name", None)
-                        or getattr(me, "username", None)
-                        or f"ID:{getattr(me, 'id', i)}"
+                    display_name = operator_title[i]
+                except Exception as exc:
+                    print(
+                        f"{exc!r}",
+                        flush=True,
                     )
+                   
+
+                
+                try:                  
+
                     print(
                         f"\n第 {t + 1} 轮、账号 {i}（{display_name}）开始提取...",
                         flush=True,
                     )
                     await op.extract(ask_like=True)
+
 
                 except (TimeoutError, ConnectionError, OSError) as exc:
                     print(
