@@ -203,8 +203,8 @@ async def run_telethon_bot(
                 # operator[i] = operator_opp
                 # await op.join_chat("https://t.me/+_Pz9_6udznFlMDhi") #玉树花
 
-                # await op.join_chat("https://t.me/+HYvGBwaTSUEyYzkx")  #正太方舟
-                # await op.client.send_message("@posterre_bot", "/checkin")      
+                # await op.join_chat("https://t.me/+gwLvTrmPWGAwYzBh")  #正太方舟               
+                # await op.client.send_message("@postfilebbot", "/checkin")      
                 # await op.join_chat("https://t.me/+LmR0F1WpnFQ0Y2Ix")
                 # await op.client.send_message("@ztFreeJJBOT", "/start") 
             except Exception as e:
@@ -251,7 +251,7 @@ async def run_telethon_bot(
                         flush=True,
                     )
                     continue
-                # await op.fetch_list()
+               
 
                 
                 # await op.join_chat("https://t.me/+i5S7P-Dol4dhNzA5")  #加入布吉岛主 1004335920222
@@ -296,7 +296,13 @@ async def run_telethon_bot(
                         f"\n第 {t + 1} 轮、账号 {i}（{display_name}）开始提取...",
                         flush=True,
                     )
-                    await op.extract(ask_like=True)
+                    for i in range(10):
+                        await op.extract(ask_like=True, bot_id=HumanBotOperator.FZ_CODE_BOT_ID)
+                        sleep_time = random.randint(1, 3)
+                        print(f"==>Sleeping for {sleep_time} seconds before next operation.", flush=True)
+                        await asyncio.sleep(sleep_time)
+
+                    await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID)
 
 
                 except (TimeoutError, ConnectionError, OSError) as exc:
@@ -333,7 +339,7 @@ async def run_telethon_bot(
 
                 sleep_time = random.randint(3, 7)
                 print(f"==>Sleeping for {sleep_time} seconds before next operation.", flush=True)
-                # await asyncio.sleep(sleep_time)
+                await asyncio.sleep(sleep_time)
         print(f"✅ Completed", flush=True)
         
         for i, session in enumerate(operator):

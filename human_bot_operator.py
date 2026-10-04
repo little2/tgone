@@ -60,7 +60,9 @@ class HumanBotOperator:
 
     MONITOR_FORWARD_CHAT_ID = 5334310434
     BJD_CODE_BOT_ID = 8915213940
-    FZ_CODE_BOT_ID = 8791594127
+    FZ_CODE_BOT_ID = 8805711672
+
+    
     REWARD_BOT_NAME = "zttower5bot"
     FREE_CHAT_ID = -1002093182221
     PROTECTED_MEDIA_TRANSFER_TIMEOUT_SECONDS = 5 * 60
@@ -1353,9 +1355,11 @@ class HumanBotOperator:
             record = None
             if secret_id is None:
                 # 只从最新 30 笔待提取记录中随机选择，避免 ORDER BY RAND() 全表扫描。
+                # 如果 bot_id 有值，則增加 sql 的過濾條件，例如 "AND `bot_id` = {bot_id}"
+                bot_filter = f"AND `bot_id` = {bot_id}" if bot_id is not None else ""
                 rows = await MySQLPool.fetchall(
                     "SELECT * FROM `sora_code` "
-                    "WHERE `extract_status` IN (0,2) and bot_id != 8791594127 ORDER BY `id` DESC LIMIT 100",
+                    f"WHERE `extract_status` IN (0,2) {bot_filter} ORDER BY `id` DESC LIMIT 100",
                     error_tag="human_bot_operator.extract.get_random_secret_id",
                 )
                 if not rows:
@@ -1403,7 +1407,7 @@ class HumanBotOperator:
         try:
             send_code = code
             # print(f"{target_bot}")
-            if target_bot.user_id == 8791594127:
+            if target_bot.user_id == self.FZ_CODE_BOT_ID:
                 send_code = f"/start {send_code}"
 
             try:
@@ -1919,7 +1923,7 @@ class HumanBotOperator:
 
     @classmethod
     def _build_extract_caption_fz2(cls, message: Any) -> str:
-        """从 posterre_bot 风格的消息中提取 description、hashtags 与 file_code。"""
+        """从 postfilebbot 风格的消息中提取 description、hashtags 与 file_code。"""
         text = str(getattr(message, "text", "") or "").strip()
         entities = list(getattr(message, "entities", []) or [])
         description = ""
