@@ -1243,7 +1243,7 @@ class HumanBotOperator:
                                 latest_id = result_loop[-1].id
                                 await asyncio.sleep(3)
                                 _qty += 1
-                                if _qty >= 30:
+                                if _qty >= 25:
                                     print("⚠️ 已達到最大嘗試次數，停止循環", flush=True)
                                     return
 

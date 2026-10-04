@@ -297,13 +297,14 @@ async def run_telethon_bot(
                         f"\n第 {t} 轮、账号 {i}（{display_name}）开始提取...",
                         flush=True,
                     )
-                    for i in range(10):
+                    await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID)
+                    for i in range(7):
                         await op.extract(ask_like=True, bot_id=HumanBotOperator.FZ_CODE_BOT_ID)
                         sleep_time = random.randint(1, 3)
                         print(f"==>Sleeping for {sleep_time} seconds before next operation.", flush=True)
                         await asyncio.sleep(sleep_time)
 
-                    await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID)
+                    
 
 
                 except (TimeoutError, ConnectionError, OSError) as exc:
