@@ -237,8 +237,9 @@ async def run_telethon_bot(
         #         r = await op.extract(code=code, bot_id=BJD_CODE_BOT_ID, ask_like=True)
 
         #         await asyncio.sleep(random.randint(3, 5))
-
-        for t in range(1):  # Example range, adjust as needed
+        t=0
+        while True:  # Infinite loop, adjust the condition as needed
+            t += 1
             for i, session in enumerate(operator):
                 op = operator[i] 
                 
@@ -246,7 +247,7 @@ async def run_telethon_bot(
                     await op.fetch_list()
                 except Exception as exc:
                     print(
-                        f"第 {t + 1} 轮、账号 {i} 获取列表发生错误，"
+                        f"第 {t} 轮、账号 {i} 获取列表发生错误，"
                         f"跳过本次并继续：{exc!r}",
                         flush=True,
                     )
@@ -274,7 +275,7 @@ async def run_telethon_bot(
                     await asyncio.sleep(1)
                 except Exception as exc:
                     print(
-                        f"第 {t + 1} 轮、账号 {i} 跟踪消息发生错误，"
+                        f"第 {t} 轮、账号 {i} 跟踪消息发生错误，"
                         f"跳过本次并继续：{exc!r}",
                         flush=True,
                     )
@@ -293,7 +294,7 @@ async def run_telethon_bot(
                 try:                  
 
                     print(
-                        f"\n第 {t + 1} 轮、账号 {i}（{display_name}）开始提取...",
+                        f"\n第 {t} 轮、账号 {i}（{display_name}）开始提取...",
                         flush=True,
                     )
                     for i in range(10):
@@ -307,14 +308,14 @@ async def run_telethon_bot(
 
                 except (TimeoutError, ConnectionError, OSError) as exc:
                     print(
-                        f"第 {t + 1} 轮、账号 {i} 提取超时或连线中断，"
+                        f"第 {t} 轮、账号 {i} 提取超时或连线中断，"
                         f"跳过本次并继续：{exc}",
                         flush=True,
                     )
                     continue
                 except Exception as exc:
                     print(
-                        f"第 {t + 1} 轮、账号 {i} 提取发生未预期错误，"
+                        f"第 {t} 轮、账号 {i} 提取发生未预期错误，"
                         f"跳过本次并继续：{exc!r}",
                         flush=True,
                     )
@@ -353,6 +354,10 @@ async def run_telethon_bot(
             # await account_manager.check_phone("+18157706388")
         print("所有操作已完成，正在断开连接...", flush=True)
     finally:
+        for i, session in enumerate(operator):
+            op = operator[i] 
+            await op.disconnect()        
+        print("所有操作已完成，正在断开连接...", flush=True)            
         await MySQLPool.close()
         return
         
