@@ -47,7 +47,7 @@ async def main_check_user() -> None:
         # )
         # await account_manager.check_phone("+254784808106")
         # await account_manager.check_phone("+254784812293")
-        await account_manager.check_phone("+573502927050") 
+        await account_manager.check_phone("+15717640949") 
 
     finally:
         await MySQLPool.close()
@@ -145,7 +145,7 @@ async def run_telethon_bot(
     try:
         session_rows = await MySQLPool.fetchall(
             "SELECT `bot_token` FROM `bot` "
-            "WHERE check_group>=1 ",
+            "WHERE check_group IN (1,2,5) ",
         
             error_tag="userbot.random_session_tokens",
         )
@@ -166,6 +166,7 @@ async def run_telethon_bot(
         }
 
         operator = {}
+        operator_title = {}
 
         # 随机从 session_set 中选择，形成另外的子集合
         selected_sessions = random.sample(list(session_set.values()), len(session_set))
@@ -186,14 +187,26 @@ async def run_telethon_bot(
                     taobao_bot_username=config.get("taobao_bot_username"),
                 )
                 operator[(operator_length)] = op
+
+               
+                me = await op.client.get_me()
+                display_name = (
+                    getattr(me, "first_name", None)
+                    or getattr(me, "username", None)
+                    or f"ID:{getattr(me, 'id', i)}"
+                )
+                operator_title[(operator_length)] = display_name
+               
+
+
                 #将 operator_opp 添加到 operator 字典中
                 # operator[i] = operator_opp
                 # await op.join_chat("https://t.me/+_Pz9_6udznFlMDhi") #玉树花
 
-                # await op.join_chat("https://t.me/+HYvGBwaTSUEyYzkx")  #正太方舟
-                # await op.client.send_message("@posterre_bot", "/checkin")      
+                # await op.join_chat("https://t.me/+gwLvTrmPWGAwYzBh")  #正太方舟               
+                # await op.client.send_message("@postfilebbot", "/checkin")      
                 # await op.join_chat("https://t.me/+LmR0F1WpnFQ0Y2Ix")
-                await op.client.send_message("@ztFreeJJBOT", "/start") 
+                # await op.client.send_message("@ztFreeJJBOT", "/start") 
             except Exception as e:
                 print(f"Failed to login with session {i} {session}: {e}", flush=True)
 
@@ -224,11 +237,24 @@ async def run_telethon_bot(
         #         r = await op.extract(code=code, bot_id=BJD_CODE_BOT_ID, ask_like=True)
 
         #         await asyncio.sleep(random.randint(3, 5))
-
-        for t in range(10000):  # Example range, adjust as needed
+        t=0
+        while True:  # Infinite loop, adjust the condition as needed
+            t += 1
             for i, session in enumerate(operator):
                 op = operator[i] 
+                
+                try:                    
+                    await op.fetch_list()
+                except Exception as exc:
+                    print(
+                        f"第 {t} 轮、账号 {i} 获取列表发生错误，"
+                        f"跳过本次并继续：{exc!r}",
+                        flush=True,
+                    )
+                    continue
+               
 
+                
                 # await op.join_chat("https://t.me/+i5S7P-Dol4dhNzA5")  #加入布吉岛主 1004335920222
                 # await op.join_chat("https://t.me/+iHyXV6FFCQAxN2Ix")  #加入布吉岛
                 # await op.join_chat("+mhqJ-3C93F0zODEx") #桃花林 
@@ -236,36 +262,69 @@ async def run_telethon_bot(
                 # await op.join_chat("https://t.me/+PmSBya7t51JmOTNh") #unbrella
                 # await op.join_chat("https://t.me/+LmR0F1WpnFQ0Y2Ix")  #测试群
              
-                
+                # //6260
                 # await op.update_profile(random_name=True)
                 # await op.send_random_message(chat_id=[-1004335920222, -1004372020134])
-
-                await op.tracking_message_range(chat=-1004335920222)
-                await op.tracking_message_range(chat=-1004372020134)
+                # await op.routine_insert()
                 try:
-                    me = await op.client.get_me()
-                    display_name = (
-                        getattr(me, "first_name", None)
-                        or getattr(me, "username", None)
-                        or f"ID:{getattr(me, 'id', i)}"
-                    )
+                    await op.tracking_message_range(chat=-1004335920222)
+                    await asyncio.sleep(1)
+                    await op.tracking_message_range(chat=-1004372020134)
+                    await asyncio.sleep(1)
+                    await op.tracking_message_range(chat=-1004383041223)
+                    await asyncio.sleep(1)
+                except Exception as exc:
                     print(
-                        f"\n第 {t + 1} 轮、账号 {i}（{display_name}）开始提取...",
+                        f"第 {t} 轮、账号 {i} 跟踪消息发生错误，"
+                        f"跳过本次并继续：{exc!r}",
                         flush=True,
                     )
-                    await op.extract(ask_like=True)
+                    continue
 
-                except TimeoutError as exc:
+                try:
+                    display_name = operator_title[i]
+                except Exception as exc:
                     print(
-                        f"第 {t + 1} 轮、账号 {i} 提取超时，"
+                        f"{exc!r}",
+                        flush=True,
+                    )
+                   
+
+                
+                try:                  
+
+                    print(
+                        f"\n第 {t} 轮、账号 {i}（{display_name}）开始提取...",
+                        flush=True,
+                    )
+                    await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID)
+                    for i in range(7):
+                        await op.extract(ask_like=True, bot_id=HumanBotOperator.FZ_CODE_BOT_ID)
+                        sleep_time = random.randint(1, 3)
+                        print(f"==>Sleeping for {sleep_time} seconds before next operation.", flush=True)
+                        await asyncio.sleep(sleep_time)
+
+                    
+
+
+                except (TimeoutError, ConnectionError, OSError) as exc:
+                    print(
+                        f"第 {t} 轮、账号 {i} 提取超时或连线中断，"
                         f"跳过本次并继续：{exc}",
+                        flush=True,
+                    )
+                    continue
+                except Exception as exc:
+                    print(
+                        f"第 {t} 轮、账号 {i} 提取发生未预期错误，"
+                        f"跳过本次并继续：{exc!r}",
                         flush=True,
                     )
                     continue
                 # for i in range(4156, 4164):  # 从 4900 往下降到 4800
                 #     await op.extract(secret_id=i)
                 #     await asyncio.sleep(random.randint(10, 25))
-                # await op.routine_insert()
+                
                 # while True:
 
 
@@ -296,6 +355,10 @@ async def run_telethon_bot(
             # await account_manager.check_phone("+18157706388")
         print("所有操作已完成，正在断开连接...", flush=True)
     finally:
+        for i, session in enumerate(operator):
+            op = operator[i] 
+            await op.disconnect()        
+        print("所有操作已完成，正在断开连接...", flush=True)            
         await MySQLPool.close()
         return
         
