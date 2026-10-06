@@ -243,15 +243,7 @@ async def run_telethon_bot(
             for i, session in enumerate(operator):
                 op = operator[i] 
                 
-                try:                    
-                    await op.fetch_list()
-                except Exception as exc:
-                    print(
-                        f"第 {t} 轮、账号 {i} 获取列表发生错误，"
-                        f"跳过本次并继续：{exc!r}",
-                        flush=True,
-                    )
-                    continue
+
                
 
                 
@@ -297,11 +289,14 @@ async def run_telethon_bot(
                         f"\n第 {t} 轮、账号 {i}（{display_name}）开始提取...",
                         flush=True,
                     )
-                    await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID)
+                    for j in range(3):
+                        await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID)
+                        sleep_time = random.randint(1, 3)
+                        await asyncio.sleep(sleep_time)
+                    
                     for i in range(7):
                         await op.extract(ask_like=True, bot_id=HumanBotOperator.FZ_CODE_BOT_ID)
                         sleep_time = random.randint(1, 3)
-                        print(f"==>Sleeping for {sleep_time} seconds before next operation.", flush=True)
                         await asyncio.sleep(sleep_time)
 
                     
@@ -336,7 +331,16 @@ async def run_telethon_bot(
 
                 # 模拟按 Ctrl 键 以避免进入休眠状态
                 await op.simulate_ctrl_press()
-
+                
+                try:                    
+                    await op.fetch_list()
+                except Exception as exc:
+                    print(
+                        f"第 {t} 轮、账号 {i} 获取列表发生错误，"
+                        f"跳过本次并继续：{exc!r}",
+                        flush=True,
+                    )
+                    continue
 
 
                 sleep_time = random.randint(3, 7)
