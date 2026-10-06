@@ -110,7 +110,7 @@ class HumanBotOperator:
         client: TelegramClient,
         taobao_bot_username: str | None = None,
     ) -> None:
-        self.show_response = False
+        self.show_response = True
         self.client = client
         self.taobao_bot_username = (
             str(taobao_bot_username or "").strip().removeprefix("@") or None
@@ -1266,7 +1266,7 @@ class HumanBotOperator:
             else:
                 
                 caption = caption.replace(f"[{code}]", "")
-                caption = caption.strip()
+                # caption = caption.strip()
                 if self.show_response:
                     print(f"Extracted code: {code}\n caption={caption}", flush=True)
                
@@ -1302,7 +1302,12 @@ class HumanBotOperator:
                                 "tags": [],
                             }
 
+                            if self.show_response:
+                                print(f"{sora_code} extract_status={sora_code.get('extract_status')}", flush=True)
+
                             if sora_code and sora_code.get("extract_status") !=1 and sora_code.get("extract_status") !=2:
+                                if self.show_response:
+                                    print(f"⚠️ 提取码 {code} 已存在，转发", flush=True)     
                                 await self._forward_media_with_json_caption(
                                     target=self.taobao_bot_username,
                                     message=message,
