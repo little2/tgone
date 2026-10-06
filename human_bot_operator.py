@@ -110,7 +110,7 @@ class HumanBotOperator:
         client: TelegramClient,
         taobao_bot_username: str | None = None,
     ) -> None:
-        self.show_response = True
+        self.show_response = False
         self.client = client
         self.taobao_bot_username = (
             str(taobao_bot_username or "").strip().removeprefix("@") or None
@@ -1168,8 +1168,8 @@ class HumanBotOperator:
         desc_order_id = int(desc_order_id)
 
         if desc_order_id <= 0:    
-            desc_order_id = await self._get_resume_message_id(source_chat_id='10001') or 0
-
+            # desc_order_id = await self._get_resume_message_id(source_chat_id='10001') or 0
+            desc_order_id = await self._get_max_desc_order_id() or 0
 
 
         # 首頁    /start
@@ -2528,6 +2528,16 @@ class HumanBotOperator:
             (status, file_code),
             error_tag="human_bot_operator.mark_extract_status_by_file_code",
         )
+
+    async def _get_max_desc_order_id(self) -> int:
+        """获取指定源群组的最大描述消息 ID。"""
+        row = await MySQLPool.fetchone(
+            "SELECT MAX(`desc_order_id`) AS `max_desc_order_id` FROM `sora_code`",
+            (),
+            error_tag="human_bot_operator.get_max_desc_order_id",
+        )
+        max_desc_order_id = int((row or {}).get("max_desc_order_id") or 0)
+        return max_desc_order_id
 
     async def _get_resume_message_id(self, source_chat_id: int) -> int:
         """优先从实例缓存读取游标，否则从 sora_code 的最大消息 ID 续扫。"""

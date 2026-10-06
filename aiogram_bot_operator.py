@@ -341,6 +341,7 @@ class AiogramBotOperator:
             return {
                 "file_unique_id": media.file_unique_id,
                 "file_type": "photo",
+                "file_id": media.file_id,
                 "thumb_file_id": thumbnail.file_id,
                 "thumb_file_unique_id": thumbnail.file_unique_id,
             }
@@ -365,6 +366,7 @@ class AiogramBotOperator:
             return {
                 "file_unique_id": media.file_unique_id,
                 "file_type": file_type,
+                "file_id": media.file_id,
                 "thumb_file_id": getattr(thumbnail, "file_id", None),
                 "thumb_file_unique_id": getattr(
                     thumbnail,
@@ -657,12 +659,15 @@ class AiogramBotOperator:
                 item_id = int(item_row["id"])
                 await cur.execute(
                     "UPDATE `sora_pack_item` SET `file_type` = %s, "
+                    "`file_id` = %s, `file_unique_id` = %s, "
                     "`thumb_file_id` = %s, `thumb_file_unique_id` = %s, "
                     "`first_user_id` = COALESCE(`first_user_id`, %s), "
                     "`source_chat_id` = %s, `source_message_id` = %s "
                     "WHERE `id` = %s",
                     (
                         media_info["file_type"],
+                        media_info["file_id"],
+                        media_info["file_unique_id"],
                         media_info["thumb_file_id"],
                         media_info["thumb_file_unique_id"],
                         sender_id,
@@ -681,15 +686,16 @@ class AiogramBotOperator:
                 next_seq = int((seq_row or {}).get("next_seq") or 1)
                 await cur.execute(
                     "INSERT INTO `sora_pack_item` "
-                    "(`pack_id`, `seq`, `file_unique_id`, `file_type`, "
+                    "(`pack_id`, `seq`, `file_unique_id`, `file_type`, `file_id`,"
                     "`thumb_file_id`, `thumb_file_unique_id`, `first_user_id`, "
                     "`source_chat_id`, `source_message_id`, `created_ts`) "
-                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                     (
                         pack_id,
                         next_seq,
                         media_info["file_unique_id"],
                         media_info["file_type"],
+                        media_info["file_id"],
                         media_info["thumb_file_id"],
                         media_info["thumb_file_unique_id"],
                         sender_id,
