@@ -69,7 +69,7 @@ class AiogramBotOperator:
     async def print_bot_message(self, message: Message) -> None:
         """打印 Aiogram Bot 收到的消息摘要与完整内容。"""
         media_info = self.get_message_media_info(message)
-        # print(f"media_info=>{message.caption}\n")
+       
         caption_payload = (
             self.parse_json_caption(message.caption)
             if media_info is not None
@@ -192,11 +192,12 @@ class AiogramBotOperator:
         description = payload.get("description", "")
         # description 已经是 Telegram 可用的 HTML（保留原始 Blockquote/加粗等格式设定），
         # 这里只合并多余空白，不对标签做转义。
-        description_line = (
-            re.sub(r"\s+", " ", description).strip()
-            if isinstance(description, str)
-            else ""
-        )
+        # description_line = (
+        #     re.sub(r"\s+", " ", description)
+        #     if isinstance(description, str)
+        #     else ""
+        # )
+        description_line = description
         file_code = str(payload.get("file_code") or "").strip()
         tags = payload.get("tags", [])
         if isinstance(tags, str):
@@ -223,7 +224,9 @@ class AiogramBotOperator:
         """以原媒体 file_id 重发文件，并使用指定 caption。"""
         reply_markup = None
         if include_portal_button:
+           
             payload = self.parse_json_caption(message.caption) or {}
+            
             file_code = str(payload.get("file_code") or "").strip()
             if file_code:
                 reply_markup = InlineKeyboardMarkup(

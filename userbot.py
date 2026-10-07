@@ -188,6 +188,8 @@ async def run_telethon_bot(
                 )
                 operator[(operator_length)] = op
 
+                
+
                
                 me = await op.client.get_me()
                 display_name = (
@@ -197,23 +199,57 @@ async def run_telethon_bot(
                 )
                 operator_title[(operator_length)] = display_name
                
-
-
                 #将 operator_opp 添加到 operator 字典中
                 # operator[i] = operator_opp
                 # await op.join_chat("https://t.me/+_Pz9_6udznFlMDhi") #玉树花
 
                 # await op.join_chat("https://t.me/+gwLvTrmPWGAwYzBh")  #正太方舟               
                 # await op.client.send_message("@postfilebbot", "/checkin")      
+                # await op.client.send_message("@taobao10086bot", "/start")
                 # await op.join_chat("https://t.me/+LmR0F1WpnFQ0Y2Ix")
                 # await op.client.send_message("@ztFreeJJBOT", "/start") 
+
+                
+                # await op.join_chat("https://t.me/+i5S7P-Dol4dhNzA5")  #加入布吉岛主 1004335920222
+                # await op.join_chat("https://t.me/+iHyXV6FFCQAxN2Ix")  #加入布吉岛
+                # await op.join_chat("+mhqJ-3C93F0zODEx") #桃花林 
+                # await op.join_chat("+V-gROBOr4sY2YzVh") #桃花源
+                # await op.join_chat("https://t.me/+PmSBya7t51JmOTNh") #unbrella
+                # await op.join_chat("https://t.me/+LmR0F1WpnFQ0Y2Ix")  #测试群
+
             except Exception as e:
                 print(f"Failed to login with session {i} {session}: {e}", flush=True)
 
         
+    
 
-            # https://t.me/+LmR0F1WpnFQ0Y2Ix
+
+
+
+        # for cnt in range(10):
+        #     for i, session in enumerate(selected_sessions):
+        #         try:
+        #             op1 = operator[i]
+        #             op2 = operator[(i+1) % len(operator)]
+                
+                    
+        #             display_name = operator_title[i]
+        #             print(f"Processing operator {i} with display name {display_name}")
+        #             for j in range(3):
+        #                 await asyncio.gather(
+        #                     op1.extract(ask_like=True, bot_id=HumanBotOperator.FZ_CODE_BOT_ID, extract_status=0),
+        #                     op2.extract(ask_like=True, bot_id=HumanBotOperator.FZ_CODE_BOT_ID, extract_status=0),
+        #                 )
+                    
+        #                 sleep_time = random.randint(3, 7)
+        #                 await asyncio.sleep(sleep_time)
+        #         except Exception as e:
+        #             print(f"Error in operator {i}: {e}")
+        #     await asyncio.sleep(random.randint(3, 7))
+
         
+        
+
         cset = {}
 
 
@@ -243,35 +279,12 @@ async def run_telethon_bot(
             for i, session in enumerate(operator):
                 op = operator[i] 
                 
-
-               
-
-                
-                # await op.join_chat("https://t.me/+i5S7P-Dol4dhNzA5")  #加入布吉岛主 1004335920222
-                # await op.join_chat("https://t.me/+iHyXV6FFCQAxN2Ix")  #加入布吉岛
-                # await op.join_chat("+mhqJ-3C93F0zODEx") #桃花林 
-                # await op.join_chat("+V-gROBOr4sY2YzVh") #桃花源
-                # await op.join_chat("https://t.me/+PmSBya7t51JmOTNh") #unbrella
-                # await op.join_chat("https://t.me/+LmR0F1WpnFQ0Y2Ix")  #测试群
-             
                 # //6260
                 # await op.update_profile(random_name=True)
                 # await op.send_random_message(chat_id=[-1004335920222, -1004372020134])
                 # await op.routine_insert()
-                try:
-                    await op.tracking_message_range(chat=-1004335920222)
-                    await asyncio.sleep(1)
-                    await op.tracking_message_range(chat=-1004372020134)
-                    await asyncio.sleep(1)
-                    await op.tracking_message_range(chat=-1004383041223)
-                    await asyncio.sleep(1)
-                except Exception as exc:
-                    print(
-                        f"第 {t} 轮、账号 {i} 跟踪消息发生错误，"
-                        f"跳过本次并继续：{exc!r}",
-                        flush=True,
-                    )
-                    continue
+                
+                
 
                 try:
                     display_name = operator_title[i]
@@ -283,39 +296,43 @@ async def run_telethon_bot(
                    
 
                 
-                try:                  
+                # try:                  
 
-                    print(
-                        f"\n第 {t} 轮、账号 {i}（{display_name}）开始提取...",
-                        flush=True,
-                    )
-                    for j in range(3):
-                        await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID)
-                        sleep_time = random.randint(1, 3)
-                        await asyncio.sleep(sleep_time)
+                #     print(
+                #         f"\n第 {t} 轮、账号 {i}（{display_name}）开始提取...",
+                #         flush=True,
+                #     )
+                #     for j in range(6):
+                #         sleep_time = random.randint(1, 3)
+                #         await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID)
+                       
+                #         if j == 1:
+                #             await op.tracking_message_range(chat=-1004335920222)
+                #         elif j == 3:
+                #             await op.tracking_message_range(chat=-1004372020134) 
+                #         elif j == 5:
+                #             await op.tracking_message_range(chat=-1004383041223)
+                #         await asyncio.sleep(sleep_time)
+                #         await op.extract(ask_like=True, bot_id=HumanBotOperator.FZ_CODE_BOT_ID, extract_status=0)
+                        
                     
-                    for i in range(7):
-                        await op.extract(ask_like=True, bot_id=HumanBotOperator.FZ_CODE_BOT_ID)
-                        sleep_time = random.randint(1, 3)
-                        await asyncio.sleep(sleep_time)
-
-                    
 
 
-                except (TimeoutError, ConnectionError, OSError) as exc:
-                    print(
-                        f"第 {t} 轮、账号 {i} 提取超时或连线中断，"
-                        f"跳过本次并继续：{exc}",
-                        flush=True,
-                    )
-                    continue
-                except Exception as exc:
-                    print(
-                        f"第 {t} 轮、账号 {i} 提取发生未预期错误，"
-                        f"跳过本次并继续：{exc!r}",
-                        flush=True,
-                    )
-                    continue
+                # except (TimeoutError, ConnectionError, OSError) as exc:
+                #     print(
+                #         f"第 {t} 轮、账号 {i} 提取超时或连线中断，"
+                #         f"跳过本次并继续：{exc}",
+                #         flush=True,
+                #     )
+                #     continue
+                # except Exception as exc:
+                #     print(
+                #         f"第 {t} 轮、账号 {i} 提取发生未预期错误，"
+                #         f"跳过本次并继续：{exc!r}",
+                #         flush=True,
+                #     )
+                #     continue
+                
                 # for i in range(4156, 4164):  # 从 4900 往下降到 4800
                 #     await op.extract(secret_id=i)
                 #     await asyncio.sleep(random.randint(10, 25))
@@ -331,9 +348,13 @@ async def run_telethon_bot(
 
                 # 模拟按 Ctrl 键 以避免进入休眠状态
                 await op.simulate_ctrl_press()
-                
-                try:                    
+
+
+                try:                  
+                    op = operator[i]
                     await op.fetch_list()
+                    
+                    
                 except Exception as exc:
                     print(
                         f"第 {t} 轮、账号 {i} 获取列表发生错误，"
@@ -346,19 +367,20 @@ async def run_telethon_bot(
                 sleep_time = random.randint(3, 7)
                 print(f"==>Sleeping for {sleep_time} seconds before next operation.", flush=True)
                 await asyncio.sleep(sleep_time)
-        print(f"✅ Completed", flush=True)
         
-        for i, session in enumerate(operator):
-            op = operator[i] 
-            await op.disconnect()
-            # await account_manager.check_all_userbot(config)
-            # await account_manager.rec_new_account(
-            #     phone_number="+15809565862",
-            #     pw2fa="z4422404",
-            # )
-            # await account_manager.check_phone("+18157706388")
-        print("所有操作已完成，正在断开连接...", flush=True)
+        
+        # for i, session in enumerate(operator):
+        #     op = operator[i] 
+        #     await op.disconnect()
+        #     # await account_manager.check_all_userbot(config)
+        #     # await account_manager.rec_new_account(
+        #     #     phone_number="+15809565862",
+        #     #     pw2fa="z4422404",
+        #     # )
+        #     # await account_manager.check_phone("+18157706388")
+        # print("所有操作已完成，正在断开连接...", flush=True)
     finally:
+        print(f"✅ Completed", flush=True)
         for i, session in enumerate(operator):
             op = operator[i] 
             await op.disconnect()        
