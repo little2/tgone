@@ -65,6 +65,10 @@ class HumanBotOperator:
 	
 	REWARD_BOT_NAME = "zttower5bot"
 	FREE_CHAT_ID = -1002093182221
+	# 媒体汇聚频道：0 表示未配置（实际值按 _resolve_pool_channel 的顺序解析）
+	POOL_CHANNEL: int | str = 0
+	# Telegram album 一次最多 10 条
+	ALBUM_MAX_SIZE = 10
 	PROTECTED_MEDIA_TRANSFER_TIMEOUT_SECONDS = 5 * 60
 	CAPTCHA_SELECTION_TIMEOUT_SECONDS = 30
 	_bot_cache: dict[str, Bot] = {}
@@ -116,6 +120,10 @@ class HumanBotOperator:
 			str(taobao_bot_username or "").strip().removeprefix("@") or None
 		)
 		self._next_message_id_by_chat: dict[int, int] = {}
+		# caption 相同的媒体先入队，凑成 album 后再发到 POOL_CHANNEL
+		self._pool_last_caption: str | None = None
+		self._pool_media_queue: list[Any] = []
+		self._pool_channel_warned = False
 		self.time_greetings = {
 			"morning": [
 				"早", "早啊", "早上好", "早安",  "早","古德猫宁","聊天就能加分","看看","没性欲了","早上好","开始爬楼","美好的早晨","好看的还是多"
@@ -709,7 +717,164 @@ class HumanBotOperator:
 
 		return printed_count
 
+	async def moving_message_range(
+		self,
+		chat: Any,
+		start_message_id: int = 0,
+		end_message_id: int = 0,
+	) -> int:
+		"""按 ID 从小到大打印指定群组内包含起止边界的消息。"""
+		if chat is None or (isinstance(chat, str) and not chat.strip()):
+			raise ValueError("chat 不可为空")
 
+		if isinstance(chat, str):
+			chat = chat.strip()
+			if re.fullmatch(r"-?\d+", chat):
+				chat = int(chat)
+
+		entity = await self.client.get_entity(chat)
+		source_chat_id = await self.client.get_peer_id(entity)
+
+		start_message_id = int(start_message_id)
+		end_message_id = int(end_message_id)
+
+		
+
+		if start_message_id <= 0:
+			start_message_id = await self._get_resume_message_id(source_chat_id)
+
+		if end_message_id <= 0:
+			end_message_id = start_message_id + 20
+
+		if start_message_id > end_message_id:
+			raise ValueError("start_message_id 不可大于 end_message_id")
+
+		printed_count = 0
+		last_scanned_message_id: int | None = None
+		async for message in self.client.iter_messages(
+			entity,
+			min_id=max(start_message_id - 1, 0),
+			max_id=end_message_id + 1,
+			reverse=True,
+		):
+			last_scanned_message_id = message.id
+			message_text = message.raw_text or ""
+			
+			# print(
+			# 	f"[历史消息] message={message}",
+			# )
+
+			# 如果是媒体信息：先比较 caption 和 last_caption 是否一致
+			if getattr(message, "media", None) is not None:
+				caption = (message.raw_text or "").strip()
+				if (
+					self._pool_last_caption is not None
+					and caption == self._pool_last_caption
+				):
+					# 相同：先放到 queue 中，攒够一组 album 再发送
+					self._pool_media_queue.append(message)
+					if len(self._pool_media_queue) >= self.ALBUM_MAX_SIZE:
+						await self._flush_pool_album()
+				else:
+					# 不相同：先把之前已经放在 queue 的媒体发送到 POOL_CHANNEL
+					await self._flush_pool_album()
+					self._pool_last_caption = caption
+					self._pool_media_queue = [message]
+			# print(
+			# 	f"[历史消息] message_id={message.id} {message_text}",	
+			# 	flush=True,
+			# )
+			printed_count += 1
+
+		if last_scanned_message_id is not None:
+			self._next_message_id_by_chat[source_chat_id] = (
+				last_scanned_message_id + 1
+			)
+			await self._upsert_extra_log(
+				source_chat_id,
+				self._next_message_id_by_chat[source_chat_id],
+			)
+
+		return printed_count
+
+
+
+	def _resolve_pool_channel(self) -> int | str | None:
+		"""解析 POOL_CHANNEL：类常量 → CONFIGURATION.pool_channel → 环境变量 POOL_CHANNEL。
+
+		因为入口程序在 import 本模块之后才 load_dotenv，所以必须惰性读取。
+		返回 None 表示未配置。
+		"""
+		raw: Any = self.POOL_CHANNEL
+		if raw in (0, None, ""):
+			try:
+				payload = json.loads(os.getenv("CONFIGURATION", "") or "{}")
+				if isinstance(payload, dict):
+					raw = payload.get("pool_channel") or ""
+			except Exception:
+				raw = ""
+		if raw in (0, None, ""):
+			raw = os.getenv("POOL_CHANNEL", "")
+
+		text = str(raw).strip()
+		if not text:
+			return None
+		if re.fullmatch(r"-?\d+", text):
+			value = int(text)
+			if value == 0:
+				return None
+			if value > 0:
+				# 与 aiogram_bot_operator 的约定一致：纯数字自动补 -100 前缀
+				value = int(f"-100{value}")
+			return value
+		return text
+
+	async def _flush_pool_album(self) -> None:
+		"""把队列中的媒体以 album 形式发送到 POOL_CHANNEL。"""
+		if not self._pool_media_queue:
+			return
+
+		target = self._resolve_pool_channel()
+		if target is None:
+			if not self._pool_channel_warned:
+				print("⚠️ POOL_CHANNEL 未配置，跳过 album 发送。", flush=True)
+				self._pool_channel_warned = True
+			self._pool_media_queue.clear()
+			return
+
+		pending_messages = list(self._pool_media_queue)
+		self._pool_media_queue.clear()
+		caption = self._pool_last_caption or ""
+
+		try:
+			entity = await self._resolve_input_entity(target)
+			if len(pending_messages) == 1:
+				# 单条不构造 album，避免 SendMultiMedia 只带一项
+				await self.client.send_file(
+					entity,
+					pending_messages[0].media,
+					caption=caption,
+				)
+			else:
+				await self.client.send_file(
+					entity,
+					[message.media for message in pending_messages],
+					caption=caption,
+				)
+
+			print(
+				f"[POOL] 已向 {target} 发送 {len(pending_messages)} 条媒体，"
+				f"caption={caption}",
+				flush=True,
+			)
+			sleep_time = random.randint(7, 15)
+			print(f"==>Sleeping for {sleep_time} seconds before next operation.", flush=True)
+			await asyncio.sleep(sleep_time)
+		except Exception as exc:
+			print(
+				f"⚠️ [POOL] 发送 album 失败（{len(pending_messages)} 条，已丢弃）：{exc}",
+				flush=True,
+			)
 
 	async def send_random_message(
 		self,

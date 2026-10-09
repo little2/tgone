@@ -52,6 +52,116 @@ async def main_check_user() -> None:
     finally:
         await MySQLPool.close()
 
+
+
+async def main_move(
+    config: dict | None = None,
+    *,
+    configure_mysql: bool = True,
+) -> None:
+    print("正在启动 Telethon 用户账号流程...", flush=True)
+    if config is None:
+        account_manager = UserAccountManager()
+        config = account_manager.load_config()
+    if configure_mysql:
+        configure_mysql_pool(config)
+    try:
+        session_rows = await MySQLPool.fetchall(
+            "SELECT `bot_token` FROM `bot` "
+            "WHERE check_group IN (9) ",
+        
+            error_tag="userbot.random_session_tokens",
+        )
+        
+        if not session_rows:
+            raise RuntimeError(
+                "从数据库中获取到的 session_rows 为空"
+            )
+        if len(session_rows) < 1:
+            raise RuntimeError(
+                f"数据库中的 bot_token 数量不足：需要 1 个，实际只有 {len(session_rows)} 个"
+            )
+       
+
+        session_set = {
+            index: str(row["bot_token"]).strip()
+            for index, row in enumerate(session_rows)
+        }
+
+        operator = {}
+        operator_title = {}
+
+        # 随机从 session_set 中选择，形成另外的子集合
+        selected_sessions = random.sample(list(session_set.values()), len(session_set))
+
+        for i, session in enumerate(selected_sessions):
+            try:
+                operator_length = len(operator)
+
+                op = await HumanBotOperator.login_with_session(
+                    session_string=session,
+                    api_id=API_ID,
+                    api_hash=API_HASH,
+                    taobao_bot_username=config.get("taobao_bot_username"),
+                )
+                operator[(operator_length)] = op
+
+                
+
+               
+                me = await op.client.get_me()
+                display_name = (
+                    getattr(me, "first_name", None)
+                    or getattr(me, "username", None)
+                    or f"ID:{getattr(me, 'id', i)}"
+                )
+                operator_title[(operator_length)] = display_name
+
+                
+            except Exception as e:
+                print(f"Failed to login with session {i} {session}: {e}", flush=True)
+
+        
+        t=0
+        while True:  # Infinite loop, adjust the condition as needed
+            t += 1
+            for i, session in enumerate(operator):
+                op = operator[i] 
+              
+                await op.simulate_ctrl_press()
+
+
+                try:                  
+                    op = operator[i]
+                    await op.moving_message_range(chat=-1003960850527)  #桃子河上游
+                    
+                    
+                    
+                except Exception as exc:
+                    print(
+                        f"第 {t} 轮、账号 {i} 获取列表发生错误，"
+                        f"跳过本次并继续：{exc!r}",
+                        flush=True,
+                    )
+                    continue
+
+
+                sleep_time = random.randint(3, 7)
+                print(f"==>Sleeping for {sleep_time} seconds before next operation.", flush=True)
+                await asyncio.sleep(sleep_time)
+        
+        
+     
+    finally:
+        print(f"✅ Completed", flush=True)
+        for i, session in enumerate(operator):
+            op = operator[i] 
+            await op.disconnect()        
+        print("所有操作已完成，正在断开连接...", flush=True)            
+        await MySQLPool.close()
+        return
+   
+
 async def main_auto_talk() -> None:
     account_manager = UserAccountManager()
     config = account_manager.load_config()
@@ -474,7 +584,8 @@ if __name__ == "__main__":
     async def _run_all() -> None:
         # await main_check_user()
         # await main_auto_talk()
-        await main()
+        await main_move()
+        # await main()
 
 
 
