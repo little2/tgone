@@ -1415,8 +1415,9 @@ class HumanBotOperator:
 									await self.tracking_message_range(chat=-1004335920222)
 								elif _qty == 3:
 									await self.tracking_message_range(chat=-1004372020134) 
-								elif _qty == 5:
-									await self.tracking_message_range(chat=-1004383041223)
+								# elif _qty == 5:
+								#   玉
+								# 	await self.tracking_message_range(chat=-1004383041223)
 
 
 								if _qty%5 == 0:
