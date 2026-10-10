@@ -133,7 +133,7 @@ async def main_move(
 
                 try:                  
                     op = operator[i]
-                    await op.moving_message_range(chat=-1003960850527)  #桃子河上游
+                    await op.moving_message_range(chat=-1003940723216)  #大运河频道
                     
                     
                     
@@ -584,8 +584,8 @@ if __name__ == "__main__":
     async def _run_all() -> None:
         # await main_check_user()
         # await main_auto_talk()
-        # await main_move()
-        await main()
+        await main_move()
+        # await main()
 
 
 
