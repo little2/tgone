@@ -136,6 +136,7 @@ class UserAccountManager:
             session_name = phone_number.replace('+', '').replace(' ', '') + '_' + str(api_id) # 确保电话号码格式正确
         else:
             session_name = StringSession(str(session_string).strip())
+            
 
         #     bot_info['check_status'] =  "bot_info 的 bot_token 為空"
         #     return None, 0, bot_info
@@ -148,6 +149,7 @@ class UserAccountManager:
 
 
         try:
+            # print(f"正在使用 session={session_name} 连接 Telegram...", flush=True)
             user_client = TelegramClient(
                 session_name, api_id, str(api_hash)
             )
@@ -184,7 +186,7 @@ class UserAccountManager:
                     bot_info,
                 )
 
-            print(f"User is not authorized, starting the login process...  {bot_title}  {phone_number} ,bot_id= {bot_info.get('bot_id')} ", flush=True)
+            print(f"❗️ User is not authorized, starting the login process...  {bot_title}  {phone_number} ,bot_id= {bot_info.get('bot_id')} ", flush=True)
             result = await self.tg_login(user_client, phone_number, pw2fa)
 
             if isinstance(result, FloodWaitError):
@@ -201,6 +203,13 @@ class UserAccountManager:
                 print("❌ The phone code entered was invalid。", flush=True)
                 bot_info['check_status'] =  "The phone code entered was invalid"
                 return None, 0, bot_info
+            elif "can no longer be used" in str(result):
+                '''
+                Failed to send verification request, error: The authorization key (session file) was used under two different IP addresses simultaneously, and can no longer be used. Use the same session exclusively, or use different sessions (caused by SendCodeRequest)
+                '''
+                print(f"❌ {result}", flush=True)
+                bot_info['check_status'] =  "two different IP addresses simultaneously"
+                return None, 0, bot_info            
             elif result:
                 stringsession = StringSession.save(user_client.session)
                 print("\n✅ 以下是你的 StringSession（可写入 .env）\n")
@@ -364,7 +373,7 @@ class UserAccountManager:
 
 
         if status_code != 1 or user_client is None:
-            print(f"登入失敗: {new_bot_info.get('check_status')}", flush=True)
+            print(f"❌登入失敗: {new_bot_info.get('check_status')}", flush=True)
             if status_code == 4:
                 work_status = "ban"
 
@@ -558,6 +567,9 @@ class UserAccountManager:
                     f"登入 session 已失效：bot_id= {new_bot_info.get('bot_id')} ",
                     flush=True,
                 )
+            except Exception as e:
+                print(f"❌ 登入失败: {e}")
+
             finally:
                 await user_client.disconnect()
 
@@ -565,43 +577,43 @@ class UserAccountManager:
 
 
 
+        if(new_bot_info.get("bot_id") is not None):
 
-
-        await MySQLPool.execute(
-            "INSERT INTO `bot` "
-            "(`bot_id`, `bot_token`, `bot_name`, `bot_root`, `user_id`, `bot_title`, `phone`, "
-            "`api_id`, `api_hash`, `work_status`, `check_timestamp`, `check_status`, `api_url`) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
-            "ON DUPLICATE KEY UPDATE "
-            "`bot_token` = VALUES(`bot_token`), "
-            "`bot_name` = VALUES(`bot_name`), "
-            "`bot_root` = VALUES(`bot_root`), "
-            "`user_id` = VALUES(`user_id`), "
-            "`bot_title` = VALUES(`bot_title`), "
-            "`phone` = VALUES(`phone`), "
-            "`api_id` = VALUES(`api_id`), "
-            "`api_hash` = VALUES(`api_hash`), "
-            "`check_timestamp` = VALUES(`check_timestamp`), "
-            "`check_status` = VALUES(`check_status`), "
-            "`work_status` = VALUES(`work_status`)",
-            (
-                new_bot_info["bot_id"],
-                new_bot_info.get("bot_token", ""),
-                new_bot_info.get("bot_name"),
-                new_bot_info.get("bot_root"),
-                new_bot_info.get("user_id"),
-                new_bot_info.get("bot_title", ""),
-                new_bot_info.get("phone"),
-                new_bot_info.get("api_id"),
-                new_bot_info.get("api_hash"),
-                work_status,
-                new_bot_info["check_timestamp"],
-                new_bot_info.get("check_status", ""),
-                new_bot_info.get("api_url", ""),
-            ),
-            error_tag="userbot.upsert_check_timestamp",
-            raise_on_error=True,
-        )
+            await MySQLPool.execute(
+                "INSERT INTO `bot` "
+                "(`bot_id`, `bot_token`, `bot_name`, `bot_root`, `user_id`, `bot_title`, `phone`, "
+                "`api_id`, `api_hash`, `work_status`, `check_timestamp`, `check_status`, `api_url`) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
+                "ON DUPLICATE KEY UPDATE "
+                "`bot_token` = VALUES(`bot_token`), "
+                "`bot_name` = VALUES(`bot_name`), "
+                "`bot_root` = VALUES(`bot_root`), "
+                "`user_id` = VALUES(`user_id`), "
+                "`bot_title` = VALUES(`bot_title`), "
+                "`phone` = VALUES(`phone`), "
+                "`api_id` = VALUES(`api_id`), "
+                "`api_hash` = VALUES(`api_hash`), "
+                "`check_timestamp` = VALUES(`check_timestamp`), "
+                "`check_status` = VALUES(`check_status`), "
+                "`work_status` = VALUES(`work_status`)",
+                (
+                    new_bot_info["bot_id"],
+                    new_bot_info.get("bot_token", ""),
+                    new_bot_info.get("bot_name"),
+                    new_bot_info.get("bot_root"),
+                    new_bot_info.get("user_id"),
+                    new_bot_info.get("bot_title", ""),
+                    new_bot_info.get("phone"),
+                    new_bot_info.get("api_id"),
+                    new_bot_info.get("api_hash"),
+                    work_status,
+                    new_bot_info["check_timestamp"],
+                    new_bot_info.get("check_status", ""),
+                    new_bot_info.get("api_url", ""),
+                ),
+                error_tag="userbot.upsert_check_timestamp",
+                raise_on_error=True,
+            )
 
     async def check_all_userbot(self, config: dict[str, Any] | None = None) -> None:
 

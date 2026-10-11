@@ -164,6 +164,7 @@ class HumanBotOperator:
 		if not api_hash:
 			raise ValueError("api_hash 不可为空")
 
+		# print(f"正在使用 {session_string}", flush=True)
 		client = TelegramClient(
 			StringSession(session_string),
 			int(api_id),
@@ -253,6 +254,7 @@ class HumanBotOperator:
 							raise RuntimeError(
 								f"account_configs 找不到 sender_id={sender_id}"
 							)
+						print(f"sender_id= {sender_id}", flush=True)
 						operator = await cls._login_script_account(
 							participant["sender_type"],
 							credentials,
