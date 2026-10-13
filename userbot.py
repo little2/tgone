@@ -42,8 +42,8 @@ async def main_check_user() -> None:
     try:
         # await account_manager.check_all_userbot(config)
         await account_manager.rec_new_account(
-            phone_number="+15155151379",
-            pw2fa="Qqqw1234",
+            phone_number="+19595881749",
+            pw2fa="z4422404",
         )
         # await account_manager.check_phone("+254784808106")
         # await account_manager.check_phone("+254784812293")
@@ -68,7 +68,7 @@ async def main_move(
     try:
         session_rows = await MySQLPool.fetchall(
             "SELECT `bot_token` FROM `bot` "
-            "WHERE check_group IN (9) ",
+            "WHERE check_group IN (10) ",
         
             error_tag="userbot.random_session_tokens",
         )
@@ -324,6 +324,7 @@ async def run_telethon_bot(
                 # await op.join_chat("https://t.me/+iHyXV6FFCQAxN2Ix")  #加入布吉岛
                 # await op.join_chat("+mhqJ-3C93F0zODEx") #桃花林 
                 # await op.join_chat("+V-gROBOr4sY2YzVh") #桃花源
+                # await op.join_chat("+Y-FYbcmvdWgxMDJh") #新桃花林 
                 # await op.join_chat("https://t.me/+PmSBya7t51JmOTNh") #unbrella
                 # await op.join_chat("https://t.me/+LmR0F1WpnFQ0Y2Ix")  #测试群
 

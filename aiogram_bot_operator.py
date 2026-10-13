@@ -59,6 +59,7 @@ class AiogramBotOperator:
             else store_channel_id
         )
 
+        # taobao_bot_username 最后会从 BOT 来取
         self.taobao_bot_username = (
             (taobao_bot_username or config.get("taobao_bot_username") or "")
             .strip()
