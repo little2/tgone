@@ -463,6 +463,12 @@ async def run_telethon_bot(
 
                 try:                  
                     op = operator[i]
+
+                    print(
+                        f"\n\n第 {t} 轮、账号 {i}（{display_name}）开始提取...",
+                        flush=True,
+                    )
+
                     await op.fetch_list()
                     
                     
