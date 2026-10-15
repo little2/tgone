@@ -219,8 +219,10 @@ async def main_auto_talk() -> None:
         }
         for participant in participants
     }
-    chat_id = -1004335920222
+    # chat_id = -1004335920222
     # chat_id = -1004303617422
+    # chat_id = -1001804924332    #测试群
+    chat_id = -1003975062729    #桃花林 
     chat_invite_link = os.getenv("CHAT_INVITE_LINK", "").strip() or None
 
    
@@ -255,7 +257,7 @@ async def run_telethon_bot(
     try:
         session_rows = await MySQLPool.fetchall(
             "SELECT `bot_token` FROM `bot` "
-            "WHERE check_group IN (1,2,5) ",
+            "WHERE check_group IN (10) ",
         
             error_tag="userbot.random_session_tokens",
         )
@@ -327,6 +329,10 @@ async def run_telethon_bot(
                 # await op.join_chat("+Y-FYbcmvdWgxMDJh") #新桃花林 
                 # await op.join_chat("https://t.me/+PmSBya7t51JmOTNh") #unbrella
                 # await op.join_chat("https://t.me/+LmR0F1WpnFQ0Y2Ix")  #测试群
+                # await op.join_chat("https://t.me/+vxOstW9jyzQ2YjA1")  #测试群
+                await op.update_profile(random_name=True)
+                await op.send_random_message(chat_id=[-1001804924332])
+               
 
             except Exception as e:
                 print(f"Failed to login with session {i} {session}: {e}", flush=True)
@@ -385,14 +391,14 @@ async def run_telethon_bot(
 
         #         await asyncio.sleep(random.randint(3, 5))
         t=0
-        while True:  # Infinite loop, adjust the condition as needed
+        while False:  # Infinite loop, adjust the condition as needed
             t += 1
             for i, session in enumerate(operator):
                 op = operator[i] 
                 
                 # //6260
-                # await op.update_profile(random_name=True)
-                # await op.send_random_message(chat_id=[-1004335920222, -1004372020134])
+                await op.update_profile(random_name=True)
+                await op.send_random_message(chat_id=[-1001804924332])
                 # await op.routine_insert()
                 
                 
@@ -584,9 +590,9 @@ async def main() -> None:
 if __name__ == "__main__":
     async def _run_all() -> None:
         # await main_check_user()
-        # await main_auto_talk()
+        await main_auto_talk()
         # await main_move()
-        await main()
+        # await main()
 
 
 
