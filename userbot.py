@@ -537,6 +537,7 @@ async def _start_health_server() -> tuple[web.AppRunner, str]:
 
 async def main() -> None:
     """同时执行 Telethon 用户账号流程与 Aiogram Bot polling。"""
+    
     account_manager = UserAccountManager()
     config = account_manager.load_config()
     configure_mysql_pool(config)
