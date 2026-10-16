@@ -261,7 +261,7 @@ async def run_telethon_bot(
     try:
         session_rows = await MySQLPool.fetchall(
             "SELECT `bot_token` FROM `bot` "
-            "WHERE check_group IN (10) ",
+            "WHERE check_group IN (1,2,5) ",
         
             error_tag="userbot.random_session_tokens",
         )
@@ -334,9 +334,9 @@ async def run_telethon_bot(
                 # await op.join_chat("https://t.me/+PmSBya7t51JmOTNh") #unbrella
                 # await op.join_chat("https://t.me/+LmR0F1WpnFQ0Y2Ix")  #测试群
                 # await op.join_chat("https://t.me/+vxOstW9jyzQ2YjA1")  #测试群
-                await op.update_profile(random_name=True)
-                await op.send_random_message(chat_id=[-1001804924332])
-               
+                # await op.update_profile(random_name=True)
+                # await op.send_random_message(chat_id=[-1001804924332])
+                # await op.routine_insert()
 
             except Exception as e:
                 print(f"Failed to login with session {i} {session}: {e}", flush=True)
@@ -395,15 +395,14 @@ async def run_telethon_bot(
 
         #         await asyncio.sleep(random.randint(3, 5))
         t=0
-        while False:  # Infinite loop, adjust the condition as needed
+        while True:  # Infinite loop, adjust the condition as needed
             t += 1
             for i, session in enumerate(operator):
                 op = operator[i] 
                 
-                # //6260
-                await op.update_profile(random_name=True)
-                await op.send_random_message(chat_id=[-1001804924332])
-                # await op.routine_insert()
+  
+
+                
                 
                 
 
@@ -496,16 +495,7 @@ async def run_telethon_bot(
                 await asyncio.sleep(sleep_time)
         
         
-        # for i, session in enumerate(operator):
-        #     op = operator[i] 
-        #     await op.disconnect()
-        #     # await account_manager.check_all_userbot(config)
-        #     # await account_manager.rec_new_account(
-        #     #     phone_number="+15809565862",
-        #     #     pw2fa="z4422404",
-        #     # )
-        #     # await account_manager.check_phone("+18157706388")
-        # print("所有操作已完成，正在断开连接...", flush=True)
+
     finally:
         print(f"✅ Completed", flush=True)
         for i, session in enumerate(operator):
