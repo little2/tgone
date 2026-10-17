@@ -22,29 +22,38 @@ def reconnecting(func):
     """
     通用断线重连装饰器：
     - 只针对 aiomysql.OperationalError
-    - 若错误码为 2006 / 2013 → 认为是断线，重建连接池 + 自动重试一次
-    - 第二次仍失败 / 其它错误 → 直接抛出
+    - 错误码 2006 / 2013 时重建连接池，最多重试 10 次（总计 11 次尝试）
+    - 每次重试前分别等待 1、2、…、10 秒
+    - 重建时无法连接（2003）也继续重试；次数耗尽或其它错误则抛出
     """
     @wraps(func)
     async def wrapper(*args, **kwargs):
         cls = args[0] if args else None
-        for attempt in (1, 2):
+        max_retries = 10
+        for attempt in range(max_retries + 1):
+            rebuilding = False
             try:
+                if attempt:
+                    rebuilding = True
+                    await cls._rebuild_pool()
+                    rebuilding = False
                 return await func(*args, **kwargs)
             except aiomysql.OperationalError as e:
                 code = e.args[0] if e.args else None
                 msg = e.args[1] if len(e.args) > 1 else ""
 
-                if not cls or code not in (2006, 2013) or attempt == 2:
+                retryable = code in (2006, 2013) or (rebuilding and code == 2003)
+                if not cls or not retryable or attempt == max_retries:
                     print(f"❌ [MySQLPool] OperationalError {code}: {msg}", flush=True)
                     raise
 
-                print(f"⚠️ [MySQLPool] 检测到断线 {code}: {msg} → 重建连接池并重试一次", flush=True)
-                try:
-                    await cls._rebuild_pool()
-                except Exception as e2:
-                    print(f"❌ [MySQLPool] 重建连接池失败: {e2}", flush=True)
-                    raise
+                retry_number = attempt + 1
+                print(
+                    f"⚠️ [MySQLPool] 连接错误 {code}: {msg} → "
+                    f"等待 {retry_number} 秒后重建连接池，重试 {retry_number}/{max_retries}",
+                    flush=True,
+                )
+                await asyncio.sleep(retry_number)
     return wrapper
 
 # tgone_mysql.py
@@ -208,7 +217,7 @@ class MySQLPool:
             cls._pool = None
             cls.show_debug("🔄 [MySQLPool] 正在重建 MySQL 连接池…")
             cls._closing = False
-            await cls.init_pool()
+            await cls._init_pool_locked()
 
     @classmethod
     def _pool_usable(cls) -> bool:

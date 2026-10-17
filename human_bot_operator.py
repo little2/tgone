@@ -126,23 +126,23 @@ class HumanBotOperator:
 		self._pool_channel_warned = False
 		self.time_greetings = {
 			"morning": [
-				"早", "早啊", "早上好", "早安",  "早","古德猫宁","聊天就能加分","看看","没性欲了","早上好","开始爬楼","美好的早晨","好看的还是多"
+				"早", "早啊", "早上好", "早安",  "早","古德猫宁","聊天就能加分","看看","没性欲了","早上好","开始爬楼","美好的早晨","好看的还是多", "早上好"
 				
 			],
 			"noon": [
-				"中午好", "午安",  "群友们好", "666", "好看爱看","看看","我要信誉分","多聊","好看🥰","爬楼啦","几千条"
+				"中午好", "午安",  "群友们好", "666", "好看爱看","看看","我要升级","多聊","好看🥰","爬楼啦","几千条"
 				
 			],
 			"afternoon": [
-				"下午好", "下午好", "大佬们好","Hi","剩下的全靠点赞","聊天就能加分","看看","需要信誉分","没性欲了","多发言","太牛了","不错啊","牛逼","好看的还是多"
+				"下午好", "下午好", "大佬们好","Hi","剩下的全靠点赞","聊天就能加分","看看","需要发言","没性欲了","多发言","太牛了","不错啊","牛逼","好看的还是多"
 				
 			],
 			"evening": [
-				"晚上好",  "群友们好", "来色色了",  "刷刷分了", "晚安", "大佬们好","可以阿","唉","剩下的全靠点赞","服了","需要信誉","就是","9494","还是说少了啊","真不赖"
+				"晚上好",  "群友们好", "来色色了",  "刷刷分了", "晚安", "大佬们好","可以阿","唉","剩下的全靠点赞","服了","需要发呀啊","就是","9494","还是说少了啊","真不赖"
 				
 			],
 			"late_night": [
-				"晚安", "群友们好",   "大佬好", "好看爱看","666","为了信誉分","积分一直涨，就是信誉分不涨了","新的一天","消息太多了","几千条"
+				"晚安", "群友们好",   "大佬好", "好看爱看","666","为了看片","好看","新的一天","消息太多了","几千条"
 			]
 		}
 
@@ -878,12 +878,14 @@ class HumanBotOperator:
 				flush=True,
 			)
 
+	
+
 	async def send_random_message(
 		self,
 		chat_id: Any,
 		hour=None,
-		messages: set[str] | None = None,
-	) -> str | None:
+		check_time_gap_minutes=60,
+	):
 		"""随机选择候选群组及一句话发送，并返回发送内容。"""
 		chat_candidates = (
 			list(chat_id)
@@ -912,6 +914,34 @@ class HumanBotOperator:
 
 		chat_target = await self._resolve_input_entity(selected_chat_id)
 
+
+		me = await self.client.get_me()
+		sender_id = me.id
+		print(f"sender_id: {sender_id}")
+
+		if check_time_gap_minutes > 0:
+			
+			current_ts = int(time.time())
+			
+
+			extra_log_row = await MySQLPool.fetchone(
+				"SELECT `update_ts` FROM `extra_log` WHERE `chat_id` = %s LIMIT 1",
+				(sender_id,),
+				error_tag="human_bot_operator.get_extra_log_cursor_update_ts",
+			)
+
+			if extra_log_row is not None:
+				last_sent_time = int(extra_log_row.get("update_ts") or 0)
+				time_gap = current_ts - last_sent_time
+				if time_gap < check_time_gap_minutes * 60:
+					print(
+						f"距离上次{last_sent_time}向群组 {sender_id} 发送消息不足 {check_time_gap_minutes} 分钟，跳过发送。(current_ts={current_ts})",
+						flush=True,
+					)
+					return
+
+
+
 		period = self.get_time_period(hour)
 		greetings = self.time_greetings[period]
 		weights = [random.uniform(0.8, 1.2) for _ in greetings]  # 模拟偏好但保持浮动
@@ -919,12 +949,17 @@ class HumanBotOperator:
 
 
 		selected_message = random.choices(greetings, weights=weights, k=1)[0]
-		await self.client.send_message(chat_target, selected_message)
+		send_result = await self.client.send_message(chat_target, selected_message)
 		print(
-			f"已向群组 {selected_chat_id} 发送随机消息：{selected_message}",
+			f"已向群组 {selected_chat_id} 发送随机消息：{selected_message} send_result={send_result} by sender_id = {sender_id}",
 			flush=True,
 		)
-		return selected_message
+
+
+
+		await self._upsert_extra_log(sender_id, send_result.id)
+
+		return send_result
 
 	async def send_first_video_to_bot(
 		self,
@@ -1343,6 +1378,14 @@ class HumanBotOperator:
 		result = await self.capture_bot_messages(target_bot, "/start")
 		if not result:
 			print("⚠️ 沒有取得 /start 首頁訊息", flush=True)
+
+
+
+			send_result = await self.send_random_message(chat_id=[-1004335920222])
+			print(f"已发送随机消息，send_result: {send_result}")
+			
+
+			
 			return
 		menu_id = result[-1].id                      # 用最後一則，通常才是選單
 
@@ -1565,7 +1608,7 @@ class HumanBotOperator:
 				)
 				
 				if not rows:
-					print(f"未找到 extract_status = 0 的 sora_code 记录，{bot_id} / {extract_status} 等待 60 秒后重试...", flush=True)
+					print(f"未找到 extract_status = 0 的 sora_code 记录，bot_id={bot_id} / {extract_status} 等待 60 秒后重试...", flush=True)
 					await asyncio.sleep(60)
 					return None
 				   
@@ -2860,11 +2903,11 @@ class HumanBotOperator:
 	) -> None:
 		"""将群组的下一条扫描游标写入 extra_log。"""
 		await MySQLPool.execute(
-			"INSERT INTO `extra_log` (`chat_id`, `message_id`, `create_ts`) "
+			"INSERT INTO `extra_log` (`chat_id`, `message_id`, `update_ts`) "
 			"VALUES (%s, %s, %s) "
 			"ON DUPLICATE KEY UPDATE "
 			"`message_id` = VALUES(`message_id`), "
-			"`create_ts` = VALUES(`create_ts`)",
+			"`update_ts` = VALUES(`update_ts`)",
 			(
 				source_chat_id,
 				next_message_id,
