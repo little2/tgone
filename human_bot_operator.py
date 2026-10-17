@@ -1365,7 +1365,7 @@ class HumanBotOperator:
 		'''
 
 		_qty = 0
-		target_bot = await self._resolve_input_entity("@yunupan1bot")
+		target_bot = await self._resolve_input_entity("@di5k5bot")
 
 		desc_order_id = int(desc_order_id)
 
