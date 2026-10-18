@@ -209,7 +209,15 @@ class UserAccountManager:
                 '''
                 print(f"❌ {result}", flush=True)
                 bot_info['check_status'] =  "two different IP addresses simultaneously"
-                return None, 0, bot_info            
+
+                new_bot_info  = {
+                    "phone": phone_number,
+                    "api_url": bot_info.get('api_url'),
+                }
+                return await self.login_bot(bot_info=new_bot_info, pw2fa=pw2fa)
+
+
+                # return None, 0, bot_info            
             elif result:
                 stringsession = StringSession.save(user_client.session)
                 print("\n✅ 以下是你的 StringSession（可写入 .env）\n")

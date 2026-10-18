@@ -300,6 +300,9 @@ class HumanBotOperator:
 					chat_entities[actor_id] = await operator._resolve_input_entity(
 						chat_id
 					)
+
+					
+
 				except ValueError as resolve_error:
 					if chat_invite_link is not None:
 						await operator.join_chat(chat_invite_link)

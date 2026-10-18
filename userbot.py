@@ -41,11 +41,11 @@ async def main_check_user() -> None:
 
     try:
         # await account_manager.check_all_userbot(config)
-        await account_manager.rec_new_account(
-            phone_number="+19595881749",
-            pw2fa="z4422404",
-        )
-        # await account_manager.check_phone("+254784808106")
+        # await account_manager.rec_new_account(
+        #     phone_number="+15155151379",
+        #     pw2fa="Qqqw1234",
+        # )
+        await account_manager.check_phone("+66829245756")
         # await account_manager.check_phone("+254784812293")
         # await account_manager.check_phone("+254797636990") 
 
@@ -223,12 +223,19 @@ async def main_auto_talk() -> None:
         }
         for participant in participants
     }
-    # chat_id = -1004335920222
+
+    chat_id = -1004335920222    #布吉岛
+    message_thread_id=0
     # chat_id = -1004303617422
     # chat_id = -1001804924332    #测试群
-    chat_id = -1003975062729    #桃花林 
-    chat_invite_link = os.getenv("CHAT_INVITE_LINK", "").strip() or None
+    # chat_id = -1003975062729    #桃花林 
+    # chat_id = -1004409893549    #桃花林 
+    # message_thread_id=28452
 
+
+
+    # chat_invite_link = os.getenv("CHAT_INVITE_LINK", "").strip() or None
+    chat_invite_link = "+1_46OHKmuuowNzkx"
    
     # chat_id: int | str = os.environ["CHAT_ID"].strip()
     # if chat_id.lstrip("-").isdigit():
@@ -238,7 +245,7 @@ async def main_auto_talk() -> None:
         result = await HumanBotOperator.run_chat_script(
             script_json=script,
             chat_id=chat_id,
-            message_thread_id=None,
+            message_thread_id=message_thread_id,
             account_configs=account_configs,
             chat_invite_link=chat_invite_link,
             fast_mode=False,
@@ -261,7 +268,7 @@ async def run_telethon_bot(
     try:
         session_rows = await MySQLPool.fetchall(
             "SELECT `bot_token` FROM `bot` "
-            "WHERE check_group IN (1,2,5) ",
+            "WHERE check_group IN (10) ",
         
             error_tag="userbot.random_session_tokens",
         )
@@ -329,7 +336,8 @@ async def run_telethon_bot(
                 # await op.join_chat("https://t.me/+i5S7P-Dol4dhNzA5")  #加入布吉岛主 1004335920222
                 # await op.join_chat("https://t.me/+iHyXV6FFCQAxN2Ix")  #加入布吉岛
                 # await op.join_chat("+mhqJ-3C93F0zODEx") #桃花林 
-                # await op.join_chat("+V-gROBOr4sY2YzVh") #桃花源
+                # await op.join_chat("+QEtmtaI-amU5NDRh") #桃花源
+                
                 # await op.join_chat("+Y-FYbcmvdWgxMDJh") #新桃花林 
                 # await op.join_chat("https://t.me/+PmSBya7t51JmOTNh") #unbrella
                 # await op.join_chat("https://t.me/+LmR0F1WpnFQ0Y2Ix")  #测试群
@@ -337,6 +345,9 @@ async def run_telethon_bot(
                 # await op.update_profile(random_name=True)
                 # await op.send_random_message(chat_id=[-1001804924332])
                 # await op.routine_insert()
+                # sleep_time = random.randint(3, 7)
+                # print(f"==>Sleeping for {sleep_time} seconds before next operation.", flush=True)
+                # await asyncio.sleep(sleep_time)
 
             except Exception as e:
                 print(f"Failed to login with session {i} {session}: {e}", flush=True)
@@ -395,7 +406,7 @@ async def run_telethon_bot(
 
         #         await asyncio.sleep(random.randint(3, 5))
         t=0
-        while True:  # Infinite loop, adjust the condition as needed
+        while False:  # Infinite loop, adjust the condition as needed
             t += 1
             for i, session in enumerate(operator):
                 op = operator[i] 
@@ -591,9 +602,9 @@ async def main() -> None:
 if __name__ == "__main__":
     async def _run_all() -> None:
         # await main_check_user()
-        # await main_auto_talk()
+        await main_auto_talk()
         # await main_move()
-        await main()
+        # await main()
 
 
 
