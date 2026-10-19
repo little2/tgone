@@ -555,10 +555,10 @@ async def main() -> None:
 
 if __name__ == "__main__":
     async def _run_all() -> None:
-        await main_check_user()
+        # await main_check_user()
         # await main_auto_talk()
         # await main_move()
-        # await main()
+        await main()
 
 
 
