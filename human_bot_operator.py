@@ -1406,7 +1406,16 @@ class HumanBotOperator:
             target_bot, click_button_title="🆕", message_id=board_id
         )
         if not result_most_recent:
+            
+
+            
+            await self.capture_bot_messages(
+                target_bot, click_button_title="简体", message_id=board_id
+            )
+
             print("⚠️ 點擊「🆕 最新發布」後沒有取得任何輸出", flush=True)
+
+
             return
         latest_id = result_most_recent[-1].id
 

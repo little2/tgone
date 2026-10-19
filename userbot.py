@@ -329,7 +329,7 @@ async def run_telethon_bot(
 
                 # await op.join_chat("https://t.me/+gwLvTrmPWGAwYzBh")  #正太方舟               
                 # await op.client.send_message("@postfilebbot", "/checkin")      
-                await op.client.send_message("@di5k5bot", "/start")
+                # await op.client.send_message("@di5k5bot", "/start")
                 # await op.join_chat("https://t.me/+LmR0F1WpnFQ0Y2Ix")
                 # await op.client.send_message("@ztFreeJJBOT", "/start") 
 
