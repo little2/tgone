@@ -17,6 +17,7 @@ from human_bot_operator import HumanBotOperator
 
 API_ID = int(os.getenv("API_ID", 0))
 API_HASH = os.getenv("API_HASH", "")
+FETCH_MODE = os.getenv("FETCH_MODE", "")
 
 env_path = Path(__file__).resolve().parent / ".env"
 load_dotenv(dotenv_path=env_path)
@@ -266,12 +267,18 @@ async def run_telethon_bot(
     if configure_mysql:
         configure_mysql_pool(config)
     try:
-        session_rows = await MySQLPool.fetchall(
-            "SELECT `bot_token` FROM `bot` "
-            "WHERE check_group IN (10) ",
-        
-            error_tag="userbot.random_session_tokens",
-        )
+        if FETCH_MODE == "emoji":
+            session_rows = await MySQLPool.fetchall(
+                "SELECT `bot_token` FROM `bot` "
+                "WHERE check_group IN (10) ",
+                error_tag="userbot.random_session_tokens",
+            )
+        else:
+            session_rows = await MySQLPool.fetchall(
+                "SELECT `bot_token` FROM `bot` "
+                "WHERE check_group IN (1,2,5) ",
+                error_tag="userbot.random_session_tokens",
+            )
         
         if not session_rows:
             raise RuntimeError(
@@ -294,10 +301,7 @@ async def run_telethon_bot(
         # 随机从 session_set 中选择，形成另外的子集合
         selected_sessions = random.sample(list(session_set.values()), len(session_set))
 
-        # selected_sessions[0] = session_set[7]
-
-        # 遍循 selected_sessions
-        # selected_sessions = list(session_set.values())
+       
 
         for i, session in enumerate(selected_sessions):
             try:
@@ -311,9 +315,6 @@ async def run_telethon_bot(
                 )
                 operator[(operator_length)] = op
 
-                
-
-               
                 me = await op.client.get_me()
                 display_name = (
                     getattr(me, "first_name", None)
@@ -328,7 +329,7 @@ async def run_telethon_bot(
 
                 # await op.join_chat("https://t.me/+gwLvTrmPWGAwYzBh")  #正太方舟               
                 # await op.client.send_message("@postfilebbot", "/checkin")      
-                # await op.client.send_message("@taobao10086bot", "/start")
+                await op.client.send_message("@di5k5bot", "/start")
                 # await op.join_chat("https://t.me/+LmR0F1WpnFQ0Y2Ix")
                 # await op.client.send_message("@ztFreeJJBOT", "/start") 
 
@@ -406,16 +407,10 @@ async def run_telethon_bot(
 
         #         await asyncio.sleep(random.randint(3, 5))
         t=0
-        while False:  # Infinite loop, adjust the condition as needed
+        while True:  # Infinite loop, adjust the condition as needed
             t += 1
             for i, session in enumerate(operator):
                 op = operator[i] 
-                
-  
-
-                
-                
-                
 
                 try:
                     display_name = operator_title[i]
@@ -424,57 +419,8 @@ async def run_telethon_bot(
                         f"{exc!r}",
                         flush=True,
                     )
-                   
 
-                
-                # try:                  
-
-                #     print(
-                #         f"\n第 {t} 轮、账号 {i}（{display_name}）开始提取...",
-                #         flush=True,
-                #     )
-                #     for j in range(6):
-                #         sleep_time = random.randint(1, 3)
-                #         await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID)
-                       
-                #         if j == 1:
-                #             await op.tracking_message_range(chat=-1004335920222)
-                #         elif j == 3:
-                #             await op.tracking_message_range(chat=-1004372020134) 
-                #         elif j == 5:
-                #             await op.tracking_message_range(chat=-1004383041223)
-                #         await asyncio.sleep(sleep_time)
-                #         await op.extract(ask_like=True, bot_id=HumanBotOperator.FZ_CODE_BOT_ID, extract_status=0)
-                        
-                    
-
-
-                # except (TimeoutError, ConnectionError, OSError) as exc:
-                #     print(
-                #         f"第 {t} 轮、账号 {i} 提取超时或连线中断，"
-                #         f"跳过本次并继续：{exc}",
-                #         flush=True,
-                #     )
-                #     continue
-                # except Exception as exc:
-                #     print(
-                #         f"第 {t} 轮、账号 {i} 提取发生未预期错误，"
-                #         f"跳过本次并继续：{exc!r}",
-                #         flush=True,
-                #     )
-                #     continue
-                
-                # for i in range(4156, 4164):  # 从 4900 往下降到 4800
-                #     await op.extract(secret_id=i)
-                #     await asyncio.sleep(random.randint(10, 25))
-                
-                # while True:
-
-
-                
-
-                # sleep_time = random.randint(10, 25)
-                # await asyncio.sleep(sleep_time)
+          
                 # await op.send_first_video_to_bot(source_chat=7613284106,target_bot="@di5k7bot",search_limit=5000)
 
                 # 模拟按 Ctrl 键 以避免进入休眠状态
@@ -489,7 +435,15 @@ async def run_telethon_bot(
                         flush=True,
                     )
 
-                    await op.fetch_list()
+
+                    if FETCH_MODE == "emoji":
+                        if t%4 == 0:
+                            await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=2)
+                        else:
+                            await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0)
+                    else:
+                        
+                        await op.fetch_list()
                     
                     
                 except Exception as exc:
@@ -602,9 +556,9 @@ async def main() -> None:
 if __name__ == "__main__":
     async def _run_all() -> None:
         # await main_check_user()
-        await main_auto_talk()
+        # await main_auto_talk()
         # await main_move()
-        # await main()
+        await main()
 
 
 
