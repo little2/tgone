@@ -41,12 +41,12 @@ async def main_check_user() -> None:
    
 
     try:
-        # await account_manager.check_all_userbot(config)
+        await account_manager.check_all_userbot(config)
         # await account_manager.rec_new_account(
         #     phone_number="+15155151379",
         #     pw2fa="Qqqw1234",
         # )
-        await account_manager.check_phone("+66829245756")
+        # await account_manager.check_phone("+66829245756")
         # await account_manager.check_phone("+254784812293")
         # await account_manager.check_phone("+254797636990") 
 
@@ -270,13 +270,13 @@ async def run_telethon_bot(
         if FETCH_MODE == "emoji":
             session_rows = await MySQLPool.fetchall(
                 "SELECT `bot_token` FROM `bot` "
-                "WHERE check_group IN (10) ",
+                "WHERE check_group IN (1,2,5) ",
                 error_tag="userbot.random_session_tokens",
             )
         else:
             session_rows = await MySQLPool.fetchall(
                 "SELECT `bot_token` FROM `bot` "
-                "WHERE check_group IN (1,2,5) ",
+                "WHERE check_group IN (10) ",
                 error_tag="userbot.random_session_tokens",
             )
         
@@ -438,9 +438,9 @@ async def run_telethon_bot(
 
                     if FETCH_MODE == "emoji":
                         if t%4 == 0:
-                            await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=2)
-                        else:
                             await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0)
+                        else:
+                            await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=2)
                     else:
                         
                         await op.fetch_list()
@@ -555,10 +555,10 @@ async def main() -> None:
 
 if __name__ == "__main__":
     async def _run_all() -> None:
-        # await main_check_user()
+        await main_check_user()
         # await main_auto_talk()
         # await main_move()
-        await main()
+        # await main()
 
 
 

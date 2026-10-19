@@ -2058,7 +2058,7 @@ class HumanBotOperator:
                 is_photo = getattr(response, "photo", None) is not None
                 if is_photo and ("只数清晰的大图案" in response_message or "与上方物体相同" in response_message):
                     print("❗️ 收到符合条件的图片媒体消息(验证码)。", flush=True)
-                    print(f"{self.FREE_CHAT_ID} {self.REWARD_BOT_NAME} 已处理。")
+                    
 
                     result = await self.handle_captcha(
                         response,
