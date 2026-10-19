@@ -441,6 +441,12 @@ async def run_telethon_bot(
                             await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0)
                         else:
                             await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=2)
+
+                        if i == 1:
+                            await op.tracking_message_range(chat=-1004335920222)
+                        elif i == 3:
+                            await op.tracking_message_range(chat=-1004372020134) 
+
                     else:
                         
                         await op.fetch_list()
