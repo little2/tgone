@@ -1600,7 +1600,7 @@ class HumanBotOperator:
                                 
                                 
                                 
-                                sleep_time = random.randint(3, 7)
+                                sleep_time = random.randint(2, 4)
                                 # await asyncio.sleep(sleep_time)
                                 await asyncio.sleep(sleep_time)
 

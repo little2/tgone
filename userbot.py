@@ -444,7 +444,7 @@ async def run_telethon_bot(
                         else:
                             await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=2)
 
-                        if t%50 == 1 and i==1:
+                        if t%25 == 0 and i==1:
                             print(f"==>Fetching top for account {i} ({display_name})...", flush=True)
                             await op.fetch_top()
                         
