@@ -1642,16 +1642,31 @@ class HumanBotOperator:
                         match = re.match(r"(\d+)/(\d+)", button_text)
                         if match:
                             current_item, max_item = map(int, match.groups())
+                            if priority > 0:
+                                pass
+                            else:
+                                pass
                             desc_order_id = max_item - current_item
                             if self.show_response:
                                 print(f"Parsed pagination: current_item={current_item}, max_item={max_item}", flush=True)
-                            await self._insert_sora_code(
-                                code,
-                                source_chat_id=0,
-                                source_message_id=0,
-                                desc_order_id=desc_order_id,
-                                priority=priority,
-                            )
+                            
+                            if priority > 0:
+                                await self._insert_sora_code(
+                                    code,
+                                    source_chat_id=0,
+                                    source_message_id=0,
+                                    priority=priority,
+                                )
+                            else:
+                                await self._insert_sora_code(
+                                    code,
+                                    source_chat_id=0,
+                                    source_message_id=0,
+                                    desc_order_id=desc_order_id,
+                                    priority=priority,
+                                )
+                            
+                            
 
                             sora_code = await self.get_code(code)
 
@@ -3765,7 +3780,7 @@ class HumanBotOperator:
             "`code` = VALUES(`code`), "
             "`source_chat_id` = VALUES(`source_chat_id`), "
             "`source_message_id` = VALUES(`source_message_id`), "
-            "`desc_order_id` = VALUES(`desc_order_id`), "
+            "`desc_order_id` = COALESCE(VALUES(`desc_order_id`), `desc_order_id`), "
             "`priority` = VALUES(`priority`)",
             (
                 code,
