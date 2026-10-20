@@ -1452,6 +1452,8 @@ class HumanBotOperator:
                             result_jump_to = await self.capture_bot_messages(target_bot, send_text=last_item)
                             current_item = await self.parse_bot_response(result_jump_to[-1])
                             latest_id = result_jump_to[-1].id
+
+                            
             
                             while current_item != max_item:
                                 result_loop = await self.capture_bot_messages(
@@ -1494,13 +1496,125 @@ class HumanBotOperator:
 
 
 
+    async def fetch_top(self):
+        '''
+        首頁    /start
+        排行榜
+        最行發布
+        
+        放大鏡
+        輸入最後一頁 （8035）
+        出現列表        
+        '''
+
+        _qty = 0
+        target_bot = await self._resolve_input_entity("@di5k5bot")
+
+        # 首頁    /start
+        result = await self.capture_bot_messages(target_bot, "/start")
+        if not result:
+            print("⚠️ 沒有取得 /start 首頁訊息", flush=True)            
+            return
+        menu_id = result[-1].id                      # 用最後一則，通常才是選單
+
+
+        # 点击 排行榜🏆
+        result2 = await self.capture_bot_messages(
+            target_bot, click_button_title="🏆", message_id=menu_id
+        )
+        if not result2:
+            print("⚠️ 排行榜點擊後沒有取得任何輸出", flush=True)
+            return
+        board_id = result2[-1].id
+       
+    
+        # 点击 点赞排序👍
+        result_most_top = await self.capture_bot_messages(
+            target_bot, click_button_title="👍", message_id=board_id
+        )
+        if not result_most_top:
+            await self.capture_bot_messages(
+                target_bot, click_button_title="简体", message_id=board_id
+            )
+            print("⚠️ 點擊「👍 点赞排序」後沒有取得任何輸出", flush=True)
+            return
+        menu_top_id = result_most_top[-1].id
+
+        # 点击 当周
+        result_most_wk_top = await self.capture_bot_messages(
+            target_bot, click_button_title="本周", message_id=menu_top_id
+        )
+        if not result_most_wk_top:
+            print("⚠️ 點擊「本周」後沒有取得任何輸出", flush=True)
+            return
+        menu_top_weekly_id = result_most_wk_top[-1].id
+
+
+        if result_most_wk_top and result_most_wk_top[-1].raw_text:
+            caption_text = result_most_wk_top[-1].raw_text
+            # 以 📦 来分割字串，再列出最后一个
+            caption_text = caption_text.split("📦")[-1]
+            
+
+            result_detail = await self.capture_bot_messages(
+                target_bot, click_button_title=caption_text, message_id=menu_top_weekly_id
+            )
+            if not result_detail:
+                print(f"⚠️ 點擊「{caption_text}」後沒有取得任何輸出", flush=True)
+                return
+
+            get_buttons = getattr(result_detail[-1], "get_buttons", None)
+            buttons = await get_buttons() if callable(get_buttons) else None
+            if buttons:
+                for row_number, row in enumerate(buttons, start=1):                
+                    for button in row:                   
+                        button_text = str(getattr(button, "text", "") or "[无文字]")
+                        # 使用正則式，如果 button_text 的組成是 數字/數字
+                        match = re.match(r"(\d+)/(\d+)", button_text)
+                        if match:
+                            _, max_item = map(int, match.groups())
+                            last_item = 100
+                            last_item = str(last_item)
+
+                            result_click_jump = await self.capture_bot_messages(
+                                target_bot, click_button_title=button_text, message_id=result_detail[-1].id
+                            )
+
+                            result_jump_to = await self.capture_bot_messages(target_bot, send_text=last_item)
+                            current_item = await self.parse_bot_response(result_jump_to[-1],source_chat_id='10002',priority=1)
+                            latest_id = result_jump_to[-1].id
+            
+                            while current_item != 1:
+                                print(f"current_item={current_item}")
+
+                                result_loop = await self.capture_bot_messages(
+                                    target_bot, click_button_title="⬅️", message_id=latest_id
+                                )
+                                    
+                                if not result_loop:
+                                    print("⚠️ 點擊「⬅️」後沒有取得任何輸出", flush=True)
+                                    return
+                                current_item =await self.parse_bot_response(result_loop[-1],source_chat_id='10002',priority=1)
+                                latest_id = result_loop[-1].id
+
+                                
+                                
+                                
+                                sleep_time = random.randint(3, 7)
+                                # await asyncio.sleep(sleep_time)
+                                await asyncio.sleep(sleep_time)
+
+                                
+
         
             
 
 
     async def parse_bot_response(
         self,
-        message: Any
+        message: Any,
+        source_chat_id: str ='10001',
+        priority: int = 0
     ) -> str:
         """解析机器人回应，返回格式化后的文本内容。"""
         try:
@@ -1535,7 +1649,8 @@ class HumanBotOperator:
                                 code,
                                 source_chat_id=0,
                                 source_message_id=0,
-                                desc_order_id=desc_order_id
+                                desc_order_id=desc_order_id,
+                                priority=priority,
                             )
 
                             sora_code = await self.get_code(code)
@@ -1550,18 +1665,23 @@ class HumanBotOperator:
                             if self.show_response:
                                 print(f"{sora_code} extract_status={sora_code.get('extract_status')}", flush=True)
 
-                            if sora_code and sora_code.get("extract_status") !=1 and sora_code.get("extract_status") !=2:
-                                if self.show_response:
-                                    print(f"⚠️ 提取码 {code} 已存在，转发", flush=True)     
-                                await self._forward_media_with_json_caption(
-                                    target=self.taobao_bot_username,
-                                    message=message,
-                                    file_code=code,
-                                    caption=json.dumps(json_dict, ensure_ascii=False),
-                                )
+                            if sora_code:
+                                if sora_code.get("extract_status") !=1 and sora_code.get("extract_status") !=2 and sora_code.get("extract_status") !=3:
+                                    if self.show_response:
+                                        print(f"⚠️ 提取码 {code} 已存在，转发", flush=True)     
+                                    
+                                    await self._forward_media_with_json_caption(
+                                        target=self.taobao_bot_username,
+                                        message=message,
+                                        file_code=code,
+                                        caption=json.dumps(json_dict, ensure_ascii=False),
+                                    )
+                                
+                            else:
+                                print(f"sora_code={sora_code}")
 
-                            await self._upsert_extra_log(source_chat_id='10001',next_message_id=desc_order_id)
-                            return current_item
+                            await self._upsert_extra_log(source_chat_id=int(source_chat_id),next_message_id=desc_order_id)
+                            return str(current_item)
                             
 
 
@@ -1615,7 +1735,7 @@ class HumanBotOperator:
                 bot_filter += f" AND `bot_id` = {bot_id}" if bot_id is not None else ""
                 rows = await MySQLPool.fetchall(
                     "SELECT * FROM `sora_code` "
-                    f"WHERE {bot_filter} ORDER BY `id` DESC LIMIT 100",
+                    f"WHERE {bot_filter} ORDER BY priority DESC, `id` DESC LIMIT 100",
                     error_tag="human_bot_operator.extract.get_random_secret_id",
                 )
                 
@@ -3628,6 +3748,7 @@ class HumanBotOperator:
         source_message_id: int | None,
         bot_id: int | None = None,
         desc_order_id : int | None = None,
+        priority: int = 0,
     ) -> None:
         """将 Emoji 密文及其 Unicode NFC SHA-256 写入 sora_code。"""
         normalized_code = unicodedata.normalize("NFC", code)
@@ -3638,13 +3759,14 @@ class HumanBotOperator:
         await MySQLPool.execute(
             "INSERT INTO `sora_code` "
             "(`code`, `code_hash`, `bot_id`, `created_ts`, "
-            "`source_chat_id`, `source_message_id`, `desc_order_id`, `extract_status`) "
-            "VALUES (%s, UNHEX(%s), %s, %s, %s, %s, %s, %s) "
+            "`source_chat_id`, `source_message_id`, `desc_order_id`, `priority`, `extract_status`) "
+            "VALUES (%s, UNHEX(%s), %s, %s, %s, %s, %s, %s, %s) "
             "ON DUPLICATE KEY UPDATE "
             "`code` = VALUES(`code`), "
             "`source_chat_id` = VALUES(`source_chat_id`), "
             "`source_message_id` = VALUES(`source_message_id`), "
-            "`desc_order_id` = VALUES(`desc_order_id`)",
+            "`desc_order_id` = VALUES(`desc_order_id`), "
+            "`priority` = VALUES(`priority`)",
             (
                 code,
                 code_hash_hex,
@@ -3653,6 +3775,7 @@ class HumanBotOperator:
                 source_chat_id,
                 source_message_id,
                 desc_order_id,
+                priority,
                 0,
             ),
             error_tag="human_bot_operator.insert_sora_code",
