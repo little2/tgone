@@ -18,6 +18,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from captcha_bot_operator import CaptchaBotOperator
 from human_bot_operator import HumanBotOperator
 from tgone_mysql import MySQLPool
+from shared_config import SharedConfig  # noqa: E402
 
 
 class AiogramBotOperator:
@@ -320,7 +321,19 @@ class AiogramBotOperator:
             except Exception as exc:
                 # 媒体 message_id=11634 传送失败：Telegram server says - Bad Request: chat not found
                 if "Bad Request: chat not found" in str(exc):
-                    
+                    try:
+                        await asyncio.to_thread(
+                            SharedConfig._download_from_api,
+                            {"text": f"频道频传送失败了，请检查频道ID是否正确: {destination_chat_id}"},
+                        )
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as notification_exc:
+                        print(
+                            "媒体传送失败通知发送失败："
+                            f"{notification_exc}",
+                            flush=True,
+                        )
                     continue
                 else:
                     print(
