@@ -318,10 +318,15 @@ class AiogramBotOperator:
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                print(
-                    f"媒体 message_id={source_message.message_id} 传送失败：{exc}",
-                    flush=True,
-                )
+                # 媒体 message_id=11634 传送失败：Telegram server says - Bad Request: chat not found
+                if "Bad Request: chat not found" in str(exc):
+                    
+                    continue
+                else:
+                    print(
+                        f"媒体 message_id={source_message.message_id} chat_id = {destination_chat_id}传送失败：{exc}",
+                        flush=True,
+                    )
             finally:
                 self.media_forward_queue.task_done()
 
