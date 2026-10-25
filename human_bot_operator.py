@@ -324,6 +324,10 @@ class HumanBotOperator:
                         f"actor={actor_id} 使用的账号={account_label} 无法访问 "
                         f"chat_id={chat_id}。请确认该账号已经加入目标群；{invite_hint}"
                     ) from resolve_error
+            if start_at is None:
+                start_at = datetime.now(cls.DEFAULT_TIMEZONE) + timedelta(seconds=10)
+                payload["script"]["start_at"] = start_at.isoformat()
+
             sent_messages: dict[str, Any] = {}
             send_errors: dict[str, BaseException] = {}
             sent_events = {
@@ -434,7 +438,7 @@ class HumanBotOperator:
     @staticmethod
     def _validate_chat_script(
         script_json: str | dict[str, Any],
-    ) -> tuple[dict[str, Any], datetime]:
+    ) -> tuple[dict[str, Any], datetime | None]:
         """验证自动群聊 JSON，并返回脚本及带时区的开始时间。"""
         if isinstance(script_json, str):
             try:
@@ -466,12 +470,16 @@ class HumanBotOperator:
         if not isinstance(messages, list):
             raise ValueError("messages 必须是数组")
 
-        try:
-            start_at = datetime.fromisoformat(str(script["start_at"]))
-        except (KeyError, TypeError, ValueError) as exc:
-            raise ValueError("script.start_at 必须是 ISO 8601 时间") from exc
-        if start_at.tzinfo is None or start_at.utcoffset() is None:
-            raise ValueError("script.start_at 必须包含时区偏移")
+        start_at_value = script.get("start_at")
+        if start_at_value is None:
+            start_at = None
+        else:
+            try:
+                start_at = datetime.fromisoformat(str(start_at_value))
+            except (TypeError, ValueError) as exc:
+                raise ValueError("script.start_at 必须是 ISO 8601 时间") from exc
+            if start_at.tzinfo is None or start_at.utcoffset() is None:
+                raise ValueError("script.start_at 必须包含时区偏移")
 
         actor_ids = set()
         for participant in participants:
