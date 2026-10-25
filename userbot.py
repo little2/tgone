@@ -1,6 +1,7 @@
 """Telegram 使用者帳號管理程式入口。"""
 
 import asyncio
+import errno
 import os
 from pathlib import Path
 import random
@@ -12,14 +13,16 @@ from tgone_mysql import MySQLPool
 from user_account_manager import UserAccountManager
 from human_bot_operator import HumanBotOperator
 
+env_path = Path(__file__).resolve().parent / ".env"
+load_dotenv(dotenv_path=env_path)
 
 API_ID = int(os.getenv("API_ID", 0))
 API_HASH = os.getenv("API_HASH", "")
 FETCH_MODE = os.getenv("FETCH_MODE", "")
 
-env_path = Path(__file__).resolve().parent / ".env"
-load_dotenv(dotenv_path=env_path)
-
+BBT_GROUP_ID = int(os.getenv("BBT_GROUP_ID", 0))
+BBT_THREAD_ID = int(os.getenv("BBT_THREAD_ID", 0))
+BBT_TOKEN = os.getenv("BBT_TOKEN", "")
 
 async def catch_miwen():
     # Implement the catch functionality here
@@ -105,9 +108,8 @@ async def main_move(
                 )
                 operator[(operator_length)] = op
 
-                
+                rank_chat_id = -1004403756652
 
-               
                 me = await op.client.get_me()
                 display_name = (
                     getattr(me, "first_name", None)
@@ -262,11 +264,12 @@ async def run_telethon_bot(
         config = account_manager.load_config()
     if configure_mysql:
         configure_mysql_pool(config)
+    operator: dict[int, HumanBotOperator] = {}
     try:
         if FETCH_MODE == "emoji":
             session_rows = await MySQLPool.fetchall(
                 "SELECT `bot_token` FROM `bot` "
-                "WHERE check_group IN (1,2,5) ",
+                "WHERE check_group IN (1) ",
                 error_tag="userbot.random_session_tokens",
             )
         else:
@@ -275,7 +278,7 @@ async def run_telethon_bot(
                 "WHERE check_group IN (10) ",
                 error_tag="userbot.random_session_tokens",
             )
-        
+
         if not session_rows:
             raise RuntimeError(
                 "从数据库中获取到的 session_rows 为空"
@@ -284,20 +287,26 @@ async def run_telethon_bot(
             raise RuntimeError(
                 f"数据库中的 bot_token 数量不足：需要 1 个，实际只有 {len(session_rows)} 个"
             )
-       
+
+        bbt_operator = None
+        if(BBT_TOKEN!=""):
+            print("BBT_TOKEN 已配置", flush=True)
+            bbt_operator = await HumanBotOperator.login_with_bot_token(
+                bot_token=BBT_TOKEN,
+                api_id=API_ID,
+                api_hash=API_HASH,
+            )
+        
 
         session_set = {
             index: str(row["bot_token"]).strip()
             for index, row in enumerate(session_rows)
         }
 
-        operator = {}
         operator_title = {}
 
         # 随机从 session_set 中选择，形成另外的子集合
         selected_sessions = random.sample(list(session_set.values()), len(session_set))
-
-       
 
         for i, session in enumerate(selected_sessions):
             try:
@@ -309,6 +318,9 @@ async def run_telethon_bot(
                     api_hash=API_HASH,
                     taobao_bot_username=config.get("taobao_bot_username"),
                 )
+                if bbt_operator is not None:
+                    await HumanBotOperator.set_bbt_bot(bbt_operator)
+               
                 operator[(operator_length)] = op
 
                 me = await op.client.get_me()
@@ -325,12 +337,13 @@ async def run_telethon_bot(
 
                 # await op.join_chat("https://t.me/+gwLvTrmPWGAwYzBh")  #正太方舟               
                 # await op.client.send_message("@postfilebbot", "/checkin")      
-                # await op.client.send_message("@di5k5bot", "/start")
+                await op.client.send_message("@di5k5bot", "/start")
                 # await op.join_chat("https://t.me/+LmR0F1WpnFQ0Y2Ix")
                 # await op.client.send_message("@ztFreeJJBOT", "/start") 
 
                 
                 # await op.join_chat("https://t.me/+i5S7P-Dol4dhNzA5")  #加入布吉岛主 1004335920222
+                # await asyncio.sleep(3)
                 # await op.join_chat("https://t.me/+iHyXV6FFCQAxN2Ix")  #加入布吉岛
                 # await op.join_chat("+mhqJ-3C93F0zODEx") #桃花林 
                 # await op.join_chat("+QEtmtaI-amU5NDRh") #桃花源
@@ -433,7 +446,7 @@ async def run_telethon_bot(
 
 
                     if FETCH_MODE == "emoji":
-
+                        
                         
                         if t%4 == 0:
                             await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0)
@@ -471,13 +484,21 @@ async def run_telethon_bot(
         
 
     finally:
-        print(f"✅ Completed", flush=True)
-        for i, session in enumerate(operator):
-            op = operator[i] 
-            await op.disconnect()        
-        print("所有操作已完成，正在断开连接...", flush=True)            
-        await MySQLPool.close()
-        return
+        print("✅ Completed", flush=True)
+        try:
+            for op in operator.values():
+                try:
+                    await op.disconnect()
+                except Exception as exc:
+                    print(f"⚠️ Telegram 账号断开失败：{exc}", flush=True)
+            if bbt_operator:
+                try:
+                    await bbt_operator.disconnect()
+                except Exception as exc:
+                    print(f"⚠️ BBT 账号断开失败：{exc}", flush=True)
+        finally:
+            print("所有操作已完成，正在断开连接...", flush=True)
+            await MySQLPool.close()
         
 def configure_mysql_pool(config: dict) -> None:
     """使用统一配置初始化 MySQLPool。"""
@@ -493,7 +514,13 @@ def configure_mysql_pool(config: dict) -> None:
 async def _start_health_server() -> tuple[web.AppRunner, str]:
     """启动用于 Render 端口探测的轻量 HTTP 服务。"""
     host = os.getenv("HOST", "0.0.0.0").strip() or "0.0.0.0"
-    port = int(os.getenv("PORT", "10000") or 10000)
+    configured_port = os.getenv("PORT", "").strip()
+    initial_port = int(configured_port or 10000)
+    candidate_ports = (
+        (initial_port,)
+        if configured_port
+        else tuple(range(initial_port, initial_port + 10))
+    )
 
     app = web.Application()
 
@@ -505,32 +532,47 @@ async def _start_health_server() -> tuple[web.AppRunner, str]:
 
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, host=host, port=port)
-    await site.start()
-    return runner, f"http://{host}:{port}"
+    last_error: OSError | None = None
+    for port in candidate_ports:
+        site = web.TCPSite(runner, host=host, port=port)
+        try:
+            await site.start()
+        except OSError as exc:
+            last_error = exc
+            if exc.errno != errno.EADDRINUSE or configured_port:
+                await runner.cleanup()
+                raise
+            print(f"⚠️ 健康检查端口 {port} 已被占用，尝试下一个端口。", flush=True)
+            continue
+        return runner, f"http://{host}:{port}"
+
+    await runner.cleanup()
+    raise RuntimeError("找不到可用的健康检查端口（已尝试 10000–10009）") from last_error
 
 async def main() -> None:
     """同时执行 Telethon 用户账号流程与 Aiogram Bot polling。"""
-    
     account_manager = UserAccountManager()
     config = account_manager.load_config()
     configure_mysql_pool(config)
-    health_runner, bind_address = await _start_health_server()
-    print(f"HTTP 健康检查服务已启动：{bind_address}", flush=True)
-    print("正在并发启动 Aiogram 与 Telethon...", flush=True)
-
-    aiogram_operator = AiogramBotOperator(config)
-    aiogram_task = asyncio.create_task(
-        aiogram_operator.run(),
-        name="aiogram-bot-polling",
-    )
-    aiogram_connected_task = asyncio.create_task(
-        aiogram_operator.connected_event.wait(),
-        name="wait-aiogram-connected",
-    )
-    telethon_task = None
-
+    health_runner: web.AppRunner | None = None
+    aiogram_task: asyncio.Task | None = None
+    aiogram_connected_task: asyncio.Task | None = None
+    telethon_task: asyncio.Task | None = None
     try:
+        health_runner, bind_address = await _start_health_server()
+        print(f"HTTP 健康检查服务已启动：{bind_address}", flush=True)
+        print("正在并发启动 Aiogram 与 Telethon...", flush=True)
+
+        aiogram_operator = AiogramBotOperator(config)
+        aiogram_task = asyncio.create_task(
+            aiogram_operator.run(),
+            name="aiogram-bot-polling",
+        )
+        aiogram_connected_task = asyncio.create_task(
+            aiogram_operator.connected_event.wait(),
+            name="wait-aiogram-connected",
+        )
+
         done, _ = await asyncio.wait(
             (aiogram_task, aiogram_connected_task),
             return_when=asyncio.FIRST_COMPLETED,
@@ -552,22 +594,29 @@ async def main() -> None:
 
         await asyncio.gather(aiogram_task, telethon_task)
     finally:
-        tasks = [aiogram_task, aiogram_connected_task]
-        if telethon_task is not None:
-            tasks.append(telethon_task)
+        # 优先关闭 HTTP server，避免其他任务取消较慢时继续占用端口。
+        if health_runner is not None:
+            await health_runner.cleanup()
+            health_runner = None
+            print("HTTP 健康检查服务已关闭，监听端口已释放。", flush=True)
+
+        tasks = [
+            task
+            for task in (aiogram_task, aiogram_connected_task, telethon_task)
+            if task is not None
+        ]
         for task in tasks:
             if not task.done():
                 task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
-        await health_runner.cleanup()
 
 
 if __name__ == "__main__":
     async def _run_all() -> None:
         # await main_check_user()
-        await main_auto_talk()
+        # await main_auto_talk()
         # await main_move()
-        # await main()
+        await main()
 
 
 

@@ -19,7 +19,7 @@ from typing import Any
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
-from telethon import TelegramClient, events
+from telethon import Button, TelegramClient, events
 from telethon.errors import (
     ChatForwardsRestrictedError,
     InviteRequestSentError,
@@ -54,13 +54,27 @@ from aiogram import Bot
 from captcha_bot_operator import CaptchaBotOperator
 from tgone_mysql import MySQLPool
 
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+env_path = Path(__file__).resolve().parent / ".env"
+load_dotenv(dotenv_path=env_path)
+
+BBT_GROUP_ID = int(os.getenv("BBT_GROUP_ID", 0))
+BBT_THREAD_ID = int(os.getenv("BBT_THREAD_ID", 0))
+BBT_TOKEN = os.getenv("BBT_TOKEN", "")
+
 
 class HumanBotOperator:
     """执行需要已登录使用者身份的 Telegram 操作。"""
 
     MONITOR_FORWARD_CHAT_ID = 5334310434
-    BJD_CODE_BOT_ID = 8965249046 #8915213940
+    BJD_CODE_BOT_ID = 8965249046
     FZ_CODE_BOT_ID = 8805711672
+    API_ID = 0
+    API_HASH = ""
+    BBT_OPERATOR = None
 
     
     REWARD_BOT_NAME = "zttower5bot"
@@ -164,6 +178,11 @@ class HumanBotOperator:
         if not api_hash:
             raise ValueError("api_hash 不可为空")
 
+        if cls.API_ID == 0:
+            cls.API_ID = api_id
+        if cls.API_HASH == "":
+            cls.API_HASH = api_hash
+
         # print(f"正在使用 {session_string}", flush=True)
         client = TelegramClient(
             StringSession(session_string),
@@ -204,6 +223,60 @@ class HumanBotOperator:
             await client.disconnect()
             raise
         return cls(client, taobao_bot_username=taobao_bot_username)
+
+    @classmethod
+    async def set_bbt_bot(
+        cls,
+        bbt_operator: "HumanBotOperator",
+    ) -> None:
+        cls.BBT_OPERATOR = bbt_operator
+
+
+    @classmethod
+    async def send_message_with_bot(
+        cls,
+        message: str,
+        chat_id: int | str,
+        message_thread_id: int | None = None,
+    ) -> Any:
+        """使用 Telethon 登录普通 Bot，发送消息后断开连接。"""
+        if not isinstance(message, str) or not message.strip():
+            raise ValueError("message 不可为空")
+        if isinstance(chat_id, bool) or not isinstance(chat_id, (int, str)):
+            raise ValueError("chat_id 必须是整数或群组 username")
+        if isinstance(chat_id, str):
+            chat_id = chat_id.strip()
+            if not chat_id:
+                raise ValueError("chat_id 不可为空")
+            if re.fullmatch(r"-?\d+", chat_id):
+                chat_id = int(chat_id)
+        if chat_id == 0:
+            raise ValueError("chat_id 不可为 0")
+        if (
+            isinstance(message_thread_id, bool)
+            or not isinstance(message_thread_id, (int, type(None)))
+            or (isinstance(message_thread_id, int) and message_thread_id < 0)
+        ):
+            raise ValueError("message_thread_id 必须是非负整数或 None")
+
+        if cls.BBT_OPERATOR:
+            
+            try:
+                
+                send_options = {}
+                if message_thread_id:
+                    send_options["reply_to"] = message_thread_id
+                return await cls.BBT_OPERATOR.client.send_message(
+                    chat_id,
+                    message.strip(),
+                    buttons=Button.url(
+                        "🧻传送门1",
+                        f"https://t.me/di5k5bot?text={message}",
+                    ),
+                    **send_options,
+                )
+            except Exception as exc:
+                print(f"❌ Failed to send message to {chat_id}: {exc}", flush=True)
 
     @classmethod
     async def run_chat_script(
@@ -1650,15 +1723,52 @@ class HumanBotOperator:
                         match = re.match(r"(\d+)/(\d+)", button_text)
                         if match:
                             current_item, max_item = map(int, match.groups())
-                            if priority > 0:
-                                pass
-                            else:
-                                pass
+                           
                             desc_order_id = max_item - current_item
                             if self.show_response:
                                 print(f"Parsed pagination: current_item={current_item}, max_item={max_item}", flush=True)
                             
                             if priority > 0:
+                                existing_unranked_code = await MySQLPool.fetchone(
+                                    "SELECT `id` FROM `sora_code` "
+                                    "WHERE `code` = %s AND `priority` = 0 LIMIT 1",
+                                    (code,),
+                                    error_tag="human_bot_operator.parse_bot_response.get_unranked_code",
+                                )
+                                if existing_unranked_code:
+                                    print("新进榜", flush=True)
+
+                                    try:
+                                        try:
+                                            runtime_config = json.loads(
+                                                os.getenv("CONFIGURATION", "") or "{}"
+                                            )
+                                        except json.JSONDecodeError:
+                                            runtime_config = {}
+                                        if not isinstance(runtime_config, dict):
+                                            runtime_config = {}
+
+
+
+                                            
+                                           
+
+                                        await self.send_message_with_bot(
+                                            f"{code}",
+                                            chat_id=BBT_GROUP_ID,
+                                            message_thread_id=BBT_THREAD_ID
+                                        )
+                                    except Exception as exc:
+                                        print(
+                                            f"⚠️ 新进榜通知发送失败：{exc}",
+                                            flush=True,
+                                        )
+                                        if "A wait of" in str(exc):
+                                            
+                                            return False
+                                else:
+                                    print("已进榜", flush=True)
+
                                 await self._insert_sora_code(
                                     code,
                                     source_chat_id=0,
