@@ -23,6 +23,7 @@ from telethon import Button, TelegramClient, events
 from telethon.errors import (
     ChatForwardsRestrictedError,
     InviteRequestSentError,
+    ServerError,
     UserAlreadyParticipantError,
     UsernameNotModifiedError,
 )
@@ -85,6 +86,8 @@ class HumanBotOperator:
     ALBUM_MAX_SIZE = 10
     PROTECTED_MEDIA_TRANSFER_TIMEOUT_SECONDS = 5 * 60
     CAPTCHA_SELECTION_TIMEOUT_SECONDS = 30
+    TELEGRAM_LOGIN_MAX_ATTEMPTS = 4
+    TELEGRAM_LOGIN_RETRY_BASE_SECONDS = 2
     _bot_cache: dict[str, Bot] = {}
 
     DEFAULT_TIMEZONE = ZoneInfo("Asia/Shanghai")
@@ -183,24 +186,37 @@ class HumanBotOperator:
         if cls.API_HASH == "":
             cls.API_HASH = api_hash
 
-        # print(f"正在使用 {session_string}", flush=True)
-        client = TelegramClient(
-            StringSession(session_string),
-            int(api_id),
-            api_hash,
-        )
-        try:
-            await client.connect()
-            if not await client.is_user_authorized():
-                raise RuntimeError("StringSession 尚未获得 Telegram 用户授权")
-            else:
+        for attempt in range(1, cls.TELEGRAM_LOGIN_MAX_ATTEMPTS + 1):
+            client = TelegramClient(
+                StringSession(session_string),
+                int(api_id),
+                api_hash,
+            )
+            try:
+                await client.connect()
+                if not await client.is_user_authorized():
+                    raise RuntimeError("StringSession 尚未获得 Telegram 用户授权")
                 me = await client.get_me()
                 print(f"已成功使用 StringSession 登录 Telegram 用户。id = {me.id} {me.first_name}", flush=True)
-        except Exception:
-            await client.disconnect()
-            raise
+                return cls(client, taobao_bot_username=taobao_bot_username)
+            except ServerError as exc:
+                await client.disconnect()
+                if attempt >= cls.TELEGRAM_LOGIN_MAX_ATTEMPTS:
+                    raise
+                retry_seconds = cls.TELEGRAM_LOGIN_RETRY_BASE_SECONDS * (
+                    2 ** (attempt - 1)
+                )
+                print(
+                    f"⚠️ Telegram 服务暂时不可用，{retry_seconds} 秒后重试登录"
+                    f"（{attempt}/{cls.TELEGRAM_LOGIN_MAX_ATTEMPTS}）：{exc}",
+                    flush=True,
+                )
+                await asyncio.sleep(retry_seconds)
+            except Exception:
+                await client.disconnect()
+                raise
 
-        return cls(client, taobao_bot_username=taobao_bot_username)
+        raise RuntimeError("Telegram 用户账号登录重试已耗尽")
 
     @classmethod
     async def login_with_bot_token(
@@ -216,13 +232,29 @@ class HumanBotOperator:
         if not bot_token or not api_id or not api_hash:
             raise ValueError("bot_token、api_id、api_hash 均不可为空")
 
-        client = TelegramClient(StringSession(), int(api_id), api_hash)
-        try:
-            await client.start(bot_token=bot_token)
-        except Exception:
-            await client.disconnect()
-            raise
-        return cls(client, taobao_bot_username=taobao_bot_username)
+        for attempt in range(1, cls.TELEGRAM_LOGIN_MAX_ATTEMPTS + 1):
+            client = TelegramClient(StringSession(), int(api_id), api_hash)
+            try:
+                await client.start(bot_token=bot_token)
+                return cls(client, taobao_bot_username=taobao_bot_username)
+            except ServerError as exc:
+                await client.disconnect()
+                if attempt >= cls.TELEGRAM_LOGIN_MAX_ATTEMPTS:
+                    raise
+                retry_seconds = cls.TELEGRAM_LOGIN_RETRY_BASE_SECONDS * (
+                    2 ** (attempt - 1)
+                )
+                print(
+                    f"⚠️ Telegram 服务暂时不可用，{retry_seconds} 秒后重试 Bot 登录"
+                    f"（{attempt}/{cls.TELEGRAM_LOGIN_MAX_ATTEMPTS}）：{exc}",
+                    flush=True,
+                )
+                await asyncio.sleep(retry_seconds)
+            except Exception:
+                await client.disconnect()
+                raise
+
+        raise RuntimeError("Telegram Bot 登录重试已耗尽")
 
     @classmethod
     async def set_bbt_bot(
@@ -615,6 +647,7 @@ class HumanBotOperator:
             ):
                 raise ValueError(f"{message_id}.after_start 必须是非负数")
             if after_start < previous_after_start:
+                print(f"messages 必须按 after_start 从小到大排列 {after_start} -> {previous_after_start}")
                 raise ValueError("messages 必须按 after_start 从小到大排列")
             if (
                 isinstance(typing_duration, bool)
@@ -1873,8 +1906,8 @@ class HumanBotOperator:
                 )
                 
                 if not rows:
-                    print(f"未找到 extract_status = 0 的 sora_code 记录，bot_id={bot_id} / {extract_status} 等待 60 秒后重试...", flush=True)
-                    await asyncio.sleep(60)
+                    print(f"未找到 extract_status = 0 的 sora_code 记录，bot_id={bot_id} / {extract_status} 等待 15 秒后重试...", flush=True)
+                    await asyncio.sleep(15)
                     return None
                    
                 record = random.choice(rows)

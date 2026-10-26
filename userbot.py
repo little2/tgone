@@ -44,7 +44,7 @@ async def main_check_user() -> None:
     try:
         # await account_manager.check_all_userbot(config)
         await account_manager.rec_new_account(
-            phone_number="+959663541053",
+            phone_number="+15156750234",
             pw2fa="Qqqw1234",
         )
         # await account_manager.check_phone("+66829245756")
@@ -70,7 +70,7 @@ async def main_move(
     try:
         session_rows = await MySQLPool.fetchall(
             "SELECT `bot_token` FROM `bot` "
-            "WHERE check_group IN (10) ",
+            "WHERE check_group IN (1) ",
         
             error_tag="userbot.random_session_tokens",
         )
@@ -275,7 +275,7 @@ async def run_telethon_bot(
         else:
             session_rows = await MySQLPool.fetchall(
                 "SELECT `bot_token` FROM `bot` "
-                "WHERE check_group IN (10) ",
+                "WHERE check_group IN (2) ",
                 error_tag="userbot.random_session_tokens",
             )
 
