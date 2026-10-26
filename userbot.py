@@ -272,6 +272,12 @@ async def run_telethon_bot(
                 "WHERE check_group IN (1) ",
                 error_tag="userbot.random_session_tokens",
             )
+        elif FETCH_MODE == "emoji2":
+            session_rows = await MySQLPool.fetchall(
+                "SELECT `bot_token` FROM `bot` "
+                "WHERE check_group IN (3) ",
+                error_tag="userbot.random_session_tokens",
+            )    
         else:
             session_rows = await MySQLPool.fetchall(
                 "SELECT `bot_token` FROM `bot` "
@@ -445,7 +451,7 @@ async def run_telethon_bot(
                     )
 
 
-                    if FETCH_MODE == "emoji":
+                    if FETCH_MODE == "emoji" or FETCH_MODE == "emoji2":
                         
                         
                         if t%4 == 0:

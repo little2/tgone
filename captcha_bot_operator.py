@@ -70,6 +70,7 @@ class CaptchaBotOperator:
 
     async def handle_captcha(self, response: Any, user_id: int | None = None, reward_bot_name: str | None = None) -> bool:
         """处理验证码响应，并返回是否成功通过验证。"""
+        REWARD_HOURS = 3
         if user_id is None:
             print(f"⚠️ 未指定 user_id，无法转发验证码图片到指定用户。", flush=True)
             user_id = -1004380843996
@@ -86,7 +87,7 @@ class CaptchaBotOperator:
         free_bot_token = (os.getenv("FREE_BOT_TOKEN") or "").strip()
         if not free_bot_token:
             print("⚠️ 未配置 FREE_BOT_TOKEN，无法转发验证码图片到指定用户。", flush=True)
-            return
+            return False
 
         bot = await self._get_bot(free_bot_token)
         notify_message = None
@@ -97,7 +98,7 @@ class CaptchaBotOperator:
                 "各位旅客请注意，各位旅客请注意！\n\n"
                 "飞行红包随机抢答活动即将开始，请各位旅客做好准备，及时关注广播与题目。\n\n"
                 "本次活动将进行限时抢答：\n"
-                "🎫 成功答对问题的旅客，可获得 6 小时飞行时长；\n"
+                f"🎫 成功答对问题的旅客，可获得 {REWARD_HOURS} 小时飞行时长；\n"
                 "⚠️ 抢答失败的旅客，将扣除 1 小时时长。\n\n"
                 "请各位旅客确认自己的脑容量、反应速度及求生欲均处于正常状态。\n\n"
                 "倒计时即将开始——\n"
@@ -324,7 +325,7 @@ class CaptchaBotOperator:
                                 json_data = {}
                                 json_data["action"] = "captcha"
                                 json_data["user_id"] = clicked_user_id
-                                json_data["minutes"] = 60*(6)
+                                json_data["minutes"] = 60*(REWARD_HOURS)
                                 json_text = json.dumps(json_data, ensure_ascii=False)
                                 award_chat_id = (
                                     f"@{CaptchaBotOperator.reward_bot_name}"
