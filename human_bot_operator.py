@@ -33,6 +33,7 @@ from telethon.tl.functions.account import (
     UpdateProfileRequest,
     UpdateUsernameRequest,
 )
+from telethon.tl.functions.channels import JoinChannelRequest
 from telethon.tl.functions.messages import ImportChatInviteRequest
 from telethon.tl.types import (
     Message,
@@ -71,7 +72,7 @@ class HumanBotOperator:
     """执行需要已登录使用者身份的 Telegram 操作。"""
 
     MONITOR_FORWARD_CHAT_ID = 5334310434
-    BJD_CODE_BOT_ID = 8965249046
+    BJD_CODE_BOT_ID = 8740782139 #8965249046    
     FZ_CODE_BOT_ID = 8805711672
     API_ID = 0
     API_HASH = ""
@@ -303,7 +304,7 @@ class HumanBotOperator:
                     message.strip(),
                     buttons=Button.url(
                         "🧻传送门1",
-                        f"https://t.me/di5k5bot?text={message}",
+                        f"https://t.me/upan3bot?text={message}",
                     ),
                     **send_options,
                 )
@@ -1482,7 +1483,7 @@ class HumanBotOperator:
         '''
 
         _qty = 0
-        target_bot = await self._resolve_input_entity("@di5k5bot")
+        target_bot = await self._resolve_input_entity("@upan3bot")
 
         desc_order_id = int(desc_order_id)
 
@@ -1622,7 +1623,7 @@ class HumanBotOperator:
         '''
 
         _qty = 0
-        target_bot = await self._resolve_input_entity("@di5k5bot")
+        target_bot = await self._resolve_input_entity("@upan3bot")
 
         # 首頁    /start
         result = await self.capture_bot_messages(target_bot, "/start")
@@ -3832,10 +3833,15 @@ class HumanBotOperator:
         """断开当前 Telegram 用户客户端连接。"""
         await self.client.disconnect()
 
-    async def join_chat(self, invite_link: str) -> Any:
-        """通过完整邀请链接、+邀请码或裸邀请码加入频道或群组。"""
-        invite_hash = self._extract_invite_hash(invite_link)
+    async def join_chat(self, chat_ref: str) -> Any:
+        """通过公开用户名或私有邀请链接加入频道/群组。"""
         try:
+            public_ref = self._extract_public_chat_ref(chat_ref)
+            if public_ref is not None:
+                entity = await self.client.get_entity(public_ref)
+                return await self.client(JoinChannelRequest(entity))
+
+            invite_hash = self._extract_invite_hash(chat_ref)
             return await self.client(ImportChatInviteRequest(invite_hash))
         except InviteRequestSentError:
             print("入群申请已成功提交，正在等待管理员批准。", flush=True)
@@ -3843,6 +3849,35 @@ class HumanBotOperator:
         except UserAlreadyParticipantError:
             print("当前账号已经加入该群组或频道。", flush=True)
             return None
+
+    @staticmethod
+    def _extract_public_chat_ref(chat_ref: str) -> str | None:
+        """识别 ``@username`` 或 ``t.me/username`` 格式的公开频道。"""
+        value = (chat_ref or "").strip()
+        if not value:
+            return None
+
+        if value.startswith("@"):
+            username = value[1:]
+        elif "://" in value:
+            parsed = urlparse(value)
+            if parsed.scheme not in {"http", "https"} or parsed.netloc.lower() not in {
+                "t.me",
+                "www.t.me",
+            }:
+                raise ValueError("chat_ref 必须是 t.me 链接")
+
+            path = parsed.path.strip("/")
+            if path.startswith("+") or path.startswith("joinchat/"):
+                return None
+            username = path.split("/", 1)[0]
+        else:
+            # 保留原有行为：不带 @ 的裸字符串视为私有邀请码。
+            return None
+
+        if not re.fullmatch(r"[A-Za-z0-9_]{5,32}", username):
+            raise ValueError("Telegram 公开用户名格式无效")
+        return f"@{username}"
 
     @staticmethod
     def _extract_invite_hash(invite_link: str) -> str:
