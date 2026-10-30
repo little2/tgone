@@ -344,7 +344,7 @@ async def run_telethon_bot(
                 # await op.join_chat("https://t.me/+gwLvTrmPWGAwYzBh")  #正太方舟               
                 # await op.client.send_message("@postfilebbot", "/checkin")   
                 await op.join_chat("https://t.me/BJDADJB") #桃花源   
-                await op.client.send_message("@upan3bot", "/start")
+                await op.client.send_message("@upan7bot", "/start")
                 # await op.join_chat("https://t.me/+LmR0F1WpnFQ0Y2Ix")
                 # await op.client.send_message("@ztFreeJJBOT", "/start") 
 

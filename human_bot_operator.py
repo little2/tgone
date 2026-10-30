@@ -72,7 +72,7 @@ class HumanBotOperator:
     """执行需要已登录使用者身份的 Telegram 操作。"""
 
     MONITOR_FORWARD_CHAT_ID = 5334310434
-    BJD_CODE_BOT_ID = 8740782139 #8965249046    
+    BJD_CODE_BOT_ID = 8754937374 #8740782139    
     FZ_CODE_BOT_ID = 8805711672
     API_ID = 0
     API_HASH = ""
@@ -304,7 +304,7 @@ class HumanBotOperator:
                     message.strip(),
                     buttons=Button.url(
                         "🧻传送门1",
-                        f"https://t.me/upan3bot?text={message}",
+                        f"https://t.me/upan7bot?text={message}",
                     ),
                     **send_options,
                 )
@@ -1483,7 +1483,7 @@ class HumanBotOperator:
         '''
 
         _qty = 0
-        target_bot = await self._resolve_input_entity("@upan3bot")
+        target_bot = await self._resolve_input_entity("@upan7bot")
 
         desc_order_id = int(desc_order_id)
 
@@ -1623,7 +1623,7 @@ class HumanBotOperator:
         '''
 
         _qty = 0
-        target_bot = await self._resolve_input_entity("@upan3bot")
+        target_bot = await self._resolve_input_entity("@upan7bot")
 
         # 首頁    /start
         result = await self.capture_bot_messages(target_bot, "/start")
