@@ -72,14 +72,15 @@ class HumanBotOperator:
     """执行需要已登录使用者身份的 Telegram 操作。"""
 
     MONITOR_FORWARD_CHAT_ID = 5334310434
-    BJD_CODE_BOT_ID = 8345754693 #8711938156 #8754937374 #8740782139    
+    BJD_CODE_BOT_ID = 8345754693 #8711938156 #8754937374 #8740782139  
+    BJD_CODE_BOT_NAME = "upan8bot"  
     FZ_CODE_BOT_ID = 8805711672
     API_ID = 0
     API_HASH = ""
     BBT_OPERATOR = None
 
     
-    REWARD_BOT_NAME = "zttower8bot"
+    REWARD_BOT_NAME = "zttower11bot"
     FREE_CHAT_ID = -1002093182221
     # 媒体汇聚频道：0 表示未配置（实际值按 _resolve_pool_channel 的顺序解析）
     POOL_CHANNEL: int | str = 0
@@ -304,7 +305,7 @@ class HumanBotOperator:
                     message.strip(),
                     buttons=Button.url(
                         "🧻传送门1",
-                        f"https://t.me/upan8bot?text={message}",
+                        f"https://t.me/{BJD_CODE_BOT_NAME}?text={message}",
                     ),
                     **send_options,
                 )
@@ -1483,7 +1484,7 @@ class HumanBotOperator:
         '''
 
         _qty = 0
-        target_bot = await self._resolve_input_entity("@upan8bot")
+        target_bot = await self._resolve_input_entity(f"@{BJD_CODE_BOT_NAME}")
 
         desc_order_id = int(desc_order_id)
 
@@ -1623,7 +1624,7 @@ class HumanBotOperator:
         '''
 
         _qty = 0
-        target_bot = await self._resolve_input_entity("@upan8bot")
+        target_bot = await self._resolve_input_entity(f"@{BJD_CODE_BOT_NAME}")
 
         # 首頁    /start
         result = await self.capture_bot_messages(target_bot, "/start")
