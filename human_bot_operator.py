@@ -72,7 +72,7 @@ class HumanBotOperator:
     """执行需要已登录使用者身份的 Telegram 操作。"""
 
     MONITOR_FORWARD_CHAT_ID = 5334310434
-    BJD_CODE_BOT_ID = 8754937374 #8740782139    
+    BJD_CODE_BOT_ID = 8711938156 #8754937374 #8740782139    
     FZ_CODE_BOT_ID = 8805711672
     API_ID = 0
     API_HASH = ""
