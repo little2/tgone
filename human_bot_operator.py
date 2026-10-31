@@ -79,7 +79,7 @@ class HumanBotOperator:
     BBT_OPERATOR = None
 
     
-    REWARD_BOT_NAME = "zttower17bot"
+    REWARD_BOT_NAME = "zttower8bot"
     FREE_CHAT_ID = -1002093182221
     # 媒体汇聚频道：0 表示未配置（实际值按 _resolve_pool_channel 的顺序解析）
     POOL_CHANNEL: int | str = 0
