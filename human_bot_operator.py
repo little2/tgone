@@ -72,8 +72,8 @@ class HumanBotOperator:
     """执行需要已登录使用者身份的 Telegram 操作。"""
 
     MONITOR_FORWARD_CHAT_ID = 5334310434
-    BJD_CODE_BOT_ID = 8345754693 #8711938156 #8754937374 #8740782139  
-    BJD_CODE_BOT_NAME = "upan8bot"  
+    BJD_CODE_BOT_ID = 8930708687 #8345754693 #8711938156 #8754937374 #8740782139  
+    BJD_CODE_BOT_NAME = "upan9bot"  
     FZ_CODE_BOT_ID = 8805711672
     API_ID = 0
     API_HASH = ""
@@ -367,10 +367,10 @@ class HumanBotOperator:
                             credentials,
                         )
                         ## 加群
-                        try:
-                            await operator.join_chat(chat_invite_link)
-                        finally:
-                            pass
+                        # try:
+                        #     await operator.join_chat(chat_invite_link)
+                        # finally:
+                        #     pass
 
                         operator_by_sender[sender_id] = operator
                         opened_operators.append(operator)
