@@ -86,7 +86,8 @@ async def ping_keepalive_task():
         "https://lz-pbtb.onrender.com",      # LZ-1002
         "https://tgone.onrender.com",
         "https://tgone-qruy.onrender.com",   # USERBOT (Grid)
-        "https://tgone-lkus.onrender.com",  # userbot ( 新人)
+        "https://tgone-lkus.onrender.com",  # userbot ( 新人),
+        "https://encbot-peach.onrender.com" #peach
     ]
 
     timeout = aiohttp.ClientTimeout(total=10)
