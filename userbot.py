@@ -223,7 +223,7 @@ async def main_auto_talk() -> None:
         for participant in participants
     }
 
-    chat_id = -1004335920222    #布吉岛
+    # chat_id = -1004335920222    #布吉岛
     message_thread_id=0
     # chat_id = -1004303617422
     # chat_id = -1001804924332    #测试群
@@ -231,10 +231,13 @@ async def main_auto_talk() -> None:
     # chat_id = -1004409893549    #桃花林 
     # message_thread_id=28452
 
+    chat_id = -1004430901330    #测试
+
 
 
     # chat_invite_link = os.getenv("CHAT_INVITE_LINK", "").strip() or None
-    chat_invite_link = "+1_46OHKmuuowNzkx"
+    # chat_invite_link = "+1_46OHKmuuowNzkx"
+    chat_invite_link = "https://t.me/+gXjWFqJTl-g0ZThk"
    
     # chat_id: int | str = os.environ["CHAT_ID"].strip()
     # if chat_id.lstrip("-").isdigit():
@@ -622,9 +625,9 @@ async def main() -> None:
 if __name__ == "__main__":
     async def _run_all() -> None:
         # await main_check_user()
-        # await main_auto_talk()
+        await main_auto_talk()
         # await main_move()
-        await main()
+        # await main()
 
 
 

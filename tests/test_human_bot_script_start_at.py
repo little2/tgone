@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -7,8 +7,14 @@ from human_bot_operator import HumanBotOperator
 
 
 @pytest.mark.asyncio
-async def test_chat_script_sets_missing_start_at_after_resolving_chat(monkeypatch):
+@pytest.mark.parametrize("start_offset", [None, -60, 3600])
+async def test_chat_script_normalizes_start_at_after_resolving_chat(monkeypatch, start_offset):
     resolved_at = None
+    original_start_at = (
+        None if start_offset is None else
+        (datetime.now(HumanBotOperator.DEFAULT_TIMEZONE)
+         + timedelta(seconds=start_offset)).isoformat()
+    )
 
     class FakeClient:
         async def send_message(self, *args, **kwargs):
@@ -16,6 +22,9 @@ async def test_chat_script_sets_missing_start_at_after_resolving_chat(monkeypatc
 
     class FakeOperator:
         client = FakeClient()
+
+        async def join_chat(self, invite_link):
+            return None
 
         async def simulate_ctrl_press(self):
             return None
@@ -48,7 +57,7 @@ async def test_chat_script_sets_missing_start_at_after_resolving_chat(monkeypatc
         "script": {
             "script_id": "test",
             "title": "test",
-            "start_at": None,
+            "start_at": original_start_at,
         },
         "participants": [
             {
@@ -78,4 +87,8 @@ async def test_chat_script_sets_missing_start_at_after_resolving_chat(monkeypatc
 
     start_at = datetime.fromisoformat(script["script"]["start_at"])
     assert resolved_at is not None
-    assert start_at > resolved_at
+    if start_offset is None or start_offset < 0:
+        assert start_at >= resolved_at + timedelta(seconds=30)
+        assert start_at <= datetime.now(HumanBotOperator.DEFAULT_TIMEZONE) + timedelta(seconds=30)
+    else:
+        assert script["script"]["start_at"] == original_start_at

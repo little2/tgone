@@ -366,6 +366,12 @@ class HumanBotOperator:
                             participant["sender_type"],
                             credentials,
                         )
+                        ## 加群
+                        try:
+                            await operator.join_chat(chat_invite_link)
+                        finally:
+                            pass
+
                         operator_by_sender[sender_id] = operator
                         opened_operators.append(operator)
                     operator_by_actor[participant["actor_id"]] = operator
@@ -431,8 +437,9 @@ class HumanBotOperator:
                         f"actor={actor_id} 使用的账号={account_label} 无法访问 "
                         f"chat_id={chat_id}。请确认该账号已经加入目标群；{invite_hint}"
                     ) from resolve_error
-            if start_at is None:
-                start_at = datetime.now(cls.DEFAULT_TIMEZONE) + timedelta(seconds=10)
+            now = datetime.now(cls.DEFAULT_TIMEZONE)
+            if start_at is None or start_at < now:
+                start_at = now + timedelta(seconds=30)
                 payload["script"]["start_at"] = start_at.isoformat()
 
             sent_messages: dict[str, Any] = {}
