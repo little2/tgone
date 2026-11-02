@@ -459,7 +459,7 @@ async def run_telethon_bot(
                     if FETCH_MODE == "emoji" or FETCH_MODE == "emoji2":
                         
                         
-                        if t%4 == 0:
+                        if (t+i)%4 == 0:
                             await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0)
                         else:
                             await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=2)
@@ -467,6 +467,7 @@ async def run_telethon_bot(
                         if t%25 == 0 and i==1:
                             print(f"==>Fetching top for account {i} ({display_name})...", flush=True)
                             await op.fetch_top()
+
                         
                         if i == 1:
                             await op.tracking_message_range(chat=-1004335920222)
@@ -474,8 +475,15 @@ async def run_telethon_bot(
                             await op.tracking_message_range(chat=-1004372020134) 
 
                     else:
+                        if (t+i)%9 == 0:
+                            await op.fetch_list()
+                        elif (t+i)%4 == 0:
+                            await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0)
+                        else:
+                            await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=2)
+
                         
-                        await op.fetch_list()
+                        
                     
                     
                 except Exception as exc:
@@ -487,7 +495,7 @@ async def run_telethon_bot(
                     continue
 
 
-                sleep_time = random.randint(3, 7)
+                sleep_time = random.randint(13, 27)
                 print(f"==>Sleeping for {sleep_time} seconds before next operation.", flush=True)
                 await asyncio.sleep(sleep_time)
         

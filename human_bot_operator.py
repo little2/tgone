@@ -1619,6 +1619,7 @@ class HumanBotOperator:
 
 
 
+
     async def fetch_top(self):
         '''
         首頁    /start

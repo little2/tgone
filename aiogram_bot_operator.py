@@ -324,7 +324,7 @@ class AiogramBotOperator:
                     try:
                         await asyncio.to_thread(
                             SharedConfig._download_from_api,
-                            {"text": f"频道频传送失败了，请检查频道ID是否正确: {destination_chat_id}"},
+                            {"text": f"频道传送失败了 _forward_media_worker ，请检查频道ID是否正确: {destination_chat_id}"},
                         )
                     except asyncio.CancelledError:
                         raise
