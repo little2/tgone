@@ -72,8 +72,9 @@ class HumanBotOperator:
     """执行需要已登录使用者身份的 Telegram 操作。"""
 
     MONITOR_FORWARD_CHAT_ID = 5334310434
-    BJD_CODE_BOT_ID = 8102848961 #8930708687 #8345754693 #8711938156 #8754937374 #8740782139  
-    BJD_CODE_BOT_NAME = "upan12bot"  
+   
+    BJD_CODE_BOT_ID: int | None = None #8102848961 #8930708687 #8345754693 #8711938156 #8754937374 #8740782139 
+    BJD_CODE_BOT_NAME = "upan13bot"  
     FZ_CODE_BOT_ID = 8805711672
     API_ID = 0
     API_HASH = ""
@@ -200,7 +201,19 @@ class HumanBotOperator:
                     raise RuntimeError("StringSession 尚未获得 Telegram 用户授权")
                 me = await client.get_me()
                 print(f"已成功使用 StringSession 登录 Telegram 用户。id = {me.id} {me.first_name}", flush=True)
+               
+                if cls.BJD_CODE_BOT_ID is None:
+                    username = cls.BJD_CODE_BOT_NAME.strip().lstrip("@")
+                    entity = await client.get_entity(f"@{username}")
+
+                    if not getattr(entity, "bot", False):
+                        raise ValueError(f"@{username} 不是机器人账号")
+
+                    cls.BJD_CODE_BOT_ID = int(entity.id)
+                    print(f"🤖 已获取 @{username} 的 id = {entity.id}")
+
                 return cls(client, taobao_bot_username=taobao_bot_username)
+
             except ServerError as exc:
                 await client.disconnect()
                 if attempt >= cls.TELEGRAM_LOGIN_MAX_ATTEMPTS:
