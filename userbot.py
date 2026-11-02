@@ -437,8 +437,6 @@ async def run_telethon_bot(
 
 
                     if FETCH_MODE == "emoji":
-
-                        
                         if t%4 == 0:
                             await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0)
                         else:
@@ -448,7 +446,6 @@ async def run_telethon_bot(
                             print(f"==>Fetching top for account {i} ({display_name})...", flush=True)
                             await op.fetch_top()
                         
-
                         if i == 1:
                             await op.tracking_message_range(chat=-1004335920222)
                         elif i == 3:
