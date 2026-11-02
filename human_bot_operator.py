@@ -63,6 +63,10 @@ from dotenv import load_dotenv
 env_path = Path(__file__).resolve().parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
+from shared_config import SharedConfig
+SharedConfig.load(True)
+
+
 BBT_GROUP_ID = int(os.getenv("BBT_GROUP_ID", 0))
 BBT_THREAD_ID = int(os.getenv("BBT_THREAD_ID", 0))
 BBT_TOKEN = os.getenv("BBT_TOKEN", "")
@@ -74,7 +78,7 @@ class HumanBotOperator:
     MONITOR_FORWARD_CHAT_ID = 5334310434
    
     BJD_CODE_BOT_ID: int | None = None #8102848961 #8930708687 #8345754693 #8711938156 #8754937374 #8740782139 
-    BJD_CODE_BOT_NAME = "upan13bot"  
+    BJD_CODE_BOT_NAME: str | None = None
     FZ_CODE_BOT_ID = 8805711672
     API_ID = 0
     API_HASH = ""
@@ -202,7 +206,17 @@ class HumanBotOperator:
                 me = await client.get_me()
                 print(f"已成功使用 StringSession 登录 Telegram 用户。id = {me.id} {me.first_name}", flush=True)
                
+
+
+               
                 if cls.BJD_CODE_BOT_ID is None:
+
+                    chat = SharedConfig.get("chat") or None
+                    if chat:
+                        bjd_dict = chat.get("bjd") or {}
+                        if bjd_dict:
+                            cls.BJD_CODE_BOT_NAME = bjd_dict.get("bot") or None
+                            
                     username = cls.BJD_CODE_BOT_NAME.strip().lstrip("@")
                     entity = await client.get_entity(f"@{username}")
 
@@ -1921,7 +1935,10 @@ class HumanBotOperator:
                     bot_filter = f" `extract_status` = {extract_status}"
                 else:
                     bot_filter = " `extract_status` IN (0,2)"
+                
+                # TODO : 先把这个拿掉，因为只剩 BJD 了
                 bot_filter += f" AND `bot_id` = {bot_id}" if bot_id is not None else ""
+                
                 rows = await MySQLPool.fetchall(
                     "SELECT * FROM `sora_code` "
                     f"WHERE {bot_filter} ORDER BY priority DESC, `id` DESC LIMIT 100",

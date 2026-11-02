@@ -18,7 +18,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from captcha_bot_operator import CaptchaBotOperator
 from human_bot_operator import HumanBotOperator
 from tgone_mysql import MySQLPool
-from shared_config import SharedConfig  # noqa: E402
+
 
 
 class AiogramBotOperator:
