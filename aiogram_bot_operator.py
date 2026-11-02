@@ -322,7 +322,7 @@ class AiogramBotOperator:
                 # 媒体 message_id=11634 传送失败：Telegram server says - Bad Request: chat not found
                 if "Bad Request: chat not found" in str(exc):
                     try:
-                        print(f"!! 频道传送失败了 _forward_media_worker ，请检查频道ID是否正确: {destination_chat_id}")
+                        print(f"⚠️ 频道传送失败了 _forward_media_worker ，请检查频道ID是否正确: {destination_chat_id}")
                         # await asyncio.to_thread(
                         #     SharedConfig._download_from_api,
                         #     {"text": f"频道传送失败了 _forward_media_worker ，请检查频道ID是否正确: {destination_chat_id}"},
