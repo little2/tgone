@@ -44,10 +44,10 @@ async def main_check_user() -> None:
     try:
         await account_manager.check_all_userbot(config)
         # await account_manager.rec_new_account(
-        #     phone_number="+62895376857784",
+        #     phone_number="+919943359094",
         #     pw2fa="Qqqw1234",
         # )
-        # await account_manager.check_phone("+66829245756")
+        # await account_manager.check_phone("+12282796709")
         # await account_manager.check_phone("+254784812293")
         # await account_manager.check_phone("+254797636990") 
 
@@ -624,8 +624,8 @@ async def main() -> None:
 
 if __name__ == "__main__":
     async def _run_all() -> None:
-        # await main_check_user()
-        await main_auto_talk()
+        await main_check_user()
+        # await main_auto_talk()
         # await main_move()
         # await main()
 

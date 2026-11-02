@@ -72,8 +72,8 @@ class HumanBotOperator:
     """执行需要已登录使用者身份的 Telegram 操作。"""
 
     MONITOR_FORWARD_CHAT_ID = 5334310434
-    BJD_CODE_BOT_ID = 8930708687 #8345754693 #8711938156 #8754937374 #8740782139  
-    BJD_CODE_BOT_NAME = "upan9bot"  
+    BJD_CODE_BOT_ID = 8102848961 #8930708687 #8345754693 #8711938156 #8754937374 #8740782139  
+    BJD_CODE_BOT_NAME = "upan12bot"  
     FZ_CODE_BOT_ID = 8805711672
     API_ID = 0
     API_HASH = ""
@@ -439,7 +439,7 @@ class HumanBotOperator:
                     ) from resolve_error
             now = datetime.now(cls.DEFAULT_TIMEZONE)
             if start_at is None or start_at < now:
-                start_at = now + timedelta(seconds=30)
+                start_at = now + timedelta(seconds=15)
                 payload["script"]["start_at"] = start_at.isoformat()
 
             sent_messages: dict[str, Any] = {}
