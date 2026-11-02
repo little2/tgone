@@ -19,10 +19,11 @@ from typing import Any
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
-from telethon import TelegramClient, events
+from telethon import Button, TelegramClient, events
 from telethon.errors import (
     ChatForwardsRestrictedError,
     InviteRequestSentError,
+    ServerError,
     UserAlreadyParticipantError,
     UsernameNotModifiedError,
 )
@@ -32,6 +33,7 @@ from telethon.tl.functions.account import (
     UpdateProfileRequest,
     UpdateUsernameRequest,
 )
+from telethon.tl.functions.channels import JoinChannelRequest
 from telethon.tl.functions.messages import ImportChatInviteRequest
 from telethon.tl.types import (
     Message,
@@ -54,16 +56,31 @@ from aiogram import Bot
 from captcha_bot_operator import CaptchaBotOperator
 from tgone_mysql import MySQLPool
 
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+env_path = Path(__file__).resolve().parent / ".env"
+load_dotenv(dotenv_path=env_path)
+
+BBT_GROUP_ID = int(os.getenv("BBT_GROUP_ID", 0))
+BBT_THREAD_ID = int(os.getenv("BBT_THREAD_ID", 0))
+BBT_TOKEN = os.getenv("BBT_TOKEN", "")
+
 
 class HumanBotOperator:
     """执行需要已登录使用者身份的 Telegram 操作。"""
 
     MONITOR_FORWARD_CHAT_ID = 5334310434
-    BJD_CODE_BOT_ID = 8965249046 #8915213940
+    BJD_CODE_BOT_ID = 8102848961 #8930708687 #8345754693 #8711938156 #8754937374 #8740782139  
+    BJD_CODE_BOT_NAME = "upan12bot"  
     FZ_CODE_BOT_ID = 8805711672
+    API_ID = 0
+    API_HASH = ""
+    BBT_OPERATOR = None
 
     
-    REWARD_BOT_NAME = "zttower5bot"
+    REWARD_BOT_NAME = "zttower11bot"
     FREE_CHAT_ID = -1002093182221
     # 媒体汇聚频道：0 表示未配置（实际值按 _resolve_pool_channel 的顺序解析）
     POOL_CHANNEL: int | str = 0
@@ -71,6 +88,8 @@ class HumanBotOperator:
     ALBUM_MAX_SIZE = 10
     PROTECTED_MEDIA_TRANSFER_TIMEOUT_SECONDS = 5 * 60
     CAPTCHA_SELECTION_TIMEOUT_SECONDS = 30
+    TELEGRAM_LOGIN_MAX_ATTEMPTS = 4
+    TELEGRAM_LOGIN_RETRY_BASE_SECONDS = 2
     _bot_cache: dict[str, Bot] = {}
 
     DEFAULT_TIMEZONE = ZoneInfo("Asia/Shanghai")
@@ -164,24 +183,42 @@ class HumanBotOperator:
         if not api_hash:
             raise ValueError("api_hash 不可为空")
 
-        # print(f"正在使用 {session_string}", flush=True)
-        client = TelegramClient(
-            StringSession(session_string),
-            int(api_id),
-            api_hash,
-        )
-        try:
-            await client.connect()
-            if not await client.is_user_authorized():
-                raise RuntimeError("StringSession 尚未获得 Telegram 用户授权")
-            else:
+        if cls.API_ID == 0:
+            cls.API_ID = api_id
+        if cls.API_HASH == "":
+            cls.API_HASH = api_hash
+
+        for attempt in range(1, cls.TELEGRAM_LOGIN_MAX_ATTEMPTS + 1):
+            client = TelegramClient(
+                StringSession(session_string),
+                int(api_id),
+                api_hash,
+            )
+            try:
+                await client.connect()
+                if not await client.is_user_authorized():
+                    raise RuntimeError("StringSession 尚未获得 Telegram 用户授权")
                 me = await client.get_me()
                 print(f"已成功使用 StringSession 登录 Telegram 用户。id = {me.id} {me.first_name}", flush=True)
-        except Exception:
-            await client.disconnect()
-            raise
+                return cls(client, taobao_bot_username=taobao_bot_username)
+            except ServerError as exc:
+                await client.disconnect()
+                if attempt >= cls.TELEGRAM_LOGIN_MAX_ATTEMPTS:
+                    raise
+                retry_seconds = cls.TELEGRAM_LOGIN_RETRY_BASE_SECONDS * (
+                    2 ** (attempt - 1)
+                )
+                print(
+                    f"⚠️ Telegram 服务暂时不可用，{retry_seconds} 秒后重试登录"
+                    f"（{attempt}/{cls.TELEGRAM_LOGIN_MAX_ATTEMPTS}）：{exc}",
+                    flush=True,
+                )
+                await asyncio.sleep(retry_seconds)
+            except Exception:
+                await client.disconnect()
+                raise
 
-        return cls(client, taobao_bot_username=taobao_bot_username)
+        raise RuntimeError("Telegram 用户账号登录重试已耗尽")
 
     @classmethod
     async def login_with_bot_token(
@@ -197,13 +234,83 @@ class HumanBotOperator:
         if not bot_token or not api_id or not api_hash:
             raise ValueError("bot_token、api_id、api_hash 均不可为空")
 
-        client = TelegramClient(StringSession(), int(api_id), api_hash)
-        try:
-            await client.start(bot_token=bot_token)
-        except Exception:
-            await client.disconnect()
-            raise
-        return cls(client, taobao_bot_username=taobao_bot_username)
+        for attempt in range(1, cls.TELEGRAM_LOGIN_MAX_ATTEMPTS + 1):
+            client = TelegramClient(StringSession(), int(api_id), api_hash)
+            try:
+                await client.start(bot_token=bot_token)
+                return cls(client, taobao_bot_username=taobao_bot_username)
+            except ServerError as exc:
+                await client.disconnect()
+                if attempt >= cls.TELEGRAM_LOGIN_MAX_ATTEMPTS:
+                    raise
+                retry_seconds = cls.TELEGRAM_LOGIN_RETRY_BASE_SECONDS * (
+                    2 ** (attempt - 1)
+                )
+                print(
+                    f"⚠️ Telegram 服务暂时不可用，{retry_seconds} 秒后重试 Bot 登录"
+                    f"（{attempt}/{cls.TELEGRAM_LOGIN_MAX_ATTEMPTS}）：{exc}",
+                    flush=True,
+                )
+                await asyncio.sleep(retry_seconds)
+            except Exception:
+                await client.disconnect()
+                raise
+
+        raise RuntimeError("Telegram Bot 登录重试已耗尽")
+
+    @classmethod
+    async def set_bbt_bot(
+        cls,
+        bbt_operator: "HumanBotOperator",
+    ) -> None:
+        cls.BBT_OPERATOR = bbt_operator
+
+
+    @classmethod
+    async def send_message_with_bot(
+        cls,
+        message: str,
+        chat_id: int | str,
+        message_thread_id: int | None = None,
+    ) -> Any:
+        """使用 Telethon 登录普通 Bot，发送消息后断开连接。"""
+        if not isinstance(message, str) or not message.strip():
+            raise ValueError("message 不可为空")
+        if isinstance(chat_id, bool) or not isinstance(chat_id, (int, str)):
+            raise ValueError("chat_id 必须是整数或群组 username")
+        if isinstance(chat_id, str):
+            chat_id = chat_id.strip()
+            if not chat_id:
+                raise ValueError("chat_id 不可为空")
+            if re.fullmatch(r"-?\d+", chat_id):
+                chat_id = int(chat_id)
+        if chat_id == 0:
+            raise ValueError("chat_id 不可为 0")
+        if (
+            isinstance(message_thread_id, bool)
+            or not isinstance(message_thread_id, (int, type(None)))
+            or (isinstance(message_thread_id, int) and message_thread_id < 0)
+        ):
+            raise ValueError("message_thread_id 必须是非负整数或 None")
+
+        if cls.BBT_OPERATOR:
+            
+            try:
+                
+                send_options = {}
+                if message_thread_id:
+                    send_options["reply_to"] = message_thread_id
+                return await cls.BBT_OPERATOR.client.send_message(
+                    chat_id,
+                    message.strip(),
+                    buttons=Button.url(
+                        "🧻传送门1",
+                        f"https://t.me/{BJD_CODE_BOT_NAME}?text={message}",
+                    ),
+                    **send_options,
+                )
+            except Exception as exc:
+                print(f"❌ Failed to send message to {chat_id}: {exc}", flush=True)
 
     @classmethod
     async def run_chat_script(
@@ -259,6 +366,12 @@ class HumanBotOperator:
                             participant["sender_type"],
                             credentials,
                         )
+                        ## 加群
+                        # try:
+                        #     await operator.join_chat(chat_invite_link)
+                        # finally:
+                        #     pass
+
                         operator_by_sender[sender_id] = operator
                         opened_operators.append(operator)
                     operator_by_actor[participant["actor_id"]] = operator
@@ -324,6 +437,11 @@ class HumanBotOperator:
                         f"actor={actor_id} 使用的账号={account_label} 无法访问 "
                         f"chat_id={chat_id}。请确认该账号已经加入目标群；{invite_hint}"
                     ) from resolve_error
+            now = datetime.now(cls.DEFAULT_TIMEZONE)
+            if start_at is None or start_at < now:
+                start_at = now + timedelta(seconds=15)
+                payload["script"]["start_at"] = start_at.isoformat()
+
             sent_messages: dict[str, Any] = {}
             send_errors: dict[str, BaseException] = {}
             sent_events = {
@@ -434,7 +552,7 @@ class HumanBotOperator:
     @staticmethod
     def _validate_chat_script(
         script_json: str | dict[str, Any],
-    ) -> tuple[dict[str, Any], datetime]:
+    ) -> tuple[dict[str, Any], datetime | None]:
         """验证自动群聊 JSON，并返回脚本及带时区的开始时间。"""
         if isinstance(script_json, str):
             try:
@@ -466,12 +584,16 @@ class HumanBotOperator:
         if not isinstance(messages, list):
             raise ValueError("messages 必须是数组")
 
-        try:
-            start_at = datetime.fromisoformat(str(script["start_at"]))
-        except (KeyError, TypeError, ValueError) as exc:
-            raise ValueError("script.start_at 必须是 ISO 8601 时间") from exc
-        if start_at.tzinfo is None or start_at.utcoffset() is None:
-            raise ValueError("script.start_at 必须包含时区偏移")
+        start_at_value = script.get("start_at")
+        if start_at_value is None:
+            start_at = None
+        else:
+            try:
+                start_at = datetime.fromisoformat(str(start_at_value))
+            except (TypeError, ValueError) as exc:
+                raise ValueError("script.start_at 必须是 ISO 8601 时间") from exc
+            if start_at.tzinfo is None or start_at.utcoffset() is None:
+                raise ValueError("script.start_at 必须包含时区偏移")
 
         actor_ids = set()
         for participant in participants:
@@ -534,6 +656,7 @@ class HumanBotOperator:
             ):
                 raise ValueError(f"{message_id}.after_start 必须是非负数")
             if after_start < previous_after_start:
+                print(f"messages 必须按 after_start 从小到大排列 {after_start} -> {previous_after_start}")
                 raise ValueError("messages 必须按 after_start 从小到大排列")
             if (
                 isinstance(typing_duration, bool)
@@ -1368,7 +1491,7 @@ class HumanBotOperator:
         '''
 
         _qty = 0
-        target_bot = await self._resolve_input_entity("@di5k5bot")
+        target_bot = await self._resolve_input_entity(f"@{BJD_CODE_BOT_NAME}")
 
         desc_order_id = int(desc_order_id)
 
@@ -1508,7 +1631,7 @@ class HumanBotOperator:
         '''
 
         _qty = 0
-        target_bot = await self._resolve_input_entity("@di5k5bot")
+        target_bot = await self._resolve_input_entity(f"@{BJD_CODE_BOT_NAME}")
 
         # 首頁    /start
         result = await self.capture_bot_messages(target_bot, "/start")
@@ -1642,15 +1765,52 @@ class HumanBotOperator:
                         match = re.match(r"(\d+)/(\d+)", button_text)
                         if match:
                             current_item, max_item = map(int, match.groups())
-                            if priority > 0:
-                                pass
-                            else:
-                                pass
+                           
                             desc_order_id = max_item - current_item
                             if self.show_response:
                                 print(f"Parsed pagination: current_item={current_item}, max_item={max_item}", flush=True)
                             
                             if priority > 0:
+                                existing_unranked_code = await MySQLPool.fetchone(
+                                    "SELECT `id` FROM `sora_code` "
+                                    "WHERE `code` = %s AND `priority` = 0 LIMIT 1",
+                                    (code,),
+                                    error_tag="human_bot_operator.parse_bot_response.get_unranked_code",
+                                )
+                                if existing_unranked_code:
+                                    print("新进榜", flush=True)
+
+                                    try:
+                                        try:
+                                            runtime_config = json.loads(
+                                                os.getenv("CONFIGURATION", "") or "{}"
+                                            )
+                                        except json.JSONDecodeError:
+                                            runtime_config = {}
+                                        if not isinstance(runtime_config, dict):
+                                            runtime_config = {}
+
+
+
+                                            
+                                           
+
+                                        await self.send_message_with_bot(
+                                            f"{code}",
+                                            chat_id=BBT_GROUP_ID,
+                                            message_thread_id=BBT_THREAD_ID
+                                        )
+                                    except Exception as exc:
+                                        print(
+                                            f"⚠️ 新进榜通知发送失败：{exc}",
+                                            flush=True,
+                                        )
+                                        if "A wait of" in str(exc):
+                                            
+                                            return False
+                                else:
+                                    print("已进榜", flush=True)
+
                                 await self._insert_sora_code(
                                     code,
                                     source_chat_id=0,
@@ -1755,8 +1915,8 @@ class HumanBotOperator:
                 )
                 
                 if not rows:
-                    print(f"未找到 extract_status = 0 的 sora_code 记录，bot_id={bot_id} / {extract_status} 等待 60 秒后重试...", flush=True)
-                    await asyncio.sleep(60)
+                    print(f"未找到 extract_status = 0 的 sora_code 记录，bot_id={bot_id} / {extract_status} 等待 15 秒后重试...", flush=True)
+                    await asyncio.sleep(15)
                     return None
                    
                 record = random.choice(rows)
@@ -1950,8 +2110,11 @@ class HumanBotOperator:
                         await self._mark_extract_status(secret_id, 12)
                         print("⚠️ 资源已由管理员下架", flush=True)
                         return response
-                   
-
+                    elif "验证码暂不可重试" in response_message:
+                        
+                        print(f"⚠️ {response_message}", flush=True)
+                        return response                  
+                    
 
                     
                     elif "信譽等級不足" in response_message:
@@ -2200,7 +2363,7 @@ class HumanBotOperator:
 
                 # 如果收到的媒体消息是图片，且 caption 的字串包括 "只数清晰的大图案" 或 "与上方物体相同"
                 is_photo = getattr(response, "photo", None) is not None
-                if is_photo and ("只数清晰的大图案" in response_message or "与上方物体相同" in response_message):
+                if is_photo and ("图中出现最多的表情" in response_message or "只数清晰的大图案" in response_message or "与上方物体相同" in response_message or "与上方的物体相同" in response_message):
                     print("❗️ 收到符合条件的图片媒体消息(验证码)。", flush=True)
                     
 
@@ -3681,10 +3844,15 @@ class HumanBotOperator:
         """断开当前 Telegram 用户客户端连接。"""
         await self.client.disconnect()
 
-    async def join_chat(self, invite_link: str) -> Any:
-        """通过完整邀请链接、+邀请码或裸邀请码加入频道或群组。"""
-        invite_hash = self._extract_invite_hash(invite_link)
+    async def join_chat(self, chat_ref: str) -> Any:
+        """通过公开用户名或私有邀请链接加入频道/群组。"""
         try:
+            public_ref = self._extract_public_chat_ref(chat_ref)
+            if public_ref is not None:
+                entity = await self.client.get_entity(public_ref)
+                return await self.client(JoinChannelRequest(entity))
+
+            invite_hash = self._extract_invite_hash(chat_ref)
             return await self.client(ImportChatInviteRequest(invite_hash))
         except InviteRequestSentError:
             print("入群申请已成功提交，正在等待管理员批准。", flush=True)
@@ -3692,6 +3860,35 @@ class HumanBotOperator:
         except UserAlreadyParticipantError:
             print("当前账号已经加入该群组或频道。", flush=True)
             return None
+
+    @staticmethod
+    def _extract_public_chat_ref(chat_ref: str) -> str | None:
+        """识别 ``@username`` 或 ``t.me/username`` 格式的公开频道。"""
+        value = (chat_ref or "").strip()
+        if not value:
+            return None
+
+        if value.startswith("@"):
+            username = value[1:]
+        elif "://" in value:
+            parsed = urlparse(value)
+            if parsed.scheme not in {"http", "https"} or parsed.netloc.lower() not in {
+                "t.me",
+                "www.t.me",
+            }:
+                raise ValueError("chat_ref 必须是 t.me 链接")
+
+            path = parsed.path.strip("/")
+            if path.startswith("+") or path.startswith("joinchat/"):
+                return None
+            username = path.split("/", 1)[0]
+        else:
+            # 保留原有行为：不带 @ 的裸字符串视为私有邀请码。
+            return None
+
+        if not re.fullmatch(r"[A-Za-z0-9_]{5,32}", username):
+            raise ValueError("Telegram 公开用户名格式无效")
+        return f"@{username}"
 
     @staticmethod
     def _extract_invite_hash(invite_link: str) -> str:
