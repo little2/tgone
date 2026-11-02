@@ -305,7 +305,7 @@ class HumanBotOperator:
                     message.strip(),
                     buttons=Button.url(
                         "🧻传送门1",
-                        f"https://t.me/{BJD_CODE_BOT_NAME}?text={message}",
+                        f"https://t.me/{cls.BJD_CODE_BOT_NAME}?text={message}",
                     ),
                     **send_options,
                 )
@@ -1491,7 +1491,7 @@ class HumanBotOperator:
         '''
 
         _qty = 0
-        target_bot = await self._resolve_input_entity(f"@{BJD_CODE_BOT_NAME}")
+        target_bot = await self._resolve_input_entity(f"@{self.BJD_CODE_BOT_NAME}")
 
         desc_order_id = int(desc_order_id)
 
@@ -1631,7 +1631,7 @@ class HumanBotOperator:
         '''
 
         _qty = 0
-        target_bot = await self._resolve_input_entity(f"@{BJD_CODE_BOT_NAME}")
+        target_bot = await self._resolve_input_entity(f"@{self.BJD_CODE_BOT_NAME}")
 
         # 首頁    /start
         result = await self.capture_bot_messages(target_bot, "/start")
