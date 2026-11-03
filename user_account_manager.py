@@ -187,6 +187,7 @@ class UserAccountManager:
                 )
 
             print(f"❗️ User is not authorized, starting the login process...  {bot_title}  {phone_number} ,bot_id= {bot_info.get('bot_id')} ", flush=True)
+            print(f"\n{bot_info.get('api_url')}\n",flush=True)
             result = await self.tg_login(user_client, phone_number, pw2fa)
 
             if isinstance(result, FloodWaitError):
@@ -209,6 +210,11 @@ class UserAccountManager:
                 '''
                 print(f"❌ {result}", flush=True)
                 bot_info['check_status'] =  "two different IP addresses simultaneously"
+
+                await user_client.disconnect()
+                if isinstance(session_name, str):
+                    session_path = Path(user_client.session.filename)
+                    session_path.unlink(missing_ok=True)
 
                 new_bot_info  = {
                     "phone": phone_number,
@@ -240,6 +246,9 @@ class UserAccountManager:
                 )
         else:
             print(f"✅ 已登入 {bot_info.get('bot_title')}，bot_id={bot_info.get('bot_id')}，phone={bot_info.get('phone')}", flush=True)
+            
+            print(f"\n{bot_info.get('api_url')}\n")
+
             bot_info['check_status'] = "已登入"
 
             bot_info['bot_token'] = StringSession.save(user_client.session)

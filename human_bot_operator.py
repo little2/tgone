@@ -466,7 +466,7 @@ class HumanBotOperator:
                     ) from resolve_error
             now = datetime.now(cls.DEFAULT_TIMEZONE)
             if start_at is None or start_at < now:
-                start_at = now + timedelta(seconds=15)
+                start_at = now + timedelta(seconds=5)
                 payload["script"]["start_at"] = start_at.isoformat()
 
             sent_messages: dict[str, Any] = {}
@@ -1936,7 +1936,7 @@ class HumanBotOperator:
                 else:
                     bot_filter = " `extract_status` IN (0,2)"
                 
-                # TODO : 先把这个拿掉，因为只剩 BJD 了
+        
                 bot_filter += f" AND `bot_id` = {bot_id}" if bot_id is not None else ""
                 
                 rows = await MySQLPool.fetchall(
