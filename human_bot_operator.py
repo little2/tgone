@@ -204,7 +204,7 @@ class HumanBotOperator:
                 if not await client.is_user_authorized():
                     raise RuntimeError("StringSession 尚未获得 Telegram 用户授权")
                 me = await client.get_me()
-                print(f"已成功使用 StringSession 登录 Telegram 用户。id = {me.id} {me.first_name}", flush=True)
+                print(f"✅ 已成功使用 StringSession 登录 Telegram 用户。id = {me.id} {me.first_name}", flush=True)
                
 
 
@@ -1531,15 +1531,12 @@ class HumanBotOperator:
         result = await self.capture_bot_messages(target_bot, "/start")
         if not result:
             print("⚠️ 沒有取得 /start 首頁訊息", flush=True)
-
-
-
             send_result = await self.send_random_message(chat_id=[-1004335920222])
             print(f"已发送随机消息，send_result: {send_result}")
-            
-
-            
             return
+        else:
+            # 打印出取得的消息内容
+            print(f"\n取得 {result[-1]}",flush=True)
         menu_id = result[-1].id                      # 用最後一則，通常才是選單
 
         result2 = await self.capture_bot_messages(
@@ -1548,6 +1545,10 @@ class HumanBotOperator:
         if not result2:
             print("⚠️ 排行榜點擊後沒有取得任何輸出", flush=True)
             return
+        else:
+            # 打印出取得的消息内容
+            print(f"\n取得 {result[-1]}",flush=True)
+
         board_id = result2[-1].id
        
     
@@ -1556,17 +1557,14 @@ class HumanBotOperator:
             target_bot, click_button_title="🆕", message_id=board_id
         )
         if not result_most_recent:
-            
-
-            
             await self.capture_bot_messages(
                 target_bot, click_button_title="简体", message_id=board_id
             )
-
-            print("⚠️ 點擊「🆕 最新發布」後沒有取得任何輸出", flush=True)
-
-
+            print("⚠️ 點擊「🆕 最新發布」後沒有取得任何輸出==>点简体按钮", flush=True)
             return
+        
+
+        
         latest_id = result_most_recent[-1].id
 
         if result_most_recent and result_most_recent[-1].raw_text:
@@ -1616,17 +1614,13 @@ class HumanBotOperator:
                                 current_item =await self.parse_bot_response(result_loop[-1])
                                 latest_id = result_loop[-1].id
 
-                                # print("extracting...", flush=True)
-                                # await self.extract(ask_like=True, bot_id=HumanBotOperator.FZ_CODE_BOT_ID, extract_status=0)
-
+                     
                                 
                                 if _qty == 1:
                                     await self.tracking_message_range(chat=-1004335920222)
                                 elif _qty == 3:
                                     await self.tracking_message_range(chat=-1004372020134) 
-                                # elif _qty == 5:
-                                #   玉
-                                # 	await self.tracking_message_range(chat=-1004383041223)
+                                
 
 
                                 if _qty%5 == 0:
