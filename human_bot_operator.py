@@ -85,7 +85,7 @@ class HumanBotOperator:
     BBT_OPERATOR = None
 
     
-    REWARD_BOT_NAME = "zttower11bot"
+    REWARD_BOT_NAME = "zttower21bot"
     FREE_CHAT_ID = -1002093182221
     # 媒体汇聚频道：0 表示未配置（实际值按 _resolve_pool_channel 的顺序解析）
     POOL_CHANNEL: int | str = 0
@@ -150,7 +150,7 @@ class HumanBotOperator:
         self._pool_channel_warned = False
         self.time_greetings = {
             "morning": [
-                "早", "早啊", "早上好", "早安",  "早","古德猫宁","聊天就能加分","看看","没性欲了","早上好","开始爬楼","美好的早晨","好看的还是多", "早上好"
+                "早", "早起起飞","早啊", "早上好", "早啊，各位","早飞","早安臭宝们","早安",  "早","古德猫宁","聊天就能加分","看看","没性欲了","早上好","开始爬楼","美好的早晨","好看的还是多", "早上好"
                 
             ],
             "noon": [
@@ -158,15 +158,15 @@ class HumanBotOperator:
                 
             ],
             "afternoon": [
-                "下午好", "下午好", "大佬们好","Hi","剩下的全靠点赞","聊天就能加分","看看","需要发言","没性欲了","多发言","太牛了","不错啊","牛逼","好看的还是多"
+                "下午好", "下午好", "大佬们下午好","大佬们好","Hi","剩下的全靠点赞","太带派了","聊天就能加分","看看","需要发言","没性欲了","多发言","太牛了","不错啊","牛逼","好看的还是多"
                 
             ],
             "evening": [
-                "晚上好",  "群友们好", "来色色了",  "刷刷分了", "晚安", "大佬们好","可以阿","唉","剩下的全靠点赞","服了","需要发呀啊","就是","9494","还是说少了啊","真不赖"
+                "晚上好",  "群友们好", "来色色了","太带派了",  "刷刷分了", "晚安", "大佬们好","可以阿","唉","剩下的全靠点赞","服了","需要发呀啊","就是","9494","还是说少了啊","真不赖"
                 
             ],
             "late_night": [
-                "晚安", "群友们好",   "大佬好", "好看爱看","666","为了看片","好看","新的一天","消息太多了","几千条"
+                "晚安", "熬夜起飞","群友们好",   "大佬好", "好看爱看","666","为了看片","好看","新的一天","消息太多了","几千条"
             ]
         }
 
@@ -2381,6 +2381,9 @@ class HumanBotOperator:
                        pass
                     elif isinstance(text, str) and "文件组已下架" in text:
                         pass
+                    elif isinstance(text, str) and "内无群聊发言" in text:
+                        send_result = await self.send_random_message(chat_id=[-1004335920222])
+                        print(f"已发送随机消息，send_result: {send_result}", flush=True)
                     elif text:
                         print(f"收到文字回应:{text}，继续等待媒体。", flush=True)
 

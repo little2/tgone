@@ -346,8 +346,15 @@ async def run_telethon_bot(
 
                 # await op.join_chat("https://t.me/+gwLvTrmPWGAwYzBh")  #正太方舟               
                 # await op.client.send_message("@postfilebbot", "/checkin")   
-                await op.join_chat("https://t.me/BJDADJB") #桃花源   
-                await op.client.send_message(f"@{HumanBotOperator.BJD_CODE_BOT_NAME}", "/start")
+                await op.join_chat("https://t.me/BJDADJB")  
+                # await op.client.send_message(f"@{HumanBotOperator.BJD_CODE_BOT_NAME}", "/start")
+
+ 
+    
+                    
+                
+
+
                 # await op.join_chat("https://t.me/+LmR0F1WpnFQ0Y2Ix")
                 # await op.client.send_message("@ztFreeJJBOT", "/start") 
 
@@ -454,6 +461,15 @@ async def run_telethon_bot(
                         f"\n\n第 {t} 轮、账号 {i}（{display_name}）开始提取...",
                         flush=True,
                     )
+
+                    # 首頁    /start
+                    start_result = await op.capture_bot_messages(f"@{HumanBotOperator.BJD_CODE_BOT_NAME}", "/start")
+                    if start_result:
+                        receive_text = start_result[-1].text if start_result else ""
+                        if "天内无群聊发言" in receive_text:
+                            print("‼️ 收到天内无群聊发言的提示，继续下一步。", flush=True)
+                            await op.send_random_message(chat_id=[-1004335920222])
+                         
 
 
                     if FETCH_MODE == "emoji" or FETCH_MODE == "emoji2":
@@ -635,9 +651,9 @@ async def main() -> None:
 if __name__ == "__main__":
     async def _run_all() -> None:
         # await main_check_user()
-        # await main_auto_talk()
+        await main_auto_talk()
         # await main_move()
-        await main()
+        # await main()
 
 
 
