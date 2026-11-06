@@ -26,6 +26,7 @@ from telethon.errors import (
     ServerError,
     UserAlreadyParticipantError,
     UsernameNotModifiedError,
+    UsernameOccupiedError,
 )
 from telethon.sessions import StringSession
 from telethon.tl.functions.account import (
@@ -4073,7 +4074,7 @@ class HumanBotOperator:
         last_name: str | None = None,
         random_name: bool = False,
     ) -> None:
-        """按需更新姓名、清空用户名，并将电话和在线状态设为 Nobody。"""
+        """按需更新姓名，设置易读的英文字母加随机数字的用户名，并更新隐私设置。"""
         if random_name:
             name_row = await MySQLPool.fetchone(
                 "SELECT `first_name`, `last_name` FROM `user` Where `first_name` IS NOT NULL "
@@ -4102,15 +4103,30 @@ class HumanBotOperator:
 
             print(f"✅ 用户姓名已成功更新。", flush=True)
 
-        try:
-            await self.client(UpdateUsernameRequest(""))
-        except UsernameNotModifiedError:
-            print("用户名已经为空，无需修改。", flush=True)
-        except Exception as exc:
-            print(f"⚠️ 用户名清空失败：{exc}", flush=True)
-            raise
-        else:
-            print("用户名已成功清空。", flush=True)
+        for attempt in range(5):
+            # 以辅音和元音交替组成 3 至 4 个音节，避免难读的字母堆叠。
+            english_name = "".join(
+                random.choice("bdfhklmnprstv") + random.choice("aeiou")
+                for _ in range(random.randint(3, 4))
+            )
+            digit_count = random.randint(2, 8)
+            number_suffix = str(random.randint(10 ** (digit_count - 1), 10 ** digit_count - 1))
+            username = f"{english_name}{number_suffix}"
+            try:
+                await self.client(UpdateUsernameRequest(username))
+            except UsernameOccupiedError:
+                if attempt == 4:
+                    print("⚠️ 连续 5 次生成的用户名均已被占用。", flush=True)
+                    raise
+            except UsernameNotModifiedError:
+                print(f"用户名已是 @{username}，无需修改。", flush=True)
+                break
+            except Exception as exc:
+                print(f"⚠️ 用户名更新失败：{exc}", flush=True)
+                raise
+            else:
+                print(f"✅ 用户名已更新为 @{username}。", flush=True)
+                break
 
         privacy_settings = (
             ("Phone number", InputPrivacyKeyPhoneNumber()),

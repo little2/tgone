@@ -42,11 +42,11 @@ async def main_check_user() -> None:
    
 
     try:
-        # await account_manager.check_all_userbot(config)
-        await account_manager.rec_new_account(
-            phone_number="+573004949228",
-            pw2fa="Qqqw1234",
-        )
+        await account_manager.check_all_userbot(config)
+        # await account_manager.rec_new_account(
+        #     phone_number="+6282146622970",
+        #     pw2fa="Qqqw1234",
+        # )
         # await account_manager.check_phone("+12282796709")
         # await account_manager.check_phone("+254784812293")
         # await account_manager.check_phone("+254797636990") 
@@ -347,7 +347,7 @@ async def run_telethon_bot(
                 # await op.join_chat("https://t.me/+gwLvTrmPWGAwYzBh")  #正太方舟               
                 # await op.client.send_message("@postfilebbot", "/checkin")   
                 await op.join_chat("https://t.me/BJDADJB")  
-                # await op.client.send_message(f"@{HumanBotOperator.BJD_CODE_BOT_NAME}", "/start")
+                await op.client.send_message(f"@{HumanBotOperator.BJD_CODE_BOT_NAME}", "/start")
 
  
     
@@ -359,9 +359,9 @@ async def run_telethon_bot(
                 # await op.client.send_message("@ztFreeJJBOT", "/start") 
 
                 
-                # await op.join_chat("https://t.me/+i5S7P-Dol4dhNzA5")  #加入布吉岛主 1004335920222
-                # await asyncio.sleep(3)
-                # await op.join_chat("https://t.me/+iHyXV6FFCQAxN2Ix")  #加入布吉岛
+                await op.join_chat("https://t.me/+i5S7P-Dol4dhNzA5")  #加入布吉岛主 1004335920222
+                await asyncio.sleep(3)
+                await op.join_chat("https://t.me/+iHyXV6FFCQAxN2Ix")  #加入布吉岛
                 # await op.join_chat("+mhqJ-3C93F0zODEx") #桃花林 
                 # await op.join_chat("+QEtmtaI-amU5NDRh") #桃花源
                 

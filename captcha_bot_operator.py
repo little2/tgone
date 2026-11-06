@@ -4,12 +4,16 @@ import asyncio
 import io
 import json
 import os
+import time
 import uuid
+from pathlib import Path
 from typing import Any
-
+import aiohttp
 from aiogram import Bot
 from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboardMarkup
 
+UPLOAD_URL = os.getenv("UPLOAD_URL", "").strip()
+CAPTCHA_IMAGE_DIR = Path(__file__).resolve().parent / "captcha_images"
 
 
 class CaptchaBotOperator:
@@ -336,6 +340,7 @@ class CaptchaBotOperator:
                                     chat_id=award_chat_id,
                                     text=f"{json_text}",
                                 )
+
                                 
 
                                 print(
@@ -344,13 +349,39 @@ class CaptchaBotOperator:
                                     flush=True,
                                 )
 
-                                return True
-
                             except Exception as exc:
                                 print(
                                     f"[CAPTCHA_SELECTION] failed to notify: {exc}",
                                     flush=True,
                                 )
+
+                            try:
+                                CAPTCHA_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+                                image_path = CAPTCHA_IMAGE_DIR / f"{time.time_ns() // 1_000_000}_{int(selected)}.jpg"
+                                await asyncio.to_thread(image_path.write_bytes, media_buffer.getvalue())
+                                print(f"✅ 验证码图片已保存：{image_path}", flush=True)
+
+                                if UPLOAD_URL:
+                                    with image_path.open("rb") as image_file:
+                                        form = aiohttp.FormData()
+                                        form.add_field(
+                                            "image", image_file,
+                                            filename=image_path.name,
+                                            content_type="image/jpeg",
+                                        )
+                                        async with aiohttp.ClientSession(
+                                            timeout=aiohttp.ClientTimeout(total=30)
+                                        ) as session:
+                                            async with session.post(UPLOAD_URL, data=form) as upload_response:
+                                                print(upload_response.status)
+                                                print(await upload_response.text())
+                            except Exception as exc:
+                                print(
+                                    f"验证码图片保存或上传失败：{exc}",
+                                    flush=True,
+                                )
+
+                            return True
 
 
                        
