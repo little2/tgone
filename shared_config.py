@@ -67,6 +67,7 @@ class SharedConfig:
         从本地 JSON 读取
         """
         if not cls.CACHE_FILE.exists():
+            
             raise FileNotFoundError(f"本地缓存不存在: {cls.CACHE_FILE}")
 
         with open(cls.CACHE_FILE, "r", encoding="utf-8") as f:
@@ -93,12 +94,18 @@ class SharedConfig:
                 cls._save_to_local(data)
                 cls._data = data
                 print("✅ 配置已从 API 下载并写入本地缓存")
+                cls._loaded = True
             except Exception as e:
                 print(f"⚠️ API 下载失败，改读本地缓存: {e}")
-                cls._data = cls._load_from_local()
-                print("⚠️ 配置已从本地缓存载入")
+                try:
+                    cls._data = cls._load_from_local()
+                    print("⚠️ 配置已从本地缓存载入")
+                    cls._loaded = True
+                except Exception as e:
+                    print(f"❌ 本地缓存读取失败: {e}")
+                    cls._loaded = False
 
-            cls._loaded = True
+            
 
     @classmethod
     def get(cls, key: str, default: Optional[Any] = None) -> Any:
