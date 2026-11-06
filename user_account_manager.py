@@ -8,6 +8,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from html import escape
 from typing import Any
+from device_lists import WHITELIST, BLACKLIST
 
 from telethon import TelegramClient
 from telethon.sessions import StringSession
@@ -460,33 +461,6 @@ class UserAccountManager:
                     if peer_type == "user":
                         new_bot_info["work_status"] = 'frozen'
 
-
-                WHITELIST = {
-                    "Redmi Redmi K40",                       # PC 64bit Android
-                    "XiaomiM2012K11AC",     # XiaomiM2012K11AC
-                    "PC 64bit",     # PC 64bit
-                    "Oppo Find X7",
-                    "OPPOPHZ110",
-                    "MacBook Pro",
-                    "U36JC",
-                    "Desktop",
-                    "Xiaomi Mi 9 Lite",
-                    "XiaomiMi 9 Lite",
-                    "iPad mini (6th gen)"
-                }
-
-                BLACKLIST = {
-                    "Swift SFG14-71",
-                    "Vivo Y28s 5G",
-                    "HP Elite x2 1012 G1",
-                    "740U5L",
-                    "Vostro 3910",
-                    "X570 MB",
-                    "XPS 730",
-                    "Latitude 7420",
-
-                    ""
-                }
 
                 # 1. 列出当前帐号所有 active sessions
                 auths = await user_client(GetAuthorizationsRequest())
