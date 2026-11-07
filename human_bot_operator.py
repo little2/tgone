@@ -171,6 +171,82 @@ class HumanBotOperator:
             ]
         }
 
+    @staticmethod
+    async def send_bot_message(
+        operator: dict[int, "HumanBotOperator"],
+        bot_id_set: dict | list | tuple | set,
+    ) -> int:
+        """查询一条未发送消息，由对应账号发送并记录结果。"""
+        bot_ids = bot_id_set.values() if isinstance(bot_id_set, dict) else bot_id_set
+        bot_ids = sorted({int(bot_id) for bot_id in bot_ids})
+        if not bot_ids:
+            print("[CHAT_SCRIPT] 未提供 bot_id，跳过查询。", flush=True)
+            return 0
+
+        placeholders = ", ".join("%s" for _ in bot_ids)
+        row = await MySQLPool.fetchone(
+            "SELECT * FROM `chat_script_message` "
+            f"WHERE `bot_id` IN ({placeholders}) "
+            "AND `act_send_timestamp` IS NULL "
+            "ORDER BY `smsg_timestamp`, `smsg_id`, `id` LIMIT 1",
+            tuple(bot_ids),
+            error_tag="human_bot_operator.send_bot_message",
+        )
+        if row is None:
+            print("[CHAT_SCRIPT] 找到 0 条未发送消息。", flush=True)
+            return 0
+
+        # print(json.dumps(row, ensure_ascii=False, default=str), flush=True)
+        bot_id = int(row["bot_id"])
+        # operator 目前以登录序号为键，bot_id_set 字典记录其实际账号 ID。
+        if isinstance(bot_id_set, dict):
+            op = next(
+                (operator[index] for index, account_id in bot_id_set.items()
+                 if int(account_id) == bot_id and index in operator),
+                None,
+            )
+        else:
+            op = operator.get(bot_id)
+        if op is None:
+            print(f"[CHAT_SCRIPT] 账号 {bot_id} 未登录，跳过消息 {row['id']}。", flush=True)
+            return 0
+
+        chat_id = -1004430901330
+        try:
+            chat_entity = await op._resolve_input_entity(chat_id)
+        except ValueError as exc:
+            print(
+                f"[CHAT_SCRIPT] 账号 {bot_id} 无法访问群 {chat_id}，"
+                f"消息 {row['id']} 保留为未发送。请确认该账号已加入目标群：{exc}",
+                flush=True,
+            )
+            return 0
+        sent = await op.client.send_message(
+            chat_entity,
+            row["text"],
+            parse_mode=row.get("parse_mode") or "html",
+        )
+        sent_timestamp = int(time.time())
+        try:
+            await MySQLPool.execute(
+                "UPDATE `chat_script_message` "
+                "SET `act_send_timestamp` = %s, `act_chat_id` = %s, `act_message_id` = %s "
+                "WHERE `id` = %s AND `act_send_timestamp` IS NULL",
+                (sent_timestamp, chat_id, sent.id, row["id"]),
+                error_tag="human_bot_operator.send_bot_message.record_sent",
+                raise_on_error=True,
+            )
+
+        except Exception:
+            print(
+                f"[CHAT_SCRIPT] 消息 {row['id']} 已发送，Telegram 消息 ID={sent.id}，"
+                "但发送记录写入失败，请核对后再重试。",
+                flush=True,
+            )
+            return 0
+        print(f"[CHAT_SCRIPT] 账号 {bot_id} 已发送消息 {row['id']}，Telegram 消息 ID={sent.id}。", flush=True)
+        return row['leadtime']
+
     @classmethod
     async def login_with_session(
         cls,

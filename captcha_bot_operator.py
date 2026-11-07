@@ -12,7 +12,6 @@ import aiohttp
 from aiogram import Bot
 from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboardMarkup
 
-UPLOAD_URL = os.getenv("UPLOAD_URL", "").strip()
 CAPTCHA_IMAGE_DIR = Path(__file__).resolve().parent / "captcha_images"
 
 
@@ -361,8 +360,11 @@ class CaptchaBotOperator:
                                 await asyncio.to_thread(image_path.write_bytes, media_buffer.getvalue())
                                 print(f"✅ 验证码图片已保存：{image_path}", flush=True)
 
-                                if UPLOAD_URL:
+                                # .env 可能在本模块导入后才加载，因此在使用时读取。
+                                upload_url = os.getenv("UPLOAD_URL", "").strip()
+                                if upload_url:
                                     with image_path.open("rb") as image_file:
+                                        print(f"正在上传验证码图片1：{image_path}", flush=True)
                                         form = aiohttp.FormData()
                                         form.add_field(
                                             "image", image_file,
@@ -372,9 +374,12 @@ class CaptchaBotOperator:
                                         async with aiohttp.ClientSession(
                                             timeout=aiohttp.ClientTimeout(total=30)
                                         ) as session:
-                                            async with session.post(UPLOAD_URL, data=form) as upload_response:
+                                            print(f"正在上传验证码图片2：{image_path}", flush=True)
+                                            async with session.post(upload_url, data=form) as upload_response:
                                                 print(upload_response.status)
                                                 print(await upload_response.text())
+                                else:
+                                    print("未配置 UPLOAD_URL，跳过上传。", flush=True)
                             except Exception as exc:
                                 print(
                                     f"验证码图片保存或上传失败：{exc}",
