@@ -211,7 +211,7 @@ class HumanBotOperator:
             print(f"[CHAT_SCRIPT] 账号 {bot_id} 未登录，跳过消息 {row['id']}。", flush=True)
             return 0
 
-        chat_id = -1004430901330
+        chat_id = -1004335920222    #布吉岛
         try:
             chat_entity = await op._resolve_input_entity(chat_id)
         except ValueError as exc:

@@ -44,7 +44,7 @@ async def main_check_user() -> None:
     try:
         await account_manager.check_all_userbot(config)
         # await account_manager.rec_new_account(
-        #     phone_number="+6282146622970",
+        #     phone_number="+13214909146",
         #     pw2fa="Qqqw1234",
         # )
         # await account_manager.check_phone("+12282796709")
@@ -358,10 +358,9 @@ async def run_telethon_bot(
 
                 # await op.join_chat("https://t.me/+_Pz9_6udznFlMDhi") #玉树花
 
-                # await op.join_chat("https://t.me/+gwLvTrmPWGAwYzBh")  #正太方舟               
-                # await op.client.send_message("@postfilebbot", "/checkin")   
-                # await op.join_chat("https://t.me/BJDADJB")  
-                # await op.client.send_message(f"@{HumanBotOperator.BJD_CODE_BOT_NAME}", "/start")
+        
+                await op.join_chat("https://t.me/BJDADJB")  
+                await op.client.send_message(f"@{HumanBotOperator.BJD_CODE_BOT_NAME}", "/start")
 
  
     
@@ -498,12 +497,12 @@ async def run_telethon_bot(
                         else:
                             await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=2)
 
-                        if t%25 == 1 and i==1:
+                        if t%25 == 0 and i==1:
                             print(f"==>Fetching top for account {i} ({display_name})...", flush=True)
                             await op.fetch_top()
-                        elif i == 1:
+                        elif (t+i)%4 == 0:
                             await op.tracking_message_range(chat=-1004335920222)
-                        elif i == 3:
+                        elif (t+i)%4 == 2:
                             await op.tracking_message_range(chat=-1004372020134) 
                         
 
@@ -529,7 +528,7 @@ async def run_telethon_bot(
 
                 leadtime = await HumanBotOperator.send_bot_message(operator, operator_bot_id) or 0
 
-                sleep_time = (random.randint(13, 27) - leadtime )
+                sleep_time = (random.randint(13, 107) - leadtime )
 
                 print(f"==>Sleeping for {sleep_time} seconds before next operation.", flush=True)
                 await asyncio.sleep(sleep_time)

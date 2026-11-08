@@ -23,3 +23,4 @@ cache/config_cache.json
 session.py
 talk.py
 __pycache__/tgone_mysql.cpython-313.pyc
+chat.py
