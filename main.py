@@ -1,6 +1,7 @@
 
 
 import os
+from device_lists import WHITELIST, BLACKLIST
 from aiogram.exceptions import TelegramUnauthorizedError
 import aiohttp
 import asyncio
@@ -42,7 +43,6 @@ if TARGET_GROUP_ID == 0:
     TARGET_GROUP_ID = 0 # bot
 
 if TARGET_GROUP_ID_FROM_BOT == 0:
-    
     TARGET_GROUP_ID_FROM_BOT = 0 # userbot
    
 
@@ -83,11 +83,11 @@ async def ping_keepalive_task():
         "https://tgone-ah13.onrender.com",  # Rely
         "https://hb-lp3a.onrender.com",     # HB  
         "https://lz-upload.onrender.com",   # LZ-No2
-        "https://lz-pbtb.onrender.com",      # LZ-1002
+        "https://lz-pbtb.onrender.com",         # LZ-1002
         "https://tgone.onrender.com",
-        "https://tgone-qruy.onrender.com",   # USERBOT (Grid)
-        "https://tgone-lkus.onrender.com",  # userbot ( 新人),
-        "https://encbot-peach.onrender.com" #peach
+        "https://tgone-qruy.onrender.com",      # USERBOT (Grid)
+        "https://tgone-lkus.onrender.com",      # userbot ( 新人),
+        "https://encbot-peach.onrender.com"     #peach
     ]
 
     timeout = aiohttp.ClientTimeout(total=10)
@@ -179,17 +179,6 @@ async def run_time_print_job_if_due():
     print(f"[TIME-JOB] current time: {now.strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
 
     
-    WHITELIST = {
-        "Redmi Redmi K40",                       # PC 64bit Android
-        "XiaomiM2012K11AC",     # XiaomiM2012K11AC
-        "PC 64bit",     # PC 64bit
-        "Oppo Find X7",
-        "OPPOPHZ110",
-        "MacBook Pro",
-        "U36JC",
-        "Desktop"
-    }
-
 # 1. 列出当前帐号所有 active sessions
     target = await user_client.get_entity(KEY_USER_ID)     # 7550420493
 

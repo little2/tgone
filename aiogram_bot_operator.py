@@ -18,7 +18,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from captcha_bot_operator import CaptchaBotOperator
 from human_bot_operator import HumanBotOperator
 from tgone_mysql import MySQLPool
-from shared_config import SharedConfig  # noqa: E402
+
 
 
 class AiogramBotOperator:
@@ -179,7 +179,7 @@ class AiogramBotOperator:
                     await asyncio.sleep(5)
 
             print(
-                f"验证码 Bot 已启动：id={free_bot_info.id} "
+                f"✅ 验证码 Bot 已启动：id={free_bot_info.id} "
                 f"username=@{getattr(free_bot_info, 'username', '')}",
                 flush=True,
             )

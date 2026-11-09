@@ -378,32 +378,53 @@ class MySQLPool:
 
     @classmethod
     async def transaction(cls, fn):
-        """
-        通用事务执行器（与现有 _pool / release / DictCursor 对齐）
-        fn: async def fn(cur): ...  # cur 为 DictCursor
-        """
-        await cls.ensure_pool()
-
-        conn = None
-        cur = None
-        try:
-            conn = await cls._pool.acquire()
-            cur = await conn.cursor(aiomysql.DictCursor)
-
-            await conn.begin()
-            result = await fn(cur)
-            await conn.commit()
-            return result
-        except Exception:
-            if conn:
-                await conn.rollback()
-            raise
-        finally:
-            # 复用你已有的 release 逻辑
-            if conn and cur:
-                await cls.release(conn, cur)
-            elif conn and cls._pool:
-                cls._pool.release(conn)
+        """执行原子事务；仅在事务开始前断线时重试，避免重复提交。"""
+        for attempt in range(3):
+            await cls.ensure_pool()
+            pool = cls._pool
+            conn = None
+            cur = None
+            started = False
+            try:
+                conn = await pool.acquire()
+                # 事务尚未开始，可以安全地重连失效的空闲连接。
+                await conn.ping(reconnect=True)
+                cur = await conn.cursor(aiomysql.DictCursor)
+                await conn.begin()
+                started = True
+                result = await fn(cur)
+                await conn.commit()
+                return result
+            except BaseException as exc:
+                disconnected = (
+                    isinstance(exc, aiomysql.OperationalError)
+                    and exc.args and exc.args[0] in (2006, 2013)
+                ) or isinstance(exc, aiomysql.InterfaceError)
+                if conn is not None:
+                    if disconnected or isinstance(exc, asyncio.CancelledError):
+                        conn.close()
+                    elif started and not conn.closed:
+                        try:
+                            await conn.rollback()
+                        except Exception as rollback_error:
+                            conn.close()
+                            cls.show_debug(f"[MySQLPool] 回滚失败，保留原始异常：{rollback_error}")
+                if not (disconnected and not started and attempt < 2):
+                    raise
+                cls.show_debug(f"[MySQLPool] 事务开始前断线，重试 {attempt + 2}/3")
+            finally:
+                # 释放到取得连接时的池，避免并发重建后释放到另一个池。
+                try:
+                    if cur is not None:
+                        try:
+                            await cur.close()
+                        except Exception as cleanup_error:
+                            if conn is not None:
+                                conn.close()
+                            cls.show_debug(f"[MySQLPool] 游标关闭失败：{cleanup_error}")
+                finally:
+                    if conn is not None:
+                        pool.release(conn)
 
 
 

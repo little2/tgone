@@ -44,7 +44,7 @@ async def main_check_user() -> None:
     try:
         await account_manager.check_all_userbot(config)
         # await account_manager.rec_new_account(
-        #     phone_number="+919943359094",
+        #     phone_number="+13214909146",
         #     pw2fa="Qqqw1234",
         # )
         # await account_manager.check_phone("+12282796709")
@@ -271,19 +271,19 @@ async def run_telethon_bot(
     try:
         if FETCH_MODE == "emoji":
             session_rows = await MySQLPool.fetchall(
-                "SELECT `bot_token` FROM `bot` "
+                "SELECT `bot_id`,`bot_token` FROM `bot` "
                 "WHERE check_group IN (1) ",
                 error_tag="userbot.random_session_tokens",
             )
         elif FETCH_MODE == "emoji2":
             session_rows = await MySQLPool.fetchall(
-                "SELECT `bot_token` FROM `bot` "
+                "SELECT `bot_id`,`bot_token` FROM `bot` "
                 "WHERE check_group IN (3) ",
                 error_tag="userbot.random_session_tokens",
             )    
         else:
             session_rows = await MySQLPool.fetchall(
-                "SELECT `bot_token` FROM `bot` "
+                "SELECT `bot_id`,`bot_token` FROM `bot` "
                 "WHERE check_group IN (2) ",
                 error_tag="userbot.random_session_tokens",
             )
@@ -312,7 +312,17 @@ async def run_telethon_bot(
             for index, row in enumerate(session_rows)
         }
 
+        bot_id_set = {
+            index: str(row["bot_id"]).strip()
+            for index, row in enumerate(session_rows)
+        }
+
         operator_title = {}
+        operator_bot_id = {}
+       
+
+        # 打印 bot_id_set
+       
 
         # 随机从 session_set 中选择，形成另外的子集合
         selected_sessions = random.sample(list(session_set.values()), len(session_set))
@@ -339,15 +349,25 @@ async def run_telethon_bot(
                     or f"ID:{getattr(me, 'id', i)}"
                 )
                 operator_title[(operator_length)] = display_name
+                operator_bot_id[(operator_length)] = int(me.id)
+
                
                 #将 operator_opp 添加到 operator 字典中
                 # operator[i] = operator_opp
+                # await op.join_chat("https://t.me/+gXjWFqJTl-g0ZThk")    #测试
+
                 # await op.join_chat("https://t.me/+_Pz9_6udznFlMDhi") #玉树花
 
-                # await op.join_chat("https://t.me/+gwLvTrmPWGAwYzBh")  #正太方舟               
-                # await op.client.send_message("@postfilebbot", "/checkin")   
-                await op.join_chat("https://t.me/BJDADJB") #桃花源   
+        
+                await op.join_chat("https://t.me/BJDADJB")  
                 await op.client.send_message(f"@{HumanBotOperator.BJD_CODE_BOT_NAME}", "/start")
+
+ 
+    
+                    
+                
+
+
                 # await op.join_chat("https://t.me/+LmR0F1WpnFQ0Y2Ix")
                 # await op.client.send_message("@ztFreeJJBOT", "/start") 
 
@@ -374,7 +394,6 @@ async def run_telethon_bot(
                 print(f"Session {i} 处理失败: {e}", flush=True)
 
         
-    
 
 
 
@@ -445,6 +464,8 @@ async def run_telethon_bot(
 
                 # 模拟按 Ctrl 键 以避免进入休眠状态
                 await op.simulate_ctrl_press()
+                
+
 
 
                 try:                  
@@ -455,9 +476,21 @@ async def run_telethon_bot(
                         flush=True,
                     )
 
+                    # 首頁    /start
+                    start_result = await op.capture_bot_messages(f"@{HumanBotOperator.BJD_CODE_BOT_NAME}", "/start")
+                    if start_result:
+                        receive_text = start_result[-1].text if start_result else ""
+                        if "天内无群聊发言" in receive_text:
+                            print("‼️ 收到天内无群聊发言的提示，继续下一步。", flush=True)
+                            await op.send_random_message(chat_id=[-1004335920222])
+                         
+
 
                     if FETCH_MODE == "emoji" or FETCH_MODE == "emoji2":
-                        
+                  
+
+                       
+                       
                         
                         if (t+i)%4 == 0:
                             await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0)
@@ -467,12 +500,11 @@ async def run_telethon_bot(
                         if t%25 == 0 and i==1:
                             print(f"==>Fetching top for account {i} ({display_name})...", flush=True)
                             await op.fetch_top()
-
-                        
-                        if i == 1:
+                        elif (t+i)%4 == 0:
                             await op.tracking_message_range(chat=-1004335920222)
-                        elif i == 3:
+                        elif (t+i)%4 == 2:
                             await op.tracking_message_range(chat=-1004372020134) 
+                        
 
                     else:
                         if (t+i)%9 == 0:
@@ -494,8 +526,10 @@ async def run_telethon_bot(
                     )
                     continue
 
+                leadtime = await HumanBotOperator.send_bot_message(operator, operator_bot_id) or 0
 
-                sleep_time = random.randint(13, 27)
+                sleep_time = (random.randint(13, 107) - leadtime )
+
                 print(f"==>Sleeping for {sleep_time} seconds before next operation.", flush=True)
                 await asyncio.sleep(sleep_time)
         
@@ -606,9 +640,6 @@ async def main() -> None:
             run_telethon_bot(config, configure_mysql=False),
             name="telethon-user-flow",
         )
-
-
-
 
         await asyncio.gather(aiogram_task, telethon_task)
     finally:

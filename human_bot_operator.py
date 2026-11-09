@@ -26,6 +26,7 @@ from telethon.errors import (
     ServerError,
     UserAlreadyParticipantError,
     UsernameNotModifiedError,
+    UsernameOccupiedError,
 )
 from telethon.sessions import StringSession
 from telethon.tl.functions.account import (
@@ -63,6 +64,10 @@ from dotenv import load_dotenv
 env_path = Path(__file__).resolve().parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
+from shared_config import SharedConfig
+SharedConfig.load(True)
+
+
 BBT_GROUP_ID = int(os.getenv("BBT_GROUP_ID", 0))
 BBT_THREAD_ID = int(os.getenv("BBT_THREAD_ID", 0))
 BBT_TOKEN = os.getenv("BBT_TOKEN", "")
@@ -72,15 +77,16 @@ class HumanBotOperator:
     """执行需要已登录使用者身份的 Telegram 操作。"""
 
     MONITOR_FORWARD_CHAT_ID = 5334310434
-    BJD_CODE_BOT_ID = 8102848961 #8930708687 #8345754693 #8711938156 #8754937374 #8740782139  
-    BJD_CODE_BOT_NAME = "upan13bot"  
+   
+    BJD_CODE_BOT_ID: int | None = None #8102848961 #8930708687 #8345754693 #8711938156 #8754937374 #8740782139 
+    BJD_CODE_BOT_NAME: str | None = None
     FZ_CODE_BOT_ID = 8805711672
     API_ID = 0
     API_HASH = ""
     BBT_OPERATOR = None
 
     
-    REWARD_BOT_NAME = "zttower11bot"
+    REWARD_BOT_NAME = "zttower21bot"
     FREE_CHAT_ID = -1002093182221
     # 媒体汇聚频道：0 表示未配置（实际值按 _resolve_pool_channel 的顺序解析）
     POOL_CHANNEL: int | str = 0
@@ -145,7 +151,7 @@ class HumanBotOperator:
         self._pool_channel_warned = False
         self.time_greetings = {
             "morning": [
-                "早", "早啊", "早上好", "早安",  "早","古德猫宁","聊天就能加分","看看","没性欲了","早上好","开始爬楼","美好的早晨","好看的还是多", "早上好"
+                "早", "早起起飞","早啊", "早上好", "早啊，各位","早飞","早安臭宝们","早安",  "早","古德猫宁","聊天就能加分","看看","没性欲了","早上好","开始爬楼","美好的早晨","好看的还是多", "早上好"
                 
             ],
             "noon": [
@@ -153,17 +159,93 @@ class HumanBotOperator:
                 
             ],
             "afternoon": [
-                "下午好", "下午好", "大佬们好","Hi","剩下的全靠点赞","聊天就能加分","看看","需要发言","没性欲了","多发言","太牛了","不错啊","牛逼","好看的还是多"
+                "下午好", "下午好", "大佬们下午好","大佬们好","Hi","剩下的全靠点赞","太带派了","聊天就能加分","看看","需要发言","没性欲了","多发言","太牛了","不错啊","牛逼","好看的还是多"
                 
             ],
             "evening": [
-                "晚上好",  "群友们好", "来色色了",  "刷刷分了", "晚安", "大佬们好","可以阿","唉","剩下的全靠点赞","服了","需要发呀啊","就是","9494","还是说少了啊","真不赖"
+                "晚上好",  "群友们好", "来色色了","太带派了",  "刷刷分了", "晚安", "大佬们好","可以阿","唉","剩下的全靠点赞","服了","需要发呀啊","就是","9494","还是说少了啊","真不赖"
                 
             ],
             "late_night": [
-                "晚安", "群友们好",   "大佬好", "好看爱看","666","为了看片","好看","新的一天","消息太多了","几千条"
+                "晚安", "熬夜起飞","群友们好",   "大佬好", "好看爱看","666","为了看片","好看","新的一天","消息太多了","几千条"
             ]
         }
+
+    @staticmethod
+    async def send_bot_message(
+        operator: dict[int, "HumanBotOperator"],
+        bot_id_set: dict | list | tuple | set,
+    ) -> int:
+        """查询一条未发送消息，由对应账号发送并记录结果。"""
+        bot_ids = bot_id_set.values() if isinstance(bot_id_set, dict) else bot_id_set
+        bot_ids = sorted({int(bot_id) for bot_id in bot_ids})
+        if not bot_ids:
+            print("[CHAT_SCRIPT] 未提供 bot_id，跳过查询。", flush=True)
+            return 0
+
+        placeholders = ", ".join("%s" for _ in bot_ids)
+        row = await MySQLPool.fetchone(
+            "SELECT * FROM `chat_script_message` "
+            f"WHERE `bot_id` IN ({placeholders}) "
+            "AND `act_send_timestamp` IS NULL "
+            "ORDER BY `smsg_timestamp`, `smsg_id`, `id` LIMIT 1",
+            tuple(bot_ids),
+            error_tag="human_bot_operator.send_bot_message",
+        )
+        if row is None:
+            print("[CHAT_SCRIPT] 找到 0 条未发送消息。", flush=True)
+            return 0
+
+        # print(json.dumps(row, ensure_ascii=False, default=str), flush=True)
+        bot_id = int(row["bot_id"])
+        # operator 目前以登录序号为键，bot_id_set 字典记录其实际账号 ID。
+        if isinstance(bot_id_set, dict):
+            op = next(
+                (operator[index] for index, account_id in bot_id_set.items()
+                 if int(account_id) == bot_id and index in operator),
+                None,
+            )
+        else:
+            op = operator.get(bot_id)
+        if op is None:
+            print(f"[CHAT_SCRIPT] 账号 {bot_id} 未登录，跳过消息 {row['id']}。", flush=True)
+            return 0
+
+        chat_id = -1004335920222    #布吉岛
+        try:
+            chat_entity = await op._resolve_input_entity(chat_id)
+        except ValueError as exc:
+            print(
+                f"[CHAT_SCRIPT] 账号 {bot_id} 无法访问群 {chat_id}，"
+                f"消息 {row['id']} 保留为未发送。请确认该账号已加入目标群：{exc}",
+                flush=True,
+            )
+            return 0
+        sent = await op.client.send_message(
+            chat_entity,
+            row["text"],
+            parse_mode=row.get("parse_mode") or "html",
+        )
+        sent_timestamp = int(time.time())
+        try:
+            await MySQLPool.execute(
+                "UPDATE `chat_script_message` "
+                "SET `act_send_timestamp` = %s, `act_chat_id` = %s, `act_message_id` = %s "
+                "WHERE `id` = %s AND `act_send_timestamp` IS NULL",
+                (sent_timestamp, chat_id, sent.id, row["id"]),
+                error_tag="human_bot_operator.send_bot_message.record_sent",
+                raise_on_error=True,
+            )
+
+        except Exception:
+            print(
+                f"[CHAT_SCRIPT] 消息 {row['id']} 已发送，Telegram 消息 ID={sent.id}，"
+                "但发送记录写入失败，请核对后再重试。",
+                flush=True,
+            )
+            return 0
+        print(f"[CHAT_SCRIPT] 账号 {bot_id} 已发送消息 {row['id']}，Telegram 消息 ID={sent.id}。", flush=True)
+        return row['leadtime']
 
     @classmethod
     async def login_with_session(
@@ -199,8 +281,30 @@ class HumanBotOperator:
                 if not await client.is_user_authorized():
                     raise RuntimeError("StringSession 尚未获得 Telegram 用户授权")
                 me = await client.get_me()
-                print(f"已成功使用 StringSession 登录 Telegram 用户。id = {me.id} {me.first_name}", flush=True)
+                print(f"✅ 已成功使用 StringSession 登录 Telegram 用户。id = {me.id} {me.first_name}", flush=True)
+               
+
+
+               
+                if cls.BJD_CODE_BOT_ID is None:
+
+                    chat = SharedConfig.get("chat") or None
+                    if chat:
+                        bjd_dict = chat.get("bjd") or {}
+                        if bjd_dict:
+                            cls.BJD_CODE_BOT_NAME = bjd_dict.get("bot") or None
+                            
+                    username = cls.BJD_CODE_BOT_NAME.strip().lstrip("@")
+                    entity = await client.get_entity(f"@{username}")
+
+                    if not getattr(entity, "bot", False):
+                        raise ValueError(f"@{username} 不是机器人账号")
+
+                    cls.BJD_CODE_BOT_ID = int(entity.id)
+                    print(f"🤖 已获取 @{username} 的 id = {entity.id}")
+
                 return cls(client, taobao_bot_username=taobao_bot_username)
+
             except ServerError as exc:
                 await client.disconnect()
                 if attempt >= cls.TELEGRAM_LOGIN_MAX_ATTEMPTS:
@@ -439,7 +543,7 @@ class HumanBotOperator:
                     ) from resolve_error
             now = datetime.now(cls.DEFAULT_TIMEZONE)
             if start_at is None or start_at < now:
-                start_at = now + timedelta(seconds=15)
+                start_at = now + timedelta(seconds=5)
                 payload["script"]["start_at"] = start_at.isoformat()
 
             sent_messages: dict[str, Any] = {}
@@ -1504,15 +1608,12 @@ class HumanBotOperator:
         result = await self.capture_bot_messages(target_bot, "/start")
         if not result:
             print("⚠️ 沒有取得 /start 首頁訊息", flush=True)
-
-
-
             send_result = await self.send_random_message(chat_id=[-1004335920222])
             print(f"已发送随机消息，send_result: {send_result}")
-            
-
-            
             return
+        else:
+            # 打印出取得的消息内容
+            print(f"\n取得 {result[-1]}",flush=True)
         menu_id = result[-1].id                      # 用最後一則，通常才是選單
 
         result2 = await self.capture_bot_messages(
@@ -1521,6 +1622,10 @@ class HumanBotOperator:
         if not result2:
             print("⚠️ 排行榜點擊後沒有取得任何輸出", flush=True)
             return
+        else:
+            # 打印出取得的消息内容
+            print(f"\n取得 {result[-1]}",flush=True)
+
         board_id = result2[-1].id
        
     
@@ -1529,17 +1634,14 @@ class HumanBotOperator:
             target_bot, click_button_title="🆕", message_id=board_id
         )
         if not result_most_recent:
-            
-
-            
             await self.capture_bot_messages(
                 target_bot, click_button_title="简体", message_id=board_id
             )
-
-            print("⚠️ 點擊「🆕 最新發布」後沒有取得任何輸出", flush=True)
-
-
+            print("⚠️ 點擊「🆕 最新發布」後沒有取得任何輸出==>点简体按钮", flush=True)
             return
+        
+
+        
         latest_id = result_most_recent[-1].id
 
         if result_most_recent and result_most_recent[-1].raw_text:
@@ -1589,17 +1691,13 @@ class HumanBotOperator:
                                 current_item =await self.parse_bot_response(result_loop[-1])
                                 latest_id = result_loop[-1].id
 
-                                # print("extracting...", flush=True)
-                                # await self.extract(ask_like=True, bot_id=HumanBotOperator.FZ_CODE_BOT_ID, extract_status=0)
-
+                     
                                 
                                 if _qty == 1:
                                     await self.tracking_message_range(chat=-1004335920222)
                                 elif _qty == 3:
                                     await self.tracking_message_range(chat=-1004372020134) 
-                                # elif _qty == 5:
-                                #   玉
-                                # 	await self.tracking_message_range(chat=-1004383041223)
+                                
 
 
                                 if _qty%5 == 0:
@@ -1908,7 +2006,10 @@ class HumanBotOperator:
                     bot_filter = f" `extract_status` = {extract_status}"
                 else:
                     bot_filter = " `extract_status` IN (0,2)"
+                
+        
                 bot_filter += f" AND `bot_id` = {bot_id}" if bot_id is not None else ""
+                
                 rows = await MySQLPool.fetchall(
                     "SELECT * FROM `sora_code` "
                     f"WHERE {bot_filter} ORDER BY priority DESC, `id` DESC LIMIT 100",
@@ -2357,6 +2458,9 @@ class HumanBotOperator:
                        pass
                     elif isinstance(text, str) and "文件组已下架" in text:
                         pass
+                    elif isinstance(text, str) and "内无群聊发言" in text:
+                        send_result = await self.send_random_message(chat_id=[-1004335920222])
+                        print(f"已发送随机消息，send_result: {send_result}", flush=True)
                     elif text:
                         print(f"收到文字回应:{text}，继续等待媒体。", flush=True)
 
@@ -4046,7 +4150,7 @@ class HumanBotOperator:
         last_name: str | None = None,
         random_name: bool = False,
     ) -> None:
-        """按需更新姓名、清空用户名，并将电话和在线状态设为 Nobody。"""
+        """按需更新姓名，设置易读的英文字母加随机数字的用户名，并更新隐私设置。"""
         if random_name:
             name_row = await MySQLPool.fetchone(
                 "SELECT `first_name`, `last_name` FROM `user` Where `first_name` IS NOT NULL "
@@ -4075,15 +4179,30 @@ class HumanBotOperator:
 
             print(f"✅ 用户姓名已成功更新。", flush=True)
 
-        try:
-            await self.client(UpdateUsernameRequest(""))
-        except UsernameNotModifiedError:
-            print("用户名已经为空，无需修改。", flush=True)
-        except Exception as exc:
-            print(f"⚠️ 用户名清空失败：{exc}", flush=True)
-            raise
-        else:
-            print("用户名已成功清空。", flush=True)
+        for attempt in range(5):
+            # 以辅音和元音交替组成 3 至 4 个音节，避免难读的字母堆叠。
+            english_name = "".join(
+                random.choice("bdfhklmnprstv") + random.choice("aeiou")
+                for _ in range(random.randint(3, 4))
+            )
+            digit_count = random.randint(2, 8)
+            number_suffix = str(random.randint(10 ** (digit_count - 1), 10 ** digit_count - 1))
+            username = f"{english_name}{number_suffix}"
+            try:
+                await self.client(UpdateUsernameRequest(username))
+            except UsernameOccupiedError:
+                if attempt == 4:
+                    print("⚠️ 连续 5 次生成的用户名均已被占用。", flush=True)
+                    raise
+            except UsernameNotModifiedError:
+                print(f"用户名已是 @{username}，无需修改。", flush=True)
+                break
+            except Exception as exc:
+                print(f"⚠️ 用户名更新失败：{exc}", flush=True)
+                raise
+            else:
+                print(f"✅ 用户名已更新为 @{username}。", flush=True)
+                break
 
         privacy_settings = (
             ("Phone number", InputPrivacyKeyPhoneNumber()),

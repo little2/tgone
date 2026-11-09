@@ -82,3 +82,80 @@ def test_rebuild_initializes_without_acquiring_lock_again(monkeypatch):
     asyncio.run(run())
     initialize_mock.assert_awaited_once()
     assert not Pool._lock.locked()
+
+
+def transaction_pool(monkeypatch, connections):
+    from unittest.mock import Mock
+    pool = SimpleNamespace(acquire=AsyncMock(side_effect=connections), release=Mock())
+    monkeypatch.setattr(MySQLPool, '_pool', pool)
+    monkeypatch.setattr(MySQLPool, 'ensure_pool', AsyncMock())
+    return pool
+
+
+def transaction_connection():
+    from unittest.mock import Mock
+    cursor = SimpleNamespace(close=AsyncMock())
+    conn = SimpleNamespace(
+        ping=AsyncMock(), cursor=AsyncMock(return_value=cursor),
+        begin=AsyncMock(), commit=AsyncMock(), rollback=AsyncMock(),
+        close=Mock(), closed=False,
+    )
+    return conn
+
+
+def test_transaction_retries_disconnect_before_begin(monkeypatch):
+    first, second = transaction_connection(), transaction_connection()
+    first.begin.side_effect = aiomysql.OperationalError(2013, 'lost')
+    pool = transaction_pool(monkeypatch, [first, second])
+    body = AsyncMock(return_value=24)
+    assert asyncio.run(MySQLPool.transaction(body)) == 24
+    first.ping.assert_awaited_once_with(reconnect=True)
+    first.close.assert_called_once()
+    first.rollback.assert_not_awaited()
+    body.assert_awaited_once()
+    second.commit.assert_awaited_once()
+    assert pool.release.call_count == 2
+
+
+@pytest.mark.parametrize('stage', ['body', 'commit'])
+def test_transaction_does_not_replay_after_start(monkeypatch, stage):
+    conn = transaction_connection()
+    pool = transaction_pool(monkeypatch, [conn])
+    error = aiomysql.OperationalError(2013, 'lost')
+    body = AsyncMock(return_value=24)
+    if stage == 'body':
+        body.side_effect = error
+    else:
+        conn.commit.side_effect = error
+    with pytest.raises(aiomysql.OperationalError) as caught:
+        asyncio.run(MySQLPool.transaction(body))
+    assert caught.value is error
+    body.assert_awaited_once()
+    pool.acquire.assert_awaited_once()
+    conn.rollback.assert_not_awaited()
+    conn.close.assert_called_once()
+
+
+def test_transaction_rollback_failure_preserves_original_error(monkeypatch):
+    conn = transaction_connection()
+    pool = transaction_pool(monkeypatch, [conn])
+    error = ValueError('invalid script')
+    conn.rollback.side_effect = aiomysql.InterfaceError('Not connected')
+    with pytest.raises(ValueError) as caught:
+        asyncio.run(MySQLPool.transaction(AsyncMock(side_effect=error)))
+    assert caught.value is error
+    conn.close.assert_called_once()
+    pool.release.assert_called_once_with(conn)
+
+
+def test_transaction_bounds_retries(monkeypatch):
+    connections = [transaction_connection() for _ in range(3)]
+    for conn in connections:
+        conn.ping.side_effect = aiomysql.OperationalError(2013, 'lost')
+    pool = transaction_pool(monkeypatch, connections)
+    body = AsyncMock()
+    with pytest.raises(aiomysql.OperationalError):
+        asyncio.run(MySQLPool.transaction(body))
+    assert pool.acquire.await_count == 3
+    body.assert_not_awaited()
+    assert pool.release.call_count == 3
