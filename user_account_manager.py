@@ -3,6 +3,7 @@
 import json
 import os
 import asyncio
+import random
 import re
 import time
 from datetime import datetime, timedelta, timezone
@@ -372,6 +373,33 @@ class UserAccountManager:
             )
 
 
+    async def product_user_name(self):
+        for attempt in range(5):
+            # 以辅音和元音交替组成 3 至 4 个音节，避免难读的字母堆叠。
+            english_name = "".join(
+                random.choice("bdfhklmnprstv") + random.choice("aeiou")
+                for _ in range(random.randint(3, 4))
+            )
+            digit_count = random.randint(2, 8)
+            number_suffix = str(random.randint(10 ** (digit_count - 1), 10 ** digit_count - 1))
+            username = f"{english_name}{number_suffix}"
+            try:
+                await self.client(UpdateUsernameRequest(username))
+            except UsernameOccupiedError:
+                if attempt == 4:
+                    print("⚠️ 连续 5 次生成的用户名均已被占用。", flush=True)
+                    raise
+            except UsernameNotModifiedError:
+                print(f"用户名已是 @{username}，无需修改。", flush=True)
+                break
+            except Exception as exc:
+                print(f"⚠️ 用户名更新失败：{exc}", flush=True)
+                raise
+            else:
+                print(f"✅ 用户名已更新为 @{username}。", flush=True)
+                break
+
+
     async def check_userbot(
         self,
         bot_info: dict[str, Any],
@@ -536,9 +564,25 @@ class UserAccountManager:
                 username = None
                 if new_bot_info['bot_name'] is None:
                     try:
-                        phone_number2 = new_bot_info.get('phone').replace('+', 'p_').replace(' ', '')  # 确保电话号码格式正确
-                        await user_client(UpdateUsernameRequest(phone_number2))  # 设置空字符串即为移除
-                        new_bot_info['bot_name'] = phone_number2
+
+                       
+
+                        new_username = None
+                        for attempt in range(5):
+                            # 以辅音和元音交替组成 3 至 4 个音节，避免难读的字母堆叠。
+                            english_name = "".join(
+                                random.choice("bdfhklmnprstv") + random.choice("aeiou")
+                                for _ in range(random.randint(3, 4))
+                            )
+                            digit_count = random.randint(2, 8)
+                            number_suffix = str(random.randint(10 ** (digit_count - 1), 10 ** digit_count - 1))
+                            new_username = f"{english_name}{number_suffix}"
+                        new_bot_info['bot_name'] = new_username
+
+                        
+                        # phone_number2 = new_bot_info.get('phone').replace('+', 'p_').replace(' ', '')  # 确保电话号码格式正确
+                        await user_client(UpdateUsernameRequest(new_username))  # 设置空字符串即为移除
+                        # new_bot_info['bot_name'] = phone_number2
                         print("✅ 用户名已成功变更。")
                     except Exception as e:
                         print(f"❌ 用户名变更失败：{e}")

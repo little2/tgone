@@ -2,8 +2,30 @@ from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
+from telethon.errors import InviteHashExpiredError
 
 from human_bot_operator import HumanBotOperator
+
+
+def _single_message_script():
+    return {
+        "version": "1.0",
+        "script": {"script_id": "test", "title": "test", "start_at": None},
+        "participants": [{
+            "actor_id": "a1",
+            "name": "test",
+            "sender_type": "user",
+            "sender_id": "a1",
+        }],
+        "messages": [{
+            "message_id": "m1",
+            "after_start": 0,
+            "actor_id": "a1",
+            "reply_to": None,
+            "typing_duration": 0,
+            "content": {"text": "hello", "parse_mode": None},
+        }],
+    }
 
 
 @pytest.mark.asyncio
@@ -92,3 +114,39 @@ async def test_chat_script_normalizes_start_at_after_resolving_chat(monkeypatch,
         assert start_at <= datetime.now(HumanBotOperator.DEFAULT_TIMEZONE) + timedelta(seconds=30)
     else:
         assert script["script"]["start_at"] == original_start_at
+
+
+@pytest.mark.asyncio
+async def test_chat_script_reports_expired_invite_with_account_context(monkeypatch):
+    class FakeOperator:
+        async def simulate_ctrl_press(self):
+            return None
+
+        async def _resolve_input_entity(self, chat_id):
+            raise ValueError("unknown entity")
+
+        async def join_chat(self, invite_link):
+            raise InviteHashExpiredError(request=None)
+
+        async def disconnect(self):
+            return None
+
+    async def fake_login(cls, sender_type, credentials):
+        return FakeOperator()
+
+    monkeypatch.setattr(
+        HumanBotOperator,
+        "_login_script_account",
+        classmethod(fake_login),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=r"actor=a1.*账号=a1.*CHAT_INVITE_LINK",
+    ):
+        await HumanBotOperator.run_chat_script(
+            script_json=_single_message_script(),
+            chat_id=-1004335920222,
+            account_configs={"a1": {}},
+            chat_invite_link="https://t.me/+expired",
+        )

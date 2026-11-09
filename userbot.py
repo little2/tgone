@@ -42,11 +42,9 @@ async def main_check_user() -> None:
    
 
     try:
-        await account_manager.check_all_userbot(config)
-        # await account_manager.rec_new_account(
-        #     phone_number="+13214909146",
-        #     pw2fa="Qqqw1234",
-        # )
+        # await account_manager.check_all_userbot(config)
+        # await account_manager.rec_new_account(phone_number="+19036260988",pw2fa="Qqqw1234",)
+        await account_manager.rec_new_account(phone_number="+19122147421",pw2fa="z4422404",)
         # await account_manager.check_phone("+12282796709")
         # await account_manager.check_phone("+254784812293")
         # await account_manager.check_phone("+254797636990") 
@@ -223,7 +221,12 @@ async def main_auto_talk() -> None:
         for participant in participants
     }
 
-    chat_id = -1004335920222    #布吉岛
+    chat_id_value = os.getenv("CHAT_ID", "-1004335920222").strip()
+    chat_id: int | str = (
+        int(chat_id_value)
+        if chat_id_value.lstrip("-").isdigit()
+        else chat_id_value
+    )
     message_thread_id=0
     # chat_id = -1004303617422
     # chat_id = -1001804924332    #测试群
@@ -235,8 +238,10 @@ async def main_auto_talk() -> None:
 
 
 
-    # chat_invite_link = os.getenv("CHAT_INVITE_LINK", "").strip() or None
-    chat_invite_link = "https://t.me/+1_46OHKmuuowNzkx"
+    chat_invite_link = (
+        os.getenv("CHAT_INVITE_LINK", "https://t.me/BJDADJB").strip()
+        or None
+    )
     # chat_invite_link = "https://t.me/+gXjWFqJTl-g0ZThk"
    
     # chat_id: int | str = os.environ["CHAT_ID"].strip()
@@ -269,7 +274,13 @@ async def run_telethon_bot(
         configure_mysql_pool(config)
     operator: dict[int, HumanBotOperator] = {}
     try:
-        if FETCH_MODE == "emoji":
+        if FETCH_MODE == "test":
+            session_rows = await MySQLPool.fetchall(
+                "SELECT `bot_id`,`bot_token` FROM `bot` "
+                "WHERE check_group IN (11) ",
+                error_tag="userbot.random_session_tokens",
+            )
+        elif FETCH_MODE == "emoji":
             session_rows = await MySQLPool.fetchall(
                 "SELECT `bot_id`,`bot_token` FROM `bot` "
                 "WHERE check_group IN (1) ",
@@ -358,9 +369,6 @@ async def run_telethon_bot(
 
                 # await op.join_chat("https://t.me/+_Pz9_6udznFlMDhi") #玉树花
 
-        
-                await op.join_chat("https://t.me/BJDADJB")  
-                await op.client.send_message(f"@{HumanBotOperator.BJD_CODE_BOT_NAME}", "/start")
 
  
     
@@ -372,12 +380,47 @@ async def run_telethon_bot(
                 # await op.client.send_message("@ztFreeJJBOT", "/start") 
 
                 
-                # await op.join_chat("https://t.me/+i5S7P-Dol4dhNzA5")  #加入布吉岛主 1004335920222
-                # await asyncio.sleep(3)
-                # await op.join_chat("https://t.me/+iHyXV6FFCQAxN2Ix")  #加入布吉岛
+                
                 # await op.join_chat("+mhqJ-3C93F0zODEx") #桃花林 
                 # await op.join_chat("+QEtmtaI-amU5NDRh") #桃花源
-                
+
+                # try:
+                    # await op.update_profile()
+                #     await op.join_chat("https://t.me/BJDADJB")
+                #     await op.client.send_message(f"@{HumanBotOperator.BJD_CODE_BOT_NAME}", "/start")
+                #     await op.join_chat("https://t.me/+i5S7P-Dol4dhNzA5")  #加入布吉岛主 1004335920222
+                #     await asyncio.sleep(3)
+                #     await op.join_chat("https://t.me/+iHyXV6FFCQAxN2Ix")  #加入布吉岛
+                # except Exception as e:
+                #     print(f"Failed to join chat or send message: {e}", flush=True)
+                # finally:
+                #     sleep_time = random.randint(65, 73)
+                #     print(f"==>Sleeping for {sleep_time} seconds before next operation.", flush=True)
+                #     await asyncio.sleep(sleep_time)
+   
+                # try:
+                #     # 首頁    /start
+                #     start_result = await op.capture_bot_messages(f"@{HumanBotOperator.BJD_CODE_BOT_NAME}", "/start")
+                #     if start_result:
+                #         receive_text = start_result[-1].text if start_result else ""
+                #         if "天内无群聊发言" in receive_text:
+                #             print("‼️ 收到天内无群聊发言的提示，继续下一步。", flush=True)
+                #             # await op.send_random_message(chat_id=[-1004335920222])
+                #         else:
+                #             print(f"receive_text={receive_text}", flush=True)
+                #     else:
+                #         print("未收到任何消息", flush=True)
+                #         await op.send_random_message(chat_id=[-1004335920222])
+                # except Exception as e:
+                #     print(f"Failed to join chat: {e}", flush=True)
+                # finally:
+                #     sleep_time = random.randint(5, 13)
+                    
+                #     print(f"==>Sleeping for {sleep_time} seconds before next operation.", flush=True)
+                #     await asyncio.sleep(sleep_time)
+
+                print("\n", flush=True)
+
                 
                 # await op.join_chat("+Y-FYbcmvdWgxMDJh") #新桃花林 
                 # await op.join_chat("https://t.me/+PmSBya7t51JmOTNh") #unbrella
@@ -483,7 +526,10 @@ async def run_telethon_bot(
                         if "天内无群聊发言" in receive_text:
                             print("‼️ 收到天内无群聊发言的提示，继续下一步。", flush=True)
                             await op.send_random_message(chat_id=[-1004335920222])
-                         
+                        else:
+                            print(f"receive_text={receive_text}", flush=True)
+                    else:
+                        print("未收到任何消息", flush=True)
 
 
                     if FETCH_MODE == "emoji" or FETCH_MODE == "emoji2":
@@ -662,10 +708,10 @@ async def main() -> None:
 
 if __name__ == "__main__":
     async def _run_all() -> None:
-        # await main_check_user()
+        await main_check_user()
         # await main_auto_talk()
         # await main_move()
-        await main()
+        # await main()
 
 
 

@@ -22,6 +22,8 @@ from zoneinfo import ZoneInfo
 from telethon import Button, TelegramClient, events
 from telethon.errors import (
     ChatForwardsRestrictedError,
+    InviteHashExpiredError,
+    InviteHashInvalidError,
     InviteRequestSentError,
     ServerError,
     UserAlreadyParticipantError,
@@ -522,7 +524,15 @@ class HumanBotOperator:
 
                 except ValueError as resolve_error:
                     if chat_invite_link is not None:
-                        await operator.join_chat(chat_invite_link)
+                        try:
+                            await operator.join_chat(chat_invite_link)
+                        except (InviteHashExpiredError, InviteHashInvalidError) as exc:
+                            account_label = account_label_by_actor[actor_id]
+                            raise ValueError(
+                                f"actor={actor_id} 使用的账号={account_label} 无法加入 "
+                                f"chat_id={chat_id}：chat_invite_link 已过期或无效。"
+                                "请更新 CHAT_INVITE_LINK，或对公开群传入 @username。"
+                            ) from exc
                         try:
                             chat_entities[actor_id] = (
                                 await operator._resolve_input_entity(chat_id)
