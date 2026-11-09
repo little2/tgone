@@ -1,6 +1,8 @@
 """Telegram 使用者帳號管理程式入口。"""
 
 import asyncio
+from datetime import datetime, time, time
+import datetime
 import errno
 import os
 from pathlib import Path
@@ -319,6 +321,7 @@ async def run_telethon_bot(
 
         operator_title = {}
         operator_bot_id = {}
+        operator_last_message_Time = {}
        
 
         # 打印 bot_id_set
@@ -465,7 +468,19 @@ async def run_telethon_bot(
                 # 模拟按 Ctrl 键 以避免进入休眠状态
                 await op.simulate_ctrl_press()
                 
-
+                # 如果现在是北京时间 00:00:01 至 00:00:30 之间，则执行任务
+                current_time = datetime.now().time()
+                if current_time >= time(0, 0, 1) and current_time <= time(0, 30, 30):
+                    if operator_last_message_Time[i] is None or (datetime.now() - operator_last_message_Time[i]).total_seconds() > 61:
+                            say_result  = await op.send_water()  # 执行 send_water 方法
+                            if(say_result):
+                                operator_last_message_Time[i] = datetime.now()  # 更新最后发送消息的时间
+                    sleep_time = random.randint(1, 3)  
+                    print(f"==>Sleeping for {sleep_time} seconds before next operation.", flush=True)
+                    await asyncio.sleep(sleep_time)
+                    continue
+                    
+                        
 
 
                 try:                  
