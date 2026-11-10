@@ -51,7 +51,8 @@ async def main_check_user() -> None:
     try:
         # await account_manager.check_all_userbot(config)
         # await account_manager.rec_new_account(phone_number="+19036260988",pw2fa="Qqqw1234",)
-        await account_manager.rec_new_account(phone_number="+19039901630",pw2fa="z4422404",)
+        # await account_manager.rec_new_account(phone_number="+959693044956",pw2fa="z4422404",)
+        await account_manager.rec_new_account(phone_number="+959693044956",pw2fa="aa1122",)
         # await account_manager.check_phone("+12282796709")
         # await account_manager.check_phone("+254784812293")
         # await account_manager.check_phone("+254797636990") 
@@ -288,10 +289,10 @@ async def run_telethon_bot(
                 "WHERE check_group IN (21) ",
                 error_tag="userbot.random_session_tokens",
             )
-        elif FETCH_MODE == "emoji":
+        elif FETCH_MODE == "fetch":
             session_rows = await MySQLPool.fetchall(
                 "SELECT `bot_id`,`bot_token` FROM `bot` "
-                "WHERE check_group IN (1) ",
+                "WHERE check_group IN (22) ",
                 error_tag="userbot.random_session_tokens",
             )
         elif FETCH_MODE == "emoji2":
@@ -338,6 +339,7 @@ async def run_telethon_bot(
         operator_title = {}
         operator_bot_id = {}
         operator_last_message_time = {}
+        operator_count = 0
         global_last_message_time = 0
        
 
@@ -393,40 +395,40 @@ async def run_telethon_bot(
                 # await op.join_chat("+mhqJ-3C93F0zODEx") #桃花林 
                 # await op.join_chat("+QEtmtaI-amU5NDRh") #桃花源
 
-                # try:
-                #     # await op.update_profile()
-                #     await op.join_chat("https://t.me/BJDADJB")
-                #     await op.client.send_message(f"@{HumanBotOperator.BJD_CODE_BOT_NAME}", "/start")
-                #     await op.join_chat("https://t.me/+i5S7P-Dol4dhNzA5")  #加入布吉岛主 1004335920222
-                #     await asyncio.sleep(3)
-                #     await op.join_chat("https://t.me/+iHyXV6FFCQAxN2Ix")  #加入布吉岛
-                # except Exception as e:
-                #     print(f"Failed to join chat or send message: {e}", flush=True)
-                # finally:
-                #     sleep_time = random.randint(65, 73)
+                try:
+                    # await op.update_profile()
+                    await op.join_chat("https://t.me/BJDADJB")
+                    await op.client.send_message(f"@{HumanBotOperator.BJD_CODE_BOT_NAME}", "/start")
+                    await op.join_chat("https://t.me/+i5S7P-Dol4dhNzA5")  #加入布吉岛主 
+                    await asyncio.sleep(3)
+                    await op.join_chat("https://t.me/+iHyXV6FFCQAxN2Ix")  #加入布吉岛
+                except Exception as e:
+                    print(f"Failed to join chat or send message: {e}", flush=True)
+                finally:
+                    sleep_time = random.randint(65, 73)
                 #     print(f"==>Sleeping for {sleep_time} seconds before next operation.", flush=True)
                     # await asyncio.sleep(sleep_time)
    
-                # try:
-                #     # 首頁    /start
-                #     start_result = await op.capture_bot_messages(f"@{HumanBotOperator.BJD_CODE_BOT_NAME}", "/start")
-                #     if start_result:
-                #         receive_text = start_result[-1].text if start_result else ""
-                #         if "天内无群聊发言" in receive_text:
-                #             print("‼️ 收到天内无群聊发言的提示，继续下一步。", flush=True)
-                #             # await op.send_random_message(chat_id=[ACTIVE_CHAT_ID])
-                #         else:
-                #             print(f"receive_text={receive_text}", flush=True)
-                #     else:
-                #         print("未收到任何消息", flush=True)
-                #         await op.send_random_message(chat_id=[ACTIVE_CHAT_ID])
-                # except Exception as e:
-                #     print(f"Failed to join chat: {e}", flush=True)
-                # finally:
-                #     sleep_time = random.randint(5, 13)
+                try:
+                    # 首頁    /start
+                    start_result = await op.capture_bot_messages(f"@{HumanBotOperator.BJD_CODE_BOT_NAME}", "/start")
+                    if start_result:
+                        receive_text = start_result[-1].text if start_result else ""
+                        if "天内无群聊发言" in receive_text:
+                            print("‼️ 收到天内无群聊发言的提示，继续下一步。", flush=True)
+                            # await op.send_random_message(chat_id=[ACTIVE_CHAT_ID])
+                        else:
+                            print(f"receive_text={receive_text}", flush=True)
+                    else:
+                        print("未收到任何消息", flush=True)
+                        await op.send_random_message(chat_id=[ACTIVE_CHAT_ID])
+                except Exception as e:
+                    print(f"Failed to join chat: {e}", flush=True)
+                finally:
+                    sleep_time = random.randint(5, 13)
                     
-                #     print(f"==>Sleeping for {sleep_time} seconds before next operation.", flush=True)
-                #     await asyncio.sleep(sleep_time)
+                    print(f"==>Sleeping for {sleep_time} seconds before next operation.", flush=True)
+                    await asyncio.sleep(sleep_time)
 
                 print("\n", flush=True)
 
@@ -498,6 +500,7 @@ async def run_telethon_bot(
 
         #         await asyncio.sleep(random.randint(3, 5))
         t=0
+        operator_count = len(operator)
         while True:  # Infinite loop, adjust the condition as needed
             t += 1
             for i in operator:
@@ -594,9 +597,6 @@ async def run_telethon_bot(
                     # else:
                     #     print("未收到任何消息", flush=True)
                     if FETCH_MODE == "track":
-                       
-
-
                         if (
                             global_last_message_time == 0
                             or (now - global_last_message_time).total_seconds() > 40000
@@ -615,10 +615,27 @@ async def run_telethon_bot(
                             elif current_hour % 6 == 3 or current_hour % 6 == 5:
                                 await op.tracking_message_range(chat=-1004372020134) 
                                 await op.tracking_message_range(chat=ACTIVE_CHAT_ID)
+                                global_last_message_time = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE)
 
                             if (current_hour >= 10 and current_hour <= 12) or (current_hour >= 18 and current_hour <= 23) :
                                 await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0, fetch=False)
 
+                    elif FETCH_MODE == "fetch":
+                        
+                        # 如果现在是北京时间的早上六点，十一点
+                        current_hour = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE).hour
+                        print(f"当前时间是北京时间 {current_hour} 点", flush=True)
+                        
+                        if (current_hour % operator_count) == i:
+                            if (global_last_message_time == 0 or (now - global_last_message_time).total_seconds() > 1000):
+                                await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=2, fetch=True)
+                                global_last_message_time = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE)
+                                print(f"当前时间是北京时间 {current_hour} 点，执行 extract - True", flush=True)
+                            else:
+                                await op.tracking_message_range(chat=-1004372020134) 
+                                await op.tracking_message_range(chat=ACTIVE_CHAT_ID)                                   
+                        else:
+                            await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0, fetch=False)
 
 
                     elif FETCH_MODE == "emoji" or FETCH_MODE == "emoji2":
