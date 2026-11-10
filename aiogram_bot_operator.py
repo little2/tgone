@@ -184,7 +184,8 @@ class AiogramBotOperator:
                 flush=True,
             )
 
-            await free_dispatcher.start_polling(free_bot)
+            # 由 asyncio.run() 统一处理 Ctrl+C，取消所有并发任务。
+            await free_dispatcher.start_polling(free_bot, handle_signals=False)
         finally:
             await free_bot.session.close()
 
@@ -830,7 +831,8 @@ class AiogramBotOperator:
                 self._run_captcha_callback_polling(proxy_url),
                 name="captcha-bot-callback-polling",
             )
-            await dispatcher.start_polling(bot)
+            # 避免 Aiogram 接管 SIGINT 后只停止 polling，留下 Telethon 循环。
+            await dispatcher.start_polling(bot, handle_signals=False)
         finally:
             if captcha_polling_task is not None:
                 captcha_polling_task.cancel()

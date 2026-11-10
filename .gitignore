@@ -20,6 +20,7 @@ __pycache__/tgone_config.cpython-313.pyc
 last_run_time_7600412139.txt
 last_run_time_8867046650.txt
 cache/config_cache.json
+cache/telethon_bot_sessions/
 session.py
 talk.py
 __pycache__/tgone_mysql.cpython-313.pyc

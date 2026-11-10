@@ -22,6 +22,7 @@ from zoneinfo import ZoneInfo
 from telethon import Button, TelegramClient, events
 from telethon.errors import (
     ChatForwardsRestrictedError,
+    FloodWaitError,
     InviteHashExpiredError,
     InviteHashInvalidError,
     InviteRequestSentError,
@@ -340,11 +341,27 @@ class HumanBotOperator:
         if not bot_token or not api_id or not api_hash:
             raise ValueError("bot_token、api_id、api_hash 均不可为空")
 
-        for attempt in range(1, cls.TELEGRAM_LOGIN_MAX_ATTEMPTS + 1):
-            client = TelegramClient(StringSession(), int(api_id), api_hash)
+        # 持久化 Bot 授权，避免每次启动都触发 ImportBotAuthorizationRequest。
+        session_dir = Path(__file__).resolve().parent / "cache" / "telethon_bot_sessions"
+        session_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        session_key = hashlib.sha256(bot_token.encode()).hexdigest()
+        session_path = session_dir / f"{api_id}_{session_key}"
+
+        attempt = 1
+        while True:
+            client = TelegramClient(str(session_path), int(api_id), api_hash)
             try:
                 await client.start(bot_token=bot_token)
                 return cls(client, taobao_bot_username=taobao_bot_username)
+            except FloodWaitError as exc:
+                await client.disconnect()
+                retry_seconds = max(1, exc.seconds)
+                print(
+                    f"⚠️ Telegram Bot 登录被限流，等待 {retry_seconds} 秒后重试"
+                    "（等待期间可按 Ctrl+C 退出）。",
+                    flush=True,
+                )
+                await asyncio.sleep(retry_seconds)
             except ServerError as exc:
                 await client.disconnect()
                 if attempt >= cls.TELEGRAM_LOGIN_MAX_ATTEMPTS:
@@ -358,11 +375,11 @@ class HumanBotOperator:
                     flush=True,
                 )
                 await asyncio.sleep(retry_seconds)
-            except Exception:
+                attempt += 1
+            except BaseException:
+                # 包括 Ctrl+C 引发的任务取消，释放连接及会话文件。
                 await client.disconnect()
                 raise
-
-        raise RuntimeError("Telegram Bot 登录重试已耗尽")
 
     @classmethod
     async def set_bbt_bot(
@@ -1623,7 +1640,11 @@ class HumanBotOperator:
             return
         else:
             # 打印出取得的消息内容
-            print(f"\n取得 {result[-1]}",flush=True)
+            for r in result:
+                print(f"\n👉取得 {r.message}", flush=True)
+                if "请先到群内发言" in r.message:
+                    await self.send_random_message(chat_id=[-1004335920222])
+                    
         menu_id = result[-1].id                      # 用最後一則，通常才是選單
 
         result2 = await self.capture_bot_messages(
@@ -1698,30 +1719,32 @@ class HumanBotOperator:
                                 if not result_loop:
                                     print("⚠️ 點擊「⬅️」後沒有取得任何輸出", flush=True)
                                     return
-                                current_item =await self.parse_bot_response(result_loop[-1])
-                                latest_id = result_loop[-1].id
+                                current_item =await self.parse_bot_response(result_loop[0])
+                                latest_id = result_loop[0].id
+
+                                print(f"当前项: {current_item}, 最新 ID: {latest_id}", flush=True)
 
                      
                                 
-                                if _qty == 1:
-                                    await self.tracking_message_range(chat=-1004335920222)
-                                elif _qty == 3:
-                                    await self.tracking_message_range(chat=-1004372020134) 
+                                # if _qty == 1:
+                                #     await self.tracking_message_range(chat=-1004335920222)
+                                # elif _qty == 3:
+                                #     await self.tracking_message_range(chat=-1004372020134) 
                                 
 
 
-                                if _qty%5 == 0:
-                                    await self.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=2)
-                                elif _qty%5 == 2 or _qty%5 == 3:
-                                    await self.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0)
+                                # if _qty%5 == 0:
+                                #     await self.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=2)
+                                # elif _qty%5 == 2 or _qty%5 == 3:
+                                #     await self.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0)
 
                                 
-                                sleep_time = random.randint(3, 7)
+                                sleep_time = random.randint(10, 15)
                                 # await asyncio.sleep(sleep_time)
                                 await asyncio.sleep(sleep_time)
 
                                 _qty += 1
-                                if _qty >= 20:
+                                if _qty >= 200:
                                     print("⚠️ 已達到最大嘗試次數，停止循環", flush=True)
                                     return
 
@@ -1815,7 +1838,8 @@ class HumanBotOperator:
                             result_jump_to = await self.capture_bot_messages(target_bot, send_text=last_item)
                             current_item = await self.parse_bot_response(result_jump_to[-1],source_chat_id='10002',priority=1)
                             latest_id = result_jump_to[-1].id
-            
+
+                            retry_count = 0
                             while current_item != 1:
                                 print(f"current_item={current_item}")
 
@@ -1824,15 +1848,20 @@ class HumanBotOperator:
                                 )
                                     
                                 if not result_loop:
-                                    print("⚠️ 點擊「⬅️」後沒有取得任何輸出", flush=True)
-                                    return
-                                current_item =await self.parse_bot_response(result_loop[-1],source_chat_id='10002',priority=1)
-                                latest_id = result_loop[-1].id
+                                    print(f"⚠️ 點擊「⬅️」後沒有取得任何輸出 retrying...{retry_count}", flush=True)
+                                    retry_count += 1
+                                    if retry_count >= 3:
+                                        print("⚠️ 重試次數達到上限，跳出循環", flush=True)
+                                        break
+                                else:    
+                                    current_item =await self.parse_bot_response(result_loop[-1],source_chat_id='10002',priority=1)
+                                    
+                                    retry_count = 0
 
                                 
                                 
                                 
-                                sleep_time = random.randint(2, 4)
+                                sleep_time = random.randint(10, 15)
                                 # await asyncio.sleep(sleep_time)
                                 await asyncio.sleep(sleep_time)
 
@@ -1991,6 +2020,7 @@ class HumanBotOperator:
         timeout: float = 60,
         ask_like: bool = False,
         extract_status: int |None = None,
+        fetch: bool = True,
     ) -> Any:
         """发送指定密文，并逐条监听机器人回应直到出现终止内容。"""
         if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
@@ -2277,7 +2307,7 @@ class HumanBotOperator:
                         return True
 
 
-                    if has_get_file_button:
+                    if has_get_file_button and fetch:
                         
                         
                         await asyncio.sleep(1)  # Yield control to the event loop
@@ -4233,3 +4263,36 @@ class HumanBotOperator:
                 raise
 
             print(f"{setting_name} 已设置为 Nobody。", flush=True)
+
+    async def chat_water_gererator(self, category=None):
+        import random
+        from water_dict import CHAT_DICT
+
+        categories = (
+            [category]
+            if category in CHAT_DICT
+            else list(CHAT_DICT)
+        )
+
+        weights = [
+            CHAT_DICT[c]["weight"]
+            for c in categories
+        ]
+
+        selected = random.choices(
+            categories,
+            weights=weights,
+            k=1
+        )[0]
+
+        phrase = random.choice(
+            CHAT_DICT[selected]["phrases"]
+        )
+
+        return {
+            "category": selected,
+            "message": phrase
+        }
+
+
+
