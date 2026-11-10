@@ -25,6 +25,7 @@ from telethon.errors import (
 )
 from telethon.tl.functions.contacts import ImportContactsRequest
 from telethon.tl.types import InputPhoneContact
+from telethon.tl.types.account import Authorizations
 # shared_config 會在 import 時讀取 SETTING_URL，因此必須先載入環境變數。
 
 from pathlib import Path
@@ -42,6 +43,52 @@ class UserAccountManager:
     """負責 Telegram 使用者帳號的新增、登入確認與資料管理。"""
 
     TGSOURCE_CHAT_ID = 777000
+
+    async def check_active_sessions(self, user_client: TelegramClient) -> str:
+        """检查当前账号的会话，按现有规则清理并发送报告。"""
+        print("\n 列出当前帐号所有 active sessions", flush=True)
+        auths = await user_client(GetAuthorizationsRequest())
+        if not isinstance(auths, Authorizations):
+            raise TypeError("Telegram 返回的会话列表格式不正确")
+        device_model_str = ""
+        for a in auths.authorizations:
+            if a.date_created is None:
+                print(f"❌ 会话 {a.hash} 缺少创建时间，无法检查", flush=True)
+                continue
+            date_created = a.date_created
+            if a.hash == 0:
+                print(f"✅ 保留本身 id={a.hash}  device={a.device_model}  platform={a.platform}  ip={a.ip}  date={date_created.astimezone(APP_TIMEZONE)}")
+                device_model_str += "✅ (本身)" + a.device_model + "\n"
+                continue
+            elif a.device_model not in WHITELIST:
+                try:
+                    seven_days_ago = datetime.now(APP_TIMEZONE) - timedelta(days=7)
+                    if date_created >= seven_days_ago:
+                        print(f"❗️ 最近七天内创建的会话 id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={date_created.astimezone(APP_TIMEZONE)}")
+                        device_model_str += "❗️ (七天新增)" + a.device_model + "\n"
+                    elif a.device_model in BLACKLIST:
+                        await user_client(ResetAuthorizationRequest(hash=a.hash))
+                        print(f"❌ 已删除 id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={date_created.astimezone(APP_TIMEZONE)} (已删除)")
+                        device_model_str += "❌ (黑名单)" + a.device_model + "\n"
+                    elif a.hash == -212406687192506612 or a.hash == -6894703599540223408:
+                        await user_client(ResetAuthorizationRequest(hash=a.hash))
+                        print(f"❌ 已删除 id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={date_created.astimezone(APP_TIMEZONE)} (已删除)")
+                        device_model_str += "❌ (特殊)" + a.device_model + "\n"
+                    else:
+                        print(f"⚠️ 建議删除 id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={date_created.astimezone(APP_TIMEZONE)}")
+                        device_model_str += "⚠️ (建議删除)" + a.device_model + "\n"
+                except Exception as e:
+                    print(f"❌ 删除 {a.hash} 失败: {e}")
+            else:
+                print(f"✅ 保留 id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={date_created.astimezone(APP_TIMEZONE)}")
+                device_model_str += "✅ (白名单)" + a.device_model + "\n"
+
+        await user_client.send_message(
+            SharedConfig.get("key_man_id"),
+            f"\ndevice_model=\n{device_model_str}",
+            parse_mode="HTML",
+        )
+        return device_model_str
 
     def load_config(self) -> dict[str, Any]:
         """合併遠端設定與 CONFIGURATION，後者有較高優先權。"""
