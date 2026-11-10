@@ -7,6 +7,7 @@ import random
 import re
 import time
 from datetime import datetime, timedelta, timezone
+from app_timezone import APP_TIMEZONE
 from html import escape
 from typing import Any
 from device_lists import WHITELIST, BLACKLIST
@@ -281,9 +282,8 @@ class UserAccountManager:
                 if received_at is not None:
                     if received_at.tzinfo is None:
                         received_at = received_at.replace(tzinfo=timezone.utc)
-                    received_time = received_at.astimezone(
-                        timezone(timedelta(hours=8))
-                    ).strftime("%Y-%m-%d %H:%M:%S")
+                    received_at = received_at.astimezone(APP_TIMEZONE)
+                    received_time = received_at.strftime("%Y-%m-%d %H:%M:%S%z")
                 else:
                     received_time = "未知"
 
@@ -295,7 +295,7 @@ class UserAccountManager:
 
                 # 如果 received_time 是三天的，则打印
                 if received_at is not None:
-                    now = datetime.now(timezone(timedelta(hours=8)))
+                    now = datetime.now(APP_TIMEZONE)
                     three_days_ago = now - timedelta(days=3)
                     if received_at >= three_days_ago:
                         
@@ -498,31 +498,31 @@ class UserAccountManager:
                     device_model_str += a.device_model + "\n"
                     if a.hash == 0:
                         
-                        print(f"✅ 保留本身 id={a.hash}  device={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created}")
+                        print(f"✅ 保留本身 id={a.hash}  device={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created.astimezone(APP_TIMEZONE)}")
                         continue  # 跳过主会话
                     elif a.device_model not in WHITELIST:
                         try:
                             # 如果 a.date_created 在七天之内的
-                            seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+                            seven_days_ago = datetime.now(APP_TIMEZONE) - timedelta(days=7)
                             if a.date_created >= seven_days_ago:
-                                print(f"❗️ 最近七天内创建的会话 id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created}")
+                                print(f"❗️ 最近七天内创建的会话 id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created.astimezone(APP_TIMEZONE)}")
 
                             elif a.device_model in BLACKLIST:
-                                print(f"❌ 已删除 id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created} (已删除)")
+                                print(f"❌ 已删除 id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created.astimezone(APP_TIMEZONE)} (已删除)")
                                 await user_client(ResetAuthorizationRequest(hash=a.hash))
                             elif a.hash == -212406687192506612 or a.hash == -6894703599540223408:
-                                print(f"❌ 已删除 id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created} (已删除)")
+                                print(f"❌ 已删除 id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created.astimezone(APP_TIMEZONE)} (已删除)")
                                 await user_client(ResetAuthorizationRequest(hash=a.hash))
                             else:
                                 # await client(ResetAuthorizationRequest(hash=a.hash))
-                                print(f"⚠️ 建議删除 id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created}")
+                                print(f"⚠️ 建議删除 id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created.astimezone(APP_TIMEZONE)}")
                                 # ❗️ 建議删除 id=-2622773520313404250  device_model=Desktop  platform=  ip=  date=2026-05-08 15:57:28+00:00
                                 # ❗️ 建議删除 id=985113455830527986  device_model=Desktop  platform=  ip=  date=2026-01-03 08:01:27+00:00
                                 # ❗️ 建議删除 id=3145982375868211614  device_model=Desktop  platform=  ip=  date=2026-05-08 15:55:32+00:00
                         except Exception as e:
                             print(f"❌ 删除 {a.hash} 失败: {e}")
                     else:
-                        print(f"✅ 保留 id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created}")
+                        print(f"✅ 保留 id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created.astimezone(APP_TIMEZONE)}")
 
                 await user_client.send_message(
                     target,

@@ -7,6 +7,7 @@ import os
 import re
 import unicodedata
 from datetime import datetime
+from app_timezone import APP_TIMEZONE
 from html import escape as html_escape
 from urllib.parse import quote
 
@@ -496,7 +497,7 @@ class AiogramBotOperator:
             return None
 
         thumb_file_unique_id = message.photo[-1].file_unique_id
-        now_ts = int(datetime.now().timestamp())
+        now_ts = int(datetime.now(APP_TIMEZONE).timestamp())
         sender_id = getattr(message.from_user, "id", None)
 
         async def transaction(cur):
@@ -593,7 +594,7 @@ class AiogramBotOperator:
             raise ValueError("pack_item caption 的 file_code 必须包含连续 8 个 Emoji")
 
         code_hash_hex = hashlib.sha256(file_code.encode("utf-8")).hexdigest()
-        now_ts = int(datetime.now().timestamp())
+        now_ts = int(datetime.now(APP_TIMEZONE).timestamp())
         sender_id = getattr(message.from_user, "id", None)
 
         async def transaction(cur):

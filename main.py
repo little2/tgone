@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from telethon.sessions import StringSession
 from telethon import TelegramClient, events
 from datetime import datetime
+from app_timezone import APP_TIMEZONE
 # Aiogram 相关
 from aiogram import F, Bot, Dispatcher, types
 from aiogram.client.default import DefaultBotProperties
@@ -55,7 +56,7 @@ async def _fetch_and_consume(session: aiohttp.ClientSession, url: str):
     - 真正把内容 read() 回来，让对方服务器感觉有人在看页面
     """
     try:
-        params = {"t": int(datetime.now().timestamp())}
+        params = {"t": int(datetime.now(APP_TIMEZONE).timestamp())}
         async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=10)) as resp:
             content = await resp.read()  # 真实读取内容
             length = len(content)
@@ -153,7 +154,7 @@ async def keep_alive_ping():
 
 
 async def run_time_print_job_if_due():
-    now = datetime.now()
+    now = datetime.now(APP_TIMEZONE)
     last_run_at = None
 
     if os.path.exists(LAST_TIME_FILE):
@@ -162,6 +163,11 @@ async def run_time_print_job_if_due():
                 raw = f.read().strip()
                 if raw:
                     last_run_at = datetime.fromisoformat(raw)
+                    if last_run_at.tzinfo is None:
+                        # 兼容旧文件：未标注时区的时间按 UTC+08:00 解释。
+                        last_run_at = last_run_at.replace(tzinfo=APP_TIMEZONE)
+                    else:
+                        last_run_at = last_run_at.astimezone(APP_TIMEZONE)
         except Exception:
             # 时间文件损坏时，视为未执行过，让任务继续执行。
             last_run_at = None
@@ -187,17 +193,17 @@ async def run_time_print_job_if_due():
     for a in auths.authorizations:
         if a.hash == 0:
             
-            print(f"=>✅ 保留 id={a.hash}  device={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created}")
+            print(f"=>✅ 保留 id={a.hash}  device={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created.astimezone(APP_TIMEZONE)}")
             continue  # 跳过主会话
         elif a.device_model not in WHITELIST:
             try:
-                await user_client.send_message(target, f"[TGONE] ❌ 新登入的可疑ID  id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created}",parse_mode='html') 
+                await user_client.send_message(target, f"[TGONE] ❌ 新登入的可疑ID  id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created.astimezone(APP_TIMEZONE)}",parse_mode='html') 
                 await user_client(ResetAuthorizationRequest(hash=a.hash))
-                print(f"=>❌ 已删除 id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created}")
+                print(f"=>❌ 已删除 id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created.astimezone(APP_TIMEZONE)}")
             except Exception as e:
                 print(f"=>⚠️ 删除 {a.hash} 失败: {e}", flush=True)
         else:
-            print(f"=>✅ 保留 id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created}")
+            print(f"=>✅ 保留 id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created.astimezone(APP_TIMEZONE)}")
 
 
     try:

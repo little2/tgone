@@ -1,5 +1,6 @@
 # tgone_pgsql.py
 import asyncpg
+from app_timezone import POSTGRES_TIMEZONE
 import asyncio
 from functools import wraps
 from inspect import stack
@@ -76,6 +77,7 @@ class PGPool:
                     min_size=cls.MIN_SIZE,
                     max_size=cls.MAX_SIZE,
                     command_timeout=cls.COMMAND_TIMEOUT,
+                    server_settings={"timezone": POSTGRES_TIMEZONE},
                 )
                 print("✅ PostgreSQL 连接池初始化完成", flush=True)
         return cls._pool

@@ -1,4 +1,5 @@
 import aiomysql
+from app_timezone import MYSQL_TIMEZONE
 import time
 from tgone_config import MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB, MYSQL_DB_PORT
 from typing import Optional, Dict, Any
@@ -37,6 +38,7 @@ class MySQLPool:
                     maxsize=32,
                     pool_recycle=1800,
                     connect_timeout=10,
+                    init_command=f"SET time_zone = '{MYSQL_TIMEZONE}'",
                 )
                 print("✅ MySQL 连接池初始化完成")
             if not cls._cache_ready:

@@ -17,7 +17,7 @@ import unicodedata
 from datetime import datetime, timedelta
 from typing import Any
 from urllib.parse import urlparse
-from zoneinfo import ZoneInfo
+from app_timezone import APP_TIMEZONE
 
 from telethon import Button, TelegramClient, events
 from telethon.errors import (
@@ -101,7 +101,7 @@ class HumanBotOperator:
     TELEGRAM_LOGIN_RETRY_BASE_SECONDS = 2
     _bot_cache: dict[str, Bot] = {}
 
-    DEFAULT_TIMEZONE = ZoneInfo("Asia/Shanghai")
+    DEFAULT_TIMEZONE = APP_TIMEZONE
     TIME_PERIODS = (
         (5, 11, "morning"),
         (11, 14, "noon"),
@@ -725,6 +725,8 @@ class HumanBotOperator:
                 raise ValueError("script.start_at 必须是 ISO 8601 时间") from exc
             if start_at.tzinfo is None or start_at.utcoffset() is None:
                 raise ValueError("script.start_at 必须包含时区偏移")
+            start_at = start_at.astimezone(APP_TIMEZONE)
+            script["start_at"] = start_at.isoformat()
 
         actor_ids = set()
         for participant in participants:

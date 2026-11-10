@@ -393,15 +393,15 @@ async def run_telethon_bot(
                 # await op.join_chat("+mhqJ-3C93F0zODEx") #桃花林 
                 # await op.join_chat("+QEtmtaI-amU5NDRh") #桃花源
 
-                try:
-                    await op.update_profile()
-                    await op.join_chat("https://t.me/BJDADJB")
-                    await op.client.send_message(f"@{HumanBotOperator.BJD_CODE_BOT_NAME}", "/start")
-                    await op.join_chat("https://t.me/+i5S7P-Dol4dhNzA5")  #加入布吉岛主 1004335920222
-                    await asyncio.sleep(3)
-                    await op.join_chat("https://t.me/+iHyXV6FFCQAxN2Ix")  #加入布吉岛
-                except Exception as e:
-                    print(f"Failed to join chat or send message: {e}", flush=True)
+                # try:
+                #     # await op.update_profile()
+                #     await op.join_chat("https://t.me/BJDADJB")
+                #     await op.client.send_message(f"@{HumanBotOperator.BJD_CODE_BOT_NAME}", "/start")
+                #     await op.join_chat("https://t.me/+i5S7P-Dol4dhNzA5")  #加入布吉岛主 1004335920222
+                #     await asyncio.sleep(3)
+                #     await op.join_chat("https://t.me/+iHyXV6FFCQAxN2Ix")  #加入布吉岛
+                # except Exception as e:
+                #     print(f"Failed to join chat or send message: {e}", flush=True)
                 # finally:
                 #     sleep_time = random.randint(65, 73)
                 #     print(f"==>Sleeping for {sleep_time} seconds before next operation.", flush=True)
@@ -602,16 +602,16 @@ async def run_telethon_bot(
                             or (now - global_last_message_time).total_seconds() > 40000
                         ):
                             # 如果现在是北京时间的早上六点，十一点
-                            current_hour = datetime.now().hour
+                            current_hour = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE).hour
                             print(f"当前时间是北京时间 {current_hour} 点", flush=True)
                             
                             if current_hour % 6 == 1:
                                 await op.fetch_top()
-                                global_last_message_time = datetime.now()
+                                global_last_message_time = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE)
                                 print(f"当前时间是北京时间 {current_hour} 点，执行 fetch_top 和 fetch_list", flush=True)
                             elif current_hour % 6 == 2:
                                 await op.fetch_list()
-                                global_last_message_time = datetime.now()
+                                global_last_message_time = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE)
                             elif current_hour % 6 == 3 or current_hour % 6 == 5:
                                 await op.tracking_message_range(chat=-1004372020134) 
                                 await op.tracking_message_range(chat=ACTIVE_CHAT_ID)

@@ -1,4 +1,5 @@
 import aiomysql
+from app_timezone import MYSQL_TIMEZONE
 import time
 from typing import Optional, Dict, Any, List
 from lz_memory_cache import MemoryCache
@@ -128,6 +129,7 @@ class MySQLPool:
                 maxsize=32,
                 pool_recycle=1800,
                 connect_timeout=10,
+                init_command=f"SET time_zone = '{MYSQL_TIMEZONE}'",
             )
             cls.show_debug("🔄 MySQL 连接池已创建")
             
