@@ -2510,7 +2510,7 @@ class HumanBotOperator:
 
                 # 如果收到的媒体消息是图片，且 caption 的字串包括 "只数清晰的大图案" 或 "与上方物体相同"
                 is_photo = getattr(response, "photo", None) is not None
-                if is_photo and ("图中出现最多的表情" in response_message or "只数清晰的大图案" in response_message or "与上方物体相同" in response_message or "与上方的物体相同" in response_message):
+                if is_photo and ("图中有几个" in response_message or "图中出现最多的表情" in response_message or "只数清晰的大图案" in response_message or "与上方物体相同" in response_message or "与上方的物体相同" in response_message):
                     print("❗️ 收到符合条件的图片媒体消息(验证码)。", flush=True)
                     
 
