@@ -599,7 +599,7 @@ async def run_telethon_bot(
 
                         if (
                             global_last_message_time == 0
-                            or (now - global_last_message_time).total_seconds() > 40000
+                            or (now - global_last_message_time).total_seconds() > 4000
                         ):
                             # 如果现在是北京时间的早上六点，十一点
                             current_hour = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE).hour
