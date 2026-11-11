@@ -645,8 +645,8 @@ async def run_telethon_bot(
                                 await op.tracking_message_range(chat=ACTIVE_CHAT_ID)
                                 global_last_message_time = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE)
 
-                            if (current_hour >= 10 and current_hour <= 12) or (current_hour >= 18 and current_hour <= 23) :
-                                await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0, fetch=False)
+                            # if (current_hour >= 10 and current_hour <= 12) or (current_hour >= 18 and current_hour <= 23) :
+                            #     await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0, fetch=False)
 
                     elif FETCH_MODE == "fetch":
                         
