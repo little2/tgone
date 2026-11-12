@@ -4230,6 +4230,7 @@ class HumanBotOperator:
             digit_count = random.randint(2, 8)
             number_suffix = str(random.randint(10 ** (digit_count - 1), 10 ** digit_count - 1))
             username = f"{english_name}{number_suffix}"
+            username = ""
             try:
                 await self.client(UpdateUsernameRequest(username))
             except UsernameOccupiedError:

@@ -403,7 +403,7 @@ async def run_telethon_bot(
                 # await op.join_chat("+QEtmtaI-amU5NDRh") #桃花源
 
                 # try:
-                #     await op.update_profile()
+                #     await op.update_profile(random=True)
                    
                 #     await op.join_chat("https://t.me/BJDADJB") 
                 #     print(f"Joined chat https://t.me/BJDADJB for operator {operator_length}",flush=True)
@@ -655,7 +655,7 @@ async def run_telethon_bot(
                         print(f"当前时间是北京时间 {current_hour} 点", flush=True)
                         
                         if (current_hour % operator_count) == i:
-                            if (global_last_message_time == 0 or (now - global_last_message_time).total_seconds() > 1000):
+                            if (global_last_message_time == 0 or (now - global_last_message_time).total_seconds() > 2300):
                                 await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=2, fetch=True)
                                 global_last_message_time = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE)
                                 print(f"当前时间是北京时间 {current_hour} 点，执行 extract - True", flush=True)
@@ -669,17 +669,18 @@ async def run_telethon_bot(
                     elif FETCH_MODE == "backup":
                         current_hour = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE).hour
                         print(f"当前时间是北京时间 {current_hour} 点", flush=True)
-                        
-                        if ((current_hour+2) % operator_count) == i:
-                            if (global_last_message_time == 0 or (now - global_last_message_time).total_seconds() > 1000):
+                        if (global_last_message_time == 0 or total_seconds > 3600):
+
+                            await op.tracking_message_range(chat=-1004372020134) 
+                            await op.tracking_message_range(chat=ACTIVE_CHAT_ID)   
+
+                            total_seconds = (now - global_last_message_time).total_seconds() if global_last_message_time != 0 else 0
+                            if ((current_hour+2) % operator_count) == i:
                                 await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=2, fetch=True)
                                 global_last_message_time = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE)
                                 print(f"当前时间是北京时间 {current_hour} 点，执行 extract - True", flush=True)
                             else:
-                                await op.tracking_message_range(chat=-1004372020134) 
-                                await op.tracking_message_range(chat=ACTIVE_CHAT_ID)                                   
-                        else:
-                            await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0, fetch=False)
+                                await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0, fetch=False)
                   
                        
                         
