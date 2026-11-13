@@ -420,25 +420,25 @@ async def run_telethon_bot(
 
 
    
-                try:
-                    # 首頁    /start
-                    start_result = await op.capture_bot_messages(f"@{HumanBotOperator.BJD_CODE_BOT_NAME}", "/start")
-                    if start_result:
-                        receive_text = start_result[-1].text if start_result else ""
-                        if "天内无群聊发言" in receive_text:
-                            print("‼️ 收到天内无群聊发言的提示，继续下一步。", flush=True)
-                            await op.send_random_message(chat_id=[ACTIVE_CHAT_ID])
-                        else:
-                            print(f"receive_text={receive_text}", flush=True)
-                    else:
-                        print("未收到任何消息", flush=True)
-                        await op.send_random_message(chat_id=[ACTIVE_CHAT_ID])
-                except Exception as e:
-                    print(f"Failed to join chat: {e}", flush=True)
-                finally:
-                    sleep_time = random.randint(5, 13)
-                    print(f"==>Sleeping for {sleep_time} .", flush=True)
-                    await asyncio.sleep(sleep_time)
+                # try:
+                #     # 首頁    /start
+                #     start_result = await op.capture_bot_messages(f"@{HumanBotOperator.BJD_CODE_BOT_NAME}", "/start")
+                #     if start_result:
+                #         receive_text = start_result[-1].text if start_result else ""
+                #         if "天内无群聊发言" in receive_text:
+                #             print("‼️ 收到天内无群聊发言的提示，继续下一步。", flush=True)
+                #             await op.send_random_message(chat_id=[ACTIVE_CHAT_ID])
+                #         else:
+                #             print(f"receive_text={receive_text}", flush=True)
+                #     else:
+                #         print("未收到任何消息", flush=True)
+                #         await op.send_random_message(chat_id=[ACTIVE_CHAT_ID])
+                # except Exception as e:
+                #     print(f"Failed to join chat: {e}", flush=True)
+                # finally:
+                #     sleep_time = random.randint(5, 13)
+                #     print(f"==>Sleeping for {sleep_time} .", flush=True)
+                #     await asyncio.sleep(sleep_time)
 
 
 
