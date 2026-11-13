@@ -289,19 +289,19 @@ async def run_telethon_bot(
     operator: dict[int, HumanBotOperator] = {}
     bbt_operator = None
     try:
-        if FETCH_MODE == "track":
+        if FETCH_MODE == "render":
             session_rows = await MySQLPool.fetchall(
                 "SELECT `bot_id`,`bot_token` FROM `bot` "
                 "WHERE check_group IN (21) ",
                 error_tag="userbot.random_session_tokens",
             )
-        elif FETCH_MODE == "fetch":
+        elif FETCH_MODE == "gridztd":
             session_rows = await MySQLPool.fetchall(
                 "SELECT `bot_id`,`bot_token` FROM `bot` "
                 "WHERE check_group IN (22) ",
                 error_tag="userbot.random_session_tokens",
             )
-        elif FETCH_MODE == "backup":
+        elif FETCH_MODE == "park":
             session_rows = await MySQLPool.fetchall(
                 "SELECT `bot_id`,`bot_token` FROM `bot` "
                 "WHERE check_group IN (23) ",
@@ -624,7 +624,7 @@ async def run_telethon_bot(
                     #         print(f"receive_text={receive_text}", flush=True)
                     # else:
                     #     print("未收到任何消息", flush=True)
-                    if FETCH_MODE == "track":
+                    if FETCH_MODE == "render":
                         if (
                             global_last_message_time == 0
                             or (now - global_last_message_time).total_seconds() > 4000
@@ -648,10 +648,11 @@ async def run_telethon_bot(
                                 await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0, fetch=False)
                                 global_last_message_time = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE)
 
-                    elif FETCH_MODE == "fetch":
+                    elif FETCH_MODE == "gridztd":
                         
                         # 如果现在是北京时间的早上六点，十一点
                         current_hour = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE).hour
+                        
                         if (global_last_message_time == 0 or (now - global_last_message_time).total_seconds() > 3600):
                         
                             print(f"当前时间是北京时间 {current_hour} 点", flush=True)
@@ -669,21 +670,23 @@ async def run_telethon_bot(
                                 # await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0, fetch=False)
                             global_last_message_time = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE)
 
-                    elif FETCH_MODE == "backup":
+                    elif FETCH_MODE == "park":
                         current_hour = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE).hour
                         print(f"当前时间是北京时间 {current_hour} 点", flush=True)
-                        if (global_last_message_time == 0 or total_seconds > 3600):
+                       
+                        if (global_last_message_time == 0 or (now - global_last_message_time).total_seconds() > 3590):
 
                             await op.tracking_message_range(chat=-1004372020134) 
                             await op.tracking_message_range(chat=ACTIVE_CHAT_ID)   
+                            global_last_message_time = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE)
 
-                            total_seconds = (now - global_last_message_time).total_seconds() if global_last_message_time != 0 else 0
-                            if ((current_hour+2) % operator_count) == i:
-                                await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=2, fetch=True)
-                                global_last_message_time = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE)
-                                print(f"当前时间是北京时间 {current_hour} 点，执行 extract - True", flush=True)
-                            else:
-                                await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0, fetch=False)
+                            
+                            # if ((current_hour+2) % operator_count) == i:
+                            #     await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=2, fetch=True)
+                            #     global_last_message_time = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE)
+                            #     print(f"当前时间是北京时间 {current_hour} 点，执行 extract - True", flush=True)
+                            # else:
+                            #     await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0, fetch=False)
                   
                        
                         
