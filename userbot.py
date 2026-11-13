@@ -56,8 +56,8 @@ async def main_check_user() -> None:
     try:
         # await account_manager.check_all_userbot(config)
         # await account_manager.rec_new_account(phone_number="+19039901630",pw2fa="Qqqw1234",)
-        await account_manager.rec_new_account(phone_number="+18709794154",pw2fa="z4422404",)
-        # await account_manager.rec_new_account(phone_number="+959693044956",pw2fa="aa1122",)
+        await account_manager.rec_new_account(phone_number="+17857489604",pw2fa="qq123456",)
+        # await account_manager.rec_new_account(phone_number="+573151139078",pw2fa="aa1122",)
         # await account_manager.check_phone("+12282796709")
         # await account_manager.check_phone("+254784812293")
         # await account_manager.check_phone("+254797636990") 
@@ -402,21 +402,21 @@ async def run_telethon_bot(
                 # await op.join_chat("+mhqJ-3C93F0zODEx") #桃花林 
                 # await op.join_chat("+QEtmtaI-amU5NDRh") #桃花源
 
-                # try:
-                #     await op.update_profile(random=True)
+                try:
+                    await op.update_profile(random_name=True)
                    
-                #     await op.join_chat("https://t.me/BJDADJB") 
-                #     print(f"Joined chat https://t.me/BJDADJB for operator {operator_length}",flush=True)
-                #     await asyncio.sleep(3)
+                    await op.join_chat("https://t.me/BJDADJB") 
+                    print(f"Joined chat https://t.me/BJDADJB for operator {operator_length}",flush=True)
+                    await asyncio.sleep(3)
                     
-                #     await op.join_chat("https://t.me/+i5S7P-Dol4dhNzA5")  #加入布吉岛主 
-                #     print(f"Joined chat https://t.me/+i5S7P-Dol4dhNzA5 for operator {operator_length}",flush=True)
+                    await op.join_chat("https://t.me/+i5S7P-Dol4dhNzA5")  #加入布吉岛主 
+                    print(f"Joined chat https://t.me/+i5S7P-Dol4dhNzA5 for operator {operator_length}",flush=True)
 
-                #     await asyncio.sleep(3)
-                #     await op.join_chat("https://t.me/+iHyXV6FFCQAxN2Ix")  #加入布吉岛
-                #     print(f"Joined chat https://t.me/+iHyXV6FFCQAxN2Ix for operator {operator_length}",flush=True)
-                # except Exception as e:
-                #     print(f"Failed to join chat or send message: {e}", flush=True)
+                    await asyncio.sleep(3)
+                    await op.join_chat("https://t.me/+iHyXV6FFCQAxN2Ix")  #加入布吉岛
+                    print(f"Joined chat https://t.me/+iHyXV6FFCQAxN2Ix for operator {operator_length}",flush=True)
+                except Exception as e:
+                    print(f"Failed to join chat or send message: {e}", flush=True)
 
 
    
@@ -652,19 +652,22 @@ async def run_telethon_bot(
                         
                         # 如果现在是北京时间的早上六点，十一点
                         current_hour = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE).hour
-                        print(f"当前时间是北京时间 {current_hour} 点", flush=True)
+                        if (global_last_message_time == 0 or (now - global_last_message_time).total_seconds() > 3600):
                         
-                        if (current_hour % operator_count) == i:
-                            if (global_last_message_time == 0 or (now - global_last_message_time).total_seconds() > 2300):
-                                await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=2, fetch=True)
-                                global_last_message_time = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE)
-                                print(f"当前时间是北京时间 {current_hour} 点，执行 extract - True", flush=True)
-                            else:
+                            print(f"当前时间是北京时间 {current_hour} 点", flush=True)
+                            
+                            if (current_hour % operator_count) == i:
+                                # if (global_last_message_time == 0 or (now - global_last_message_time).total_seconds() > 2300):
+                                #     await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=2, fetch=True)
+                                #     global_last_message_time = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE)
+                                #     print(f"当前时间是北京时间 {current_hour} 点，执行 extract - True", flush=True)
+                                # else:
                                 await op.tracking_message_range(chat=-1004372020134) 
-                                await op.tracking_message_range(chat=ACTIVE_CHAT_ID)                                   
-                        else:
-                            await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0, fetch=False)
-
+                                # await op.tracking_message_range(chat=ACTIVE_CHAT_ID)                                   
+                            else:
+                                await op.tracking_message_range(chat=ACTIVE_CHAT_ID)     
+                                # await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0, fetch=False)
+                            global_last_message_time = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE)
 
                     elif FETCH_MODE == "backup":
                         current_hour = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE).hour
