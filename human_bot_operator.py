@@ -437,8 +437,13 @@ class HumanBotOperator:
                     ),
                     **send_options,
                 )
+
+
+
             except Exception as exc:
                 print(f"❌ Failed to send message to {chat_id}: {exc}", flush=True)
+
+
 
     @classmethod
     async def run_chat_script(
