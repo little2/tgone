@@ -48,7 +48,36 @@ def test_xhgsgk_bot_clicks_calculated_check_in_answer():
     asyncio.run(AIBot.xhgsgk_bot(operator))
 
     assert operator.capture_bot_messages.await_args_list == [
-        call("target", "/start 9uiZrIA2lj3qGSK"),
+        call("target", "/start yoQyA2fgRxrxkgR"),
         call("target", "/qd"),
         call("target", click_button_title="6", message_id=88),
+    ]
+
+
+def test_xhgsgk_bot_handles_empty_reply_after_clicking_16(monkeypatch):
+    registration_board = SimpleNamespace(id=100, text="请完成注册")
+    wrong_answer = SimpleNamespace(message="答案错误")
+    challenge = SimpleNamespace(id=200, text="2 * 3 = ?")
+    replies = [[registration_board]]
+    for number in range(1, 16):
+        replies.extend(
+            ([wrong_answer], [SimpleNamespace(id=100 + number, text="请完成注册")])
+        )
+    replies.extend(([], [challenge], [SimpleNamespace(text="签到成功")]))
+
+    operator = SimpleNamespace(
+        _resolve_input_entity=AsyncMock(return_value="target"),
+        join_chat=AsyncMock(),
+        capture_bot_messages=AsyncMock(side_effect=replies),
+    )
+    monkeypatch.setattr(asyncio, "sleep", AsyncMock())
+
+    asyncio.run(AIBot.xhgsgk_bot(operator))
+
+    assert call("target", click_button_title="16", message_id=115) in (
+        operator.capture_bot_messages.await_args_list
+    )
+    assert operator.capture_bot_messages.await_args_list[-2:] == [
+        call("target", "/qd"),
+        call("target", click_button_title="6", message_id=200),
     ]

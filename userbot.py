@@ -312,7 +312,7 @@ async def run_telethon_bot(
                 "WHERE check_group IN (23) ",
                 error_tag="userbot.random_session_tokens",
             )  
-        elif FETCH_MODE == "ai":
+        elif FETCH_MODE == "Patrol":
 
             bots = await MySQLPool.fetchall(
                 "SELECT * "
@@ -320,8 +320,8 @@ async def run_telethon_bot(
                 "WHERE bot_id = user_id "
                 "AND bot_token IS NOT NULL "
                 "AND work_status IN ('used', 'free') "
-                "AND check_timestamp <= UNIX_TIMESTAMP() - 3600 "
-                "AND check_group IN (1,2) "
+                "AND check_timestamp <= UNIX_TIMESTAMP() - 39600 "
+                "AND check_group IN (0, 1,2) "
                 "ORDER BY check_timestamp ASC",
                 error_tag="userbot.random_session_tokens",
             )
@@ -372,7 +372,10 @@ async def run_telethon_bot(
                 finally:
                     if "op" in locals():
                         await op.disconnect()
-
+                    '''
+                    设定 1 分钟后再次执行 main()
+                    '''
+                    
             return
 
 
@@ -461,7 +464,7 @@ async def run_telethon_bot(
                 # await op.join_chat("https://t.me/+_Pz9_6udznFlMDhi") #玉树花
 
 
-                if FETCH_MODE in ("ai"):
+                if FETCH_MODE in ("patrol"):
                     try:
                         await AIBot.t_manbaout_bot(op)
                         await AIBot.lijiankaige_bot(op)
@@ -472,10 +475,11 @@ async def run_telethon_bot(
                       
                         await AIBot.ShuoWen_bot(op)
                         await AIBot.ftcyy04bot(op)
-                        await AIBot.xhgsgk_bot(op)
+                       
                         # await AIBot.dkeiwfBot(op)
                         await AIBot.huangdoubaozi_bot(op)
                         await AIBot.LiteAI_ai(op)
+                        await AIBot.xhgsgk_bot(op)
                         
                         
                     except Exception as e:
@@ -740,7 +744,7 @@ async def run_telethon_bot(
                             #     print(f"当前时间是北京时间 {current_hour} 点，执行 extract - True", flush=True)
                             # else:
                             #     await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0, fetch=False)
-                    elif FETCH_MODE == "ai":
+                    elif FETCH_MODE == "patrol":
                         # 访问玲珑 https://t.me/lijiankaige_bot?start=OQPiuIKr
 
                         pass
@@ -898,12 +902,44 @@ async def main() -> None:
         await asyncio.gather(*tasks, return_exceptions=True)
 
 
+async def run_main_loop(interval_seconds: float = 60) -> None:
+    """持续执行 main；每轮结束或失败后等待指定秒数再重新执行。"""
+    if isinstance(interval_seconds, bool) or not isinstance(
+        interval_seconds, (int, float)
+    ):
+        raise TypeError("interval_seconds 必须是数字")
+    if interval_seconds <= 0:
+        raise ValueError("interval_seconds 必须大于 0")
+
+    while True:
+        try:
+            await main()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            print(f"⚠️ main() 执行失败：{exc}", flush=True)
+
+        print(
+            f"main() 本轮执行结束，{interval_seconds:g} 秒后再次执行。",
+            flush=True,
+        )
+        await asyncio.sleep(interval_seconds)
+
+
+async def run_for_fetch_mode() -> None:
+    """AI 模式持续循环执行，其余模式仅执行一次。"""
+    if FETCH_MODE == "patrol":
+        await run_main_loop(7000)
+        return
+    await main()
+
+
 if __name__ == "__main__":
     async def _run_all() -> None:
         # await main_check_user()
         # await main_auto_talk()
         # await main_move()
-        await main()
+        await run_for_fetch_mode()
 
 
 

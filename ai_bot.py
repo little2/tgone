@@ -56,7 +56,7 @@ class AIBot:
 				checking = await op.capture_bot_messages(
 					target_bot, click_button_title="💎", message_id=board_id
 				)
-				print(f"checking={checking}", flush=True)
+				# print(f"checking={checking}", flush=True)
 		else:
 			print("未收到任何消息", flush=True)
 
@@ -181,7 +181,7 @@ https://gaoren.me?start=ref_6941890966'''
 					target_bot, click_button_title="签到", message_id=board_id
 				)
 
-			print(f"checking={checking2}", flush=True)
+			# print(f"checking={checking2}", flush=True)
 		else:
 			print("未收到任何消息", flush=True)
 			
@@ -199,24 +199,42 @@ https://gaoren.me?start=ref_6941890966'''
 			# print(f"start_result={start_result[-1]}", flush=True)
 			if "完成注册" in start_result[-1].text:
 				board_id = start_result[-1].id
+				registration_completed = False
 
-				for i in range(1, 16):
+				for i in range(1, 17):
 					checking = await op.capture_bot_messages(
 						target_bot, click_button_title=str(i), message_id=board_id
 					)
 				  
-					await asyncio.sleep(2)
+					await asyncio.sleep(3)
+					if not checking:
+						print(f"点 {i} 后未收到机器人回覆，继续尝试。", flush=True)
+						continue
 
-					if "答案错误" in str(checking[-1].message):
+					checking_message = checking[-1]
+					checking_text = (
+						getattr(checking_message, "message", None)
+						or getattr(checking_message, "text", None)
+						or ""
+					)
+					if "答案错误" in checking_text:
+						print(f"点 {i} 错误，重新开始注册", flush=True)
 						start_result = await op.capture_bot_messages(target_bot, "/start")
+						if not start_result:
+							print("重新开始注册后未收到机器人回覆。", flush=True)
+							break
 						board_id = start_result[-1].id
-						
-					else: #🎉 验证成功！注册完成！欢迎使用！
-						print(f"22=>{checking[-1].message}",flush=True)
-						break
+						continue
 
+					# 🎉 验证成功！注册完成！欢迎使用！
+					print(f"22=>{checking_text}", flush=True)
+					registration_completed = True
+					break
 
-				print("完成注册", flush=True) 
+				if registration_completed:
+					print("完成注册", flush=True)
+				else:
+					print("未能确认注册完成", flush=True)
 		else:
 			print("未收到任何消息", flush=True)  
 
