@@ -52,12 +52,13 @@ async def main_check_user() -> None:
         port=int(config.get("db_port", os.getenv("MYSQL_DB_PORT", 3306))),
     )
 
-   
-
     try:
-        # await account_manager.check_all_userbot(config)
+        await account_manager.check_all_userbot(config)
+
+
+        
         # await account_manager.rec_new_account(phone_number="+19039901630",pw2fa="Qqqw1234",)
-        await account_manager.rec_new_account(phone_number="+17067077939",pw2fa="qq123456",)
+        # await account_manager.rec_new_account(phone_number="+17067077939",pw2fa="qq123456",)
         # await account_manager.rec_new_account(phone_number="+573151139078",pw2fa="aa1122",)
         # await account_manager.check_phone("+12282796709")
         # await account_manager.check_phone("+254784812293")
@@ -312,11 +313,73 @@ async def run_telethon_bot(
                 error_tag="userbot.random_session_tokens",
             )  
         elif FETCH_MODE == "ai":
-            session_rows = await MySQLPool.fetchall(
-                "SELECT `bot_id`,`bot_token` FROM `bot` "
-                "WHERE check_group IN (17) ",
+
+            bots = await MySQLPool.fetchall(
+                "SELECT * "
+                "FROM `bot` "
+                "WHERE bot_id = user_id "
+                "AND bot_token IS NOT NULL "
+                "AND work_status IN ('used', 'free') "
+                "AND check_timestamp <= UNIX_TIMESTAMP() - 3600 "
+                "AND check_group IN (1,2) "
+                "ORDER BY check_timestamp ASC",
                 error_tag="userbot.random_session_tokens",
-            )    
+            )
+
+           
+            if not bots:
+                print("bot 資料表沒有任何資料",flush=True)
+                return
+
+            for bot in bots:
+                
+                await account_manager.check_userbot(bot)
+                await asyncio.sleep(5)  # 避免過於頻繁的請求
+                print("\n" + "=" * 50 + "\n", flush=True)
+
+                try:
+                    op = await HumanBotOperator.login_with_session(
+                        session_string=bot["bot_token"],
+                        api_id=API_ID,
+                        api_hash=API_HASH,
+                    )
+
+                    try:
+                        if bot['check_group'] == 2:
+                            await AIBot.t_manbaout_bot(op)
+                        await AIBot.lijiankaige_bot(op)
+                        await AIBot.cyaibox116bot(op)
+                        await AIBot.QQCC_123_bot(op)
+                        await AIBot.huyaback_bot(op)
+                        await AIBot.linglongai_10bot(op)
+                    
+                        await AIBot.ShuoWen_bot(op)
+                        await AIBot.ftcyy04bot(op)
+                        await AIBot.xhgsgk_bot(op)
+                        # await AIBot.dkeiwfBot(op)
+                        await AIBot.huangdoubaozi_bot(op)
+                        await AIBot.LiteAI_ai(op)
+                        
+                        
+                    except Exception as e:
+                        print(f"Failed: {e}", flush=True)
+                    
+
+
+
+                except Exception as exc:
+                    print(f"登录失败: {exc}", flush=True)
+                finally:
+                    if "op" in locals():
+                        await op.disconnect()
+
+            return
+
+
+
+
+
+
         else:
             session_rows = await MySQLPool.fetchall(
                 "SELECT `bot_id`,`bot_token` FROM `bot` "
@@ -536,7 +599,7 @@ async def run_telethon_bot(
                         #     SharedConfig.get("key_man_id"),
                         #     777000,
                         # )
-                        # operator_check_message_time[i] = now
+                        operator_check_message_time[i] = now
 
                         if FETCH_MODE in ("render", "gridztd","park"):
                             start_result = await op.capture_bot_messages(f"@{HumanBotOperator.BJD_CODE_BOT_NAME}", "/me")

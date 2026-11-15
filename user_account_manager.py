@@ -115,9 +115,9 @@ class UserAccountManager:
             SELECT *
             FROM `bot`
             WHERE bot_id = user_id
-              AND bot_token IS NOT NULL
-              AND work_status IN ('used', 'free')
-                        AND check_timestamp <= UNIX_TIMESTAMP() - 3600
+                AND bot_token IS NOT NULL
+                AND work_status IN ('used', 'free')
+                AND check_timestamp <= UNIX_TIMESTAMP() - 3600
             ORDER BY check_timestamp ASC
         """
         return await MySQLPool.fetchall(
@@ -511,6 +511,7 @@ class UserAccountManager:
                     target = await user_client.get_entity(target_user_id)
                     await user_client.send_message(
                         target,
+                        f"<blockquote>{datetime.now(APP_TIMEZONE)}</blockquote>"
                         f"[RESET] 你好, 我是 <code>{me.id}</code> - "
                         f"{me.first_name} {me.last_name or ''} +{me.phone} "
                         f"\nrestricted={me.restricted}\nscam={me.scam}\nfake={me.fake}",
@@ -542,10 +543,11 @@ class UserAccountManager:
 
                 device_model_str = ""
                 for a in auths.authorizations:
-                    device_model_str += a.device_model + "\n"
+                    
                     if a.hash == 0:
                         
                         print(f"✅ 保留本身 id={a.hash}  device={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created.astimezone(APP_TIMEZONE)}")
+                        device_model_str += "✅ 保留本身 "+a.device_model + "\n"
                         continue  # 跳过主会话
                     elif a.device_model not in WHITELIST:
                         try:
@@ -553,16 +555,20 @@ class UserAccountManager:
                             seven_days_ago = datetime.now(APP_TIMEZONE) - timedelta(days=7)
                             if a.date_created >= seven_days_ago:
                                 print(f"❗️ 最近七天内创建的会话 id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created.astimezone(APP_TIMEZONE)}")
+                                device_model_str += "❗️ 最近七天内创建的会话 "+a.device_model + "\n"
 
                             elif a.device_model in BLACKLIST:
                                 print(f"❌ 已删除 id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created.astimezone(APP_TIMEZONE)} (已删除)")
+                                device_model_str += "❌ 黑名单已删除 "+a.device_model + "\n"
                                 await user_client(ResetAuthorizationRequest(hash=a.hash))
                             elif a.hash == -212406687192506612 or a.hash == -6894703599540223408:
                                 print(f"❌ 已删除 id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created.astimezone(APP_TIMEZONE)} (已删除)")
+                                device_model_str += "❌ 特定会话已删除 "+a.device_model + "\n"
                                 await user_client(ResetAuthorizationRequest(hash=a.hash))
                             else:
                                 # await client(ResetAuthorizationRequest(hash=a.hash))
                                 print(f"⚠️ 建議删除 id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created.astimezone(APP_TIMEZONE)}")
+                                device_model_str += "⚠️ 建議删除 "+a.device_model + "\n"
                                 # ❗️ 建議删除 id=-2622773520313404250  device_model=Desktop  platform=  ip=  date=2026-05-08 15:57:28+00:00
                                 # ❗️ 建議删除 id=985113455830527986  device_model=Desktop  platform=  ip=  date=2026-01-03 08:01:27+00:00
                                 # ❗️ 建議删除 id=3145982375868211614  device_model=Desktop  platform=  ip=  date=2026-05-08 15:55:32+00:00
@@ -570,13 +576,14 @@ class UserAccountManager:
                             print(f"❌ 删除 {a.hash} 失败: {e}")
                     else:
                         print(f"✅ 保留 id={a.hash}  device_model={a.device_model}  platform={a.platform}  ip={a.ip}  date={a.date_created.astimezone(APP_TIMEZONE)}")
+                        device_model_str += "✅ 白名单保留 "+a.device_model + "\n"
 
                 await user_client.send_message(
                     target,
                     f"[RESET] 你好, 我是 <code>{me.id}</code> - "
                     f"{me.first_name} {me.last_name or ''} +{me.phone} "
                     f"\nrestricted={me.restricted}\nscam={me.scam}\nfake={me.fake}"
-                    f"\ndevice_model=\n{device_model_str}",
+                    f"\n<b>device_model:</b>\n{device_model_str}",
                     parse_mode="HTML",
                 )
 
