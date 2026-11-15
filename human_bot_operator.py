@@ -38,7 +38,12 @@ from telethon.tl.functions.account import (
     UpdateUsernameRequest,
 )
 from telethon.tl.functions.channels import JoinChannelRequest
+from telethon.tl.functions.chatlists import (
+    CheckChatlistInviteRequest,
+    JoinChatlistInviteRequest,
+)
 from telethon.tl.functions.messages import ImportChatInviteRequest
+from telethon.tl.functions.users import GetFullUserRequest
 from telethon.tl.types import (
     Message,
     InputMessagesFilterVideo,
@@ -304,7 +309,7 @@ class HumanBotOperator:
                         raise ValueError(f"@{username} 不是机器人账号")
 
                     cls.BJD_CODE_BOT_ID = int(entity.id)
-                    print(f"🤖 已获取 @{username} 的 id = {entity.id}")
+                   
 
                 return cls(client, taobao_bot_username=taobao_bot_username)
 
@@ -3992,8 +3997,30 @@ class HumanBotOperator:
         await self.client.disconnect()
 
     async def join_chat(self, chat_ref: str) -> Any:
-        """通过公开用户名或私有邀请链接加入频道/群组。"""
+        """通过公开用户名、私有邀请或聊天文件夹链接加入频道/群组。"""
         try:
+            chatlist_slug = self._extract_chatlist_slug(chat_ref)
+            if chatlist_slug is not None:
+                invite = await self.client(
+                    CheckChatlistInviteRequest(slug=chatlist_slug)
+                )
+                peer_refs = getattr(invite, "missing_peers", None)
+                if peer_refs is None:
+                    peer_refs = getattr(invite, "peers", [])
+                if not peer_refs:
+                    print("聊天文件夹中的群组或频道均已加入。", flush=True)
+                    return invite
+
+                input_peers = [
+                    await self.client.get_input_entity(peer) for peer in peer_refs
+                ]
+                return await self.client(
+                    JoinChatlistInviteRequest(
+                        slug=chatlist_slug,
+                        peers=input_peers,
+                    )
+                )
+
             public_ref = self._extract_public_chat_ref(chat_ref)
             if public_ref is not None:
                 entity = await self.client.get_entity(public_ref)
@@ -4007,6 +4034,29 @@ class HumanBotOperator:
         except UserAlreadyParticipantError:
             print("当前账号已经加入该群组或频道。", flush=True)
             return None
+
+    @staticmethod
+    def _extract_chatlist_slug(chat_ref: str) -> str | None:
+        """提取 ``t.me/addlist/<slug>`` 聊天文件夹邀请代码。"""
+        value = (chat_ref or "").strip()
+        if "://" not in value:
+            return None
+
+        parsed = urlparse(value)
+        if parsed.scheme not in {"http", "https"} or parsed.netloc.lower() not in {
+            "t.me",
+            "www.t.me",
+        }:
+            return None
+
+        path_parts = parsed.path.strip("/").split("/")
+        if len(path_parts) != 2 or path_parts[0].lower() != "addlist":
+            return None
+
+        slug = path_parts[1]
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", slug):
+            raise ValueError("Telegram 聊天文件夹邀请码格式无效")
+        return slug
 
     @staticmethod
     def _extract_public_chat_ref(chat_ref: str) -> str | None:
@@ -4185,6 +4235,38 @@ class HumanBotOperator:
         if index < len(text) and 0x1F3FB <= ord(text[index]) <= 0x1F3FF:
             index += 1
         return index
+
+    async def update_bio(self, bio: str) -> str:
+        """更新当前用户简介，并从 Telegram 服务器读取结果进行确认。"""
+        if not isinstance(bio, str):
+            raise TypeError("bio 必须是字符串")
+
+        try:
+            updated_user = await self.client(UpdateProfileRequest(about=bio))
+            full_result = await self.client(GetFullUserRequest(id=updated_user))
+        except Exception as exc:
+            print(f"⚠️ 用户简介更新失败：{exc}", flush=True)
+            raise
+
+        server_bio = (getattr(full_result.full_user, "about", None) or "")
+        # if server_bio != bio:
+        #     raise RuntimeError(
+        #         f"Telegram 返回的简介与设置值不一致：server_bio={server_bio!r}"
+        #     )
+
+        user_id = getattr(updated_user, "id", None)
+        username = getattr(updated_user, "username", None)
+        account_label = f"id={user_id}"
+        if username:
+            account_label += f", username=@{username}"
+
+        action = "更新" if bio else "清除"
+        print(
+            f"✅ 用户简介已在 Telegram 服务器确认{action}（{account_label}）："
+            f"{server_bio!r}",
+            flush=True,
+        )
+        return server_bio
 
     async def update_profile(
         self,

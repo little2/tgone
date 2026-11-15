@@ -14,6 +14,7 @@ from aiogram_bot_operator import AiogramBotOperator
 from tgone_mysql import MySQLPool
 from user_account_manager import UserAccountManager
 from human_bot_operator import HumanBotOperator
+from ai_bot import AIBot
 
 from shared_config import SharedConfig  # noqa: E402
 SharedConfig.load(True)
@@ -56,7 +57,7 @@ async def main_check_user() -> None:
     try:
         # await account_manager.check_all_userbot(config)
         # await account_manager.rec_new_account(phone_number="+19039901630",pw2fa="Qqqw1234",)
-        await account_manager.rec_new_account(phone_number="+17857489604",pw2fa="qq123456",)
+        await account_manager.rec_new_account(phone_number="+17067077939",pw2fa="qq123456",)
         # await account_manager.rec_new_account(phone_number="+573151139078",pw2fa="aa1122",)
         # await account_manager.check_phone("+12282796709")
         # await account_manager.check_phone("+254784812293")
@@ -64,6 +65,8 @@ async def main_check_user() -> None:
 
     finally:
         await MySQLPool.close()
+
+
 
 
 
@@ -288,6 +291,7 @@ async def run_telethon_bot(
         configure_mysql_pool(config)
     operator: dict[int, HumanBotOperator] = {}
     bbt_operator = None
+    
     try:
         if FETCH_MODE == "render":
             session_rows = await MySQLPool.fetchall(
@@ -306,6 +310,12 @@ async def run_telethon_bot(
                 "SELECT `bot_id`,`bot_token` FROM `bot` "
                 "WHERE check_group IN (23) ",
                 error_tag="userbot.random_session_tokens",
+            )  
+        elif FETCH_MODE == "ai":
+            session_rows = await MySQLPool.fetchall(
+                "SELECT `bot_id`,`bot_token` FROM `bot` "
+                "WHERE check_group IN (17) ",
+                error_tag="userbot.random_session_tokens",
             )    
         else:
             session_rows = await MySQLPool.fetchall(
@@ -316,7 +326,7 @@ async def run_telethon_bot(
 
         if not session_rows:
             raise RuntimeError(
-                "从数据库中获取到的 session_rows 为空"
+                f"从数据库中获取到的 session_rows 为空, FETCH_MODE={FETCH_MODE}"
             )
         if len(session_rows) < 1:
             raise RuntimeError(
@@ -388,10 +398,29 @@ async def run_telethon_bot(
                 # await op.join_chat("https://t.me/+_Pz9_6udznFlMDhi") #玉树花
 
 
- 
-    
-                    
-                
+                if FETCH_MODE in ("ai"):
+                    try:
+                        await AIBot.t_manbaout_bot(op)
+                        await AIBot.lijiankaige_bot(op)
+                        await AIBot.cyaibox116bot(op)
+                        await AIBot.QQCC_123_bot(op)
+                        await AIBot.huyaback_bot(op)
+                        await AIBot.linglongai_10bot(op)
+                      
+                        await AIBot.ShuoWen_bot(op)
+                        await AIBot.ftcyy04bot(op)
+                        await AIBot.xhgsgk_bot(op)
+                        # await AIBot.dkeiwfBot(op)
+                        await AIBot.huangdoubaozi_bot(op)
+                        await AIBot.LiteAI_ai(op)
+                        
+                        
+                    except Exception as e:
+                        print(f"Failed: {e}", flush=True)
+                    finally:
+                        sleep_time = random.randint(5, 13)
+                        print(f"==>Sleeping for {sleep_time} .", flush=True)
+                        await asyncio.sleep(sleep_time)
 
 
                
@@ -402,43 +431,45 @@ async def run_telethon_bot(
                 # await op.join_chat("+mhqJ-3C93F0zODEx") #桃花林 
                 # await op.join_chat("+QEtmtaI-amU5NDRh") #桃花源
 
-                try:
-                    await op.update_profile(random_name=True)
-                   
-                    await op.join_chat("https://t.me/BJDADJB") 
-                    print(f"Joined chat https://t.me/BJDADJB for operator {operator_length}",flush=True)
-                    await asyncio.sleep(3)
+
+                if FETCH_MODE in ("render", "gridztd","park"):
+                    try:
+                        await op.update_profile(random_name=True)
                     
-                    await op.join_chat("https://t.me/+i5S7P-Dol4dhNzA5")  #加入布吉岛主 
-                    print(f"Joined chat https://t.me/+i5S7P-Dol4dhNzA5 for operator {operator_length}",flush=True)
+                        await op.join_chat("https://t.me/BJDADJB") 
+                        print(f"Joined chat https://t.me/BJDADJB for operator {operator_length}",flush=True)
+                        await asyncio.sleep(3)
+                        
+                        await op.join_chat("https://t.me/+i5S7P-Dol4dhNzA5")  #加入布吉岛主 
+                        print(f"Joined chat https://t.me/+i5S7P-Dol4dhNzA5 for operator {operator_length}",flush=True)
 
-                    await asyncio.sleep(3)
-                    await op.join_chat("https://t.me/+iHyXV6FFCQAxN2Ix")  #加入布吉岛
-                    print(f"Joined chat https://t.me/+iHyXV6FFCQAxN2Ix for operator {operator_length}",flush=True)
-                except Exception as e:
-                    print(f"Failed to join chat or send message: {e}", flush=True)
+                        await asyncio.sleep(3)
+                        await op.join_chat("https://t.me/+iHyXV6FFCQAxN2Ix")  #加入布吉岛
+                        print(f"Joined chat https://t.me/+iHyXV6FFCQAxN2Ix for operator {operator_length}",flush=True)
+                    except Exception as e:
+                        print(f"Failed to join chat or send message: {e}", flush=True)
 
 
-   
-                # try:
-                #     # 首頁    /start
-                #     start_result = await op.capture_bot_messages(f"@{HumanBotOperator.BJD_CODE_BOT_NAME}", "/start")
-                #     if start_result:
-                #         receive_text = start_result[-1].text if start_result else ""
-                #         if "天内无群聊发言" in receive_text:
-                #             print("‼️ 收到天内无群聊发言的提示，继续下一步。", flush=True)
-                #             await op.send_random_message(chat_id=[ACTIVE_CHAT_ID])
-                #         else:
-                #             print(f"receive_text={receive_text}", flush=True)
-                #     else:
-                #         print("未收到任何消息", flush=True)
-                #         await op.send_random_message(chat_id=[ACTIVE_CHAT_ID])
-                # except Exception as e:
-                #     print(f"Failed to join chat: {e}", flush=True)
-                # finally:
-                #     sleep_time = random.randint(5, 13)
-                #     print(f"==>Sleeping for {sleep_time} .", flush=True)
-                #     await asyncio.sleep(sleep_time)
+    
+                    try:
+                        # 首頁    /start
+                        start_result = await op.capture_bot_messages(f"@{HumanBotOperator.BJD_CODE_BOT_NAME}", "/start")
+                        if start_result:
+                            receive_text = start_result[-1].text if start_result else ""
+                            if "天内无群聊发言" in receive_text:
+                                print("‼️ 收到天内无群聊发言的提示，继续下一步。", flush=True)
+                                await op.send_random_message(chat_id=[ACTIVE_CHAT_ID])
+                            else:
+                                print(f"receive_text={receive_text}", flush=True)
+                        else:
+                            print("未收到任何消息", flush=True)
+                            await op.send_random_message(chat_id=[ACTIVE_CHAT_ID])
+                    except Exception as e:
+                        print(f"Failed to join chat: {e}", flush=True)
+                    finally:
+                        sleep_time = random.randint(5, 13)
+                        print(f"==>Sleeping for {sleep_time} .", flush=True)
+                        await asyncio.sleep(sleep_time)
 
 
 
@@ -462,53 +493,10 @@ async def run_telethon_bot(
 
 
 
-        # for cnt in range(10):
-        #     for i, session in enumerate(selected_sessions):
-        #         try:
-        #             op1 = operator[i]
-        #             op2 = operator[(i+1) % len(operator)]
-                
-                    
-        #             display_name = operator_title[i]
-        #             print(f"Processing operator {i} with display name {display_name}")
-        #             for j in range(3):
-        #                 await asyncio.gather(
-        #                     op1.extract(ask_like=True, bot_id=HumanBotOperator.FZ_CODE_BOT_ID, extract_status=0),
-        #                     op2.extract(ask_like=True, bot_id=HumanBotOperator.FZ_CODE_BOT_ID, extract_status=0),
-        #                 )
-                    
-        #                 sleep_time = random.randint(3, 7)
-        #                 await asyncio.sleep(sleep_time)
-        #         except Exception as e:
-        #             print(f"Error in operator {i}: {e}")
-        #     await asyncio.sleep(random.randint(3, 7))
-
         
         
 
-        cset = {}
-
-
-        cset_pxm_27491912={"🪜📔🏣🍸🧂🐍😩📆","🪜📔🏣🍸🧂🐍😩📆","🌛🎣😀🌕🍌🤢🔨🥗","📱💳🚞🔫🥵📰🥎🐙","🐸🛠🌆🚟🩰😌🤓🍺","🌛🔋🐗📆🎂📆🎭🤫","😃🤐🦉🥌🧿🍺🦙🧽"}
-        cset_ow_4254 ={"🎉🛠🎰🐦🐉🏡🔎🥒","🦕🖨🍳🍱🐤💫🚘🍲","🚽🦔🔎🐄🍑🐇🍮🏡","🦁🐙🔦🐍🪳💫🦔🌌","😊📡🎢🐉🐍📔🚝😊","🎇😽🏵🍱🧆🐨🫐😴","🥘🎣🎭🍲🛤🚍🍟🎚","🤹🍋🐦🌈🔫🎂🎣🏜"}
-        cset_gayne_7972120149={"📐😊🎻🧿😓🐜😀😈","🌚🐼🧹🚘🐦🩰🎫🚽","😮🛺📐🤫📐🔦🌙🪙","😳🎭🌡🛖🐤🤮💌🛺","🚝🐦🍳😽😃🐊🐭😺"}
-        cset_guojin={"🚑🌸🍌🎯🛏🌌📡🌇","🥖😂🏒🏜🛁🐀🧽🌇","🪳🥘🔖🍲😂🥬🚍🚟"}
-        cset_light={"🪜🐺😋🦕🛡🐜🚽🦌","🌶🎂🐗🌌🗼🐼🍣🦕","🐤🚝🥋😀🧂🐙🔫🐍","🔪🪵😬🧺🍺🌒😃🧺","🍸🎰🧂🤕🎖🪙🤹😌"}
-        cset = cset_light
-        # cset[1]="🤫🏵😬🥪🎭🏫🎣🥣"
-        # cset[2]="🌕🛖🔨🫔🐪🐄🎡🧆"
-        # cset[3]="📰🏒😉😠🔨📺🐗🚤"
-        # cset[4]="🐱🎢🚅🙊🌠😆🦊🚆"
-        # cset[5]="🌇🚞🖨😩🌴🚑🗼🔫"
-        # cset[6]="🏘🌚🚘🛺🔨🏢🐄🖨"
-        # cset[7]="🍜🛤🥨🌯🫐🔫🛡😴"
-
-        # for code in cset:
-        #     for i, op in operator.items():
-        #         print(f"code={code} i={i}", flush=True)
-        #         r = await op.extract(code=code, bot_id=BJD_CODE_BOT_ID, ask_like=True)
-
-        #         await asyncio.sleep(random.randint(3, 5))
+        
         t=0
         operator_count = len(operator)
         while True:  # Infinite loop, adjust the condition as needed
@@ -540,54 +528,56 @@ async def run_telethon_bot(
                     # 如果现在是北京时间 23:00 至次日 03:00 之间，则执行任务
 
                    
-
+                    
                     if operator_check_message_time.get(i) is None or (now - operator_check_message_time[i]).total_seconds() > (3600*6):
-                        await account_manager.check_active_sessions(op.client)
-                        await account_manager.forward_latest_group_messages(
-                            op.client,
-                            SharedConfig.get("key_man_id"),
-                            777000,
-                        )
-                        operator_check_message_time[i] = now
-                        start_result = await op.capture_bot_messages(f"@{HumanBotOperator.BJD_CODE_BOT_NAME}", "/me")
-                        if start_result:
-                            receive_text = start_result[-1].text if start_result else ""
-                            await op.client.send_message(SharedConfig.get("key_man_id"), receive_text)
-                            print(f"Received text from bot: {receive_text}\n\n", flush=True)
+                        # await account_manager.check_active_sessions(op.client)
+                        # await account_manager.forward_latest_group_messages(
+                        #     op.client,
+                        #     SharedConfig.get("key_man_id"),
+                        #     777000,
+                        # )
+                        # operator_check_message_time[i] = now
+
+                        if FETCH_MODE in ("render", "gridztd","park"):
+                            start_result = await op.capture_bot_messages(f"@{HumanBotOperator.BJD_CODE_BOT_NAME}", "/me")
+                            if start_result:
+                                receive_text = start_result[-1].text if start_result else ""
+                                await op.client.send_message(SharedConfig.get("key_man_id"), receive_text)
+                                print(f"Received text from bot: {receive_text}\n\n", flush=True)
                         
                         
 
-                
-                    if current_time >= time(0, 0) and current_time <= time(0, 30):
-                        last_message_time = operator_last_message_time.get(i)
-                        if (
-                            last_message_time is None
-                            or (now - last_message_time).total_seconds() > 61
-                        ):
-                            say_result = None
-                            if current_time >= time(0, 1) and current_time < time(0, 3):
-                                say_result = await op.chat_water_gererator("greeting")
-                            elif current_time >= time(0, 3) and current_time < time(0, 10):
-                                say_result = await op.chat_water_gererator("checkin")
-                            elif current_time >= time(0, 10) and current_time < time(0, 30):
-                                say_result = await op.chat_water_gererator()
-                            
-                            if say_result and "message" in say_result:
-                                sleep_time = random.randint(5, 17)
-                                if sleep_time > 8:
-                                    await op.client.send_message(ACTIVE_CHAT_ID, say_result['message'])
-                                    operator_last_message_time[i] = now
-                                    print(f"{say_result['message']}",flush=True)
+                    if FETCH_MODE in ("render", "gridztd","park"):
+                        if current_time >= time(0, 0) and current_time <= time(0, 30):
+                            last_message_time = operator_last_message_time.get(i)
+                            if (
+                                last_message_time is None
+                                or (now - last_message_time).total_seconds() > 61
+                            ):
+                                say_result = None
+                                if current_time >= time(0, 1) and current_time < time(0, 3):
+                                    say_result = await op.chat_water_gererator("greeting")
+                                elif current_time >= time(0, 3) and current_time < time(0, 10):
+                                    say_result = await op.chat_water_gererator("checkin")
+                                elif current_time >= time(0, 10) and current_time < time(0, 30):
+                                    say_result = await op.chat_water_gererator()
+                                
+                                if say_result and "message" in say_result:
+                                    sleep_time = random.randint(5, 17)
+                                    if sleep_time > 8:
+                                        await op.client.send_message(ACTIVE_CHAT_ID, say_result['message'])
+                                        operator_last_message_time[i] = now
+                                        print(f"{say_result['message']}",flush=True)
+                                    else:
+                                        sleep_time = 3    
+                                    # print(f"Generated message: {say_result['message']}", flush=True)
                                 else:
-                                    sleep_time = 3    
-                                # print(f"Generated message: {say_result['message']}", flush=True)
-                            else:
-                                sleep_time = random.randint(3, 5)
+                                    sleep_time = random.randint(3, 5)
 
-                        
-                        print(f"==>Sleeping for {sleep_time} seconds before next operation.", flush=True)
-                        await asyncio.sleep(sleep_time)
-                        continue
+                            
+                            print(f"==>Sleeping for {sleep_time} seconds before next operation.", flush=True)
+                            await asyncio.sleep(sleep_time)
+                            continue
 
                     
                 except Exception as exc:
@@ -687,7 +677,10 @@ async def run_telethon_bot(
                             #     print(f"当前时间是北京时间 {current_hour} 点，执行 extract - True", flush=True)
                             # else:
                             #     await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0, fetch=False)
-                  
+                    elif FETCH_MODE == "ai":
+                        # 访问玲珑 https://t.me/lijiankaige_bot?start=OQPiuIKr
+
+                        pass
                        
                         
 
@@ -775,7 +768,7 @@ async def _start_health_server() -> tuple[web.AppRunner, str]:
     raise RuntimeError("找不到可用的健康检查端口（已尝试 10000–10009）") from last_error
 
 async def main() -> None:
-    """同时执行 Telethon 用户账号流程与 Aiogram Bot polling。"""
+    """执行 Telethon，并在有 Bot Token 时同时执行 Aiogram polling。"""
     account_manager = UserAccountManager()
     config = account_manager.load_config()
     configure_mysql_pool(config)
@@ -786,35 +779,44 @@ async def main() -> None:
     try:
         health_runner, bind_address = await _start_health_server()
         print(f"HTTP 健康检查服务已启动：{bind_address}", flush=True)
-        print("正在并发启动 Aiogram 与 Telethon...", flush=True)
+        bot_token = str(
+            config.get("bot_token") or os.getenv("BOT_TOKEN", "")
+        ).strip()
 
-        aiogram_operator = AiogramBotOperator(config)
-        aiogram_task = asyncio.create_task(
-            aiogram_operator.run(),
-            name="aiogram-bot-polling",
-        )
-        aiogram_connected_task = asyncio.create_task(
-            aiogram_operator.connected_event.wait(),
-            name="wait-aiogram-connected",
-        )
+        if bot_token:
+            print("正在并发启动 Aiogram 与 Telethon...", flush=True)
+            aiogram_operator = AiogramBotOperator(config)
+            aiogram_task = asyncio.create_task(
+                aiogram_operator.run(),
+                name="aiogram-bot-polling",
+            )
+            aiogram_connected_task = asyncio.create_task(
+                aiogram_operator.connected_event.wait(),
+                name="wait-aiogram-connected",
+            )
 
-        done, _ = await asyncio.wait(
-            (aiogram_task, aiogram_connected_task),
-            return_when=asyncio.FIRST_COMPLETED,
-        )
-        if aiogram_task in done:
-            # Aiogram 在连接成功前异常结束，直接向上传递异常，避免永久等待。
-            await aiogram_task
+            done, _ = await asyncio.wait(
+                (aiogram_task, aiogram_connected_task),
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if aiogram_task in done:
+                # Aiogram 在连接成功前异常结束，直接向上传递异常，避免永久等待。
+                await aiogram_task
 
-        await aiogram_connected_task
-        print("Aiogram Bot 已确认连接，正在启动 Telethon...", flush=True)
-        # print(f"config: {config}")
+            await aiogram_connected_task
+            print("Aiogram Bot 已确认连接，正在启动 Telethon...", flush=True)
+        else:
+            print("未设定 bot_token，跳过 AiogramBotOperator。", flush=True)
+
         telethon_task = asyncio.create_task(
             run_telethon_bot(config, configure_mysql=False),
             name="telethon-user-flow",
         )
 
-        await asyncio.gather(aiogram_task, telethon_task)
+        running_tasks = [telethon_task]
+        if aiogram_task is not None:
+            running_tasks.append(aiogram_task)
+        await asyncio.gather(*running_tasks)
     finally:
         # 优先关闭 HTTP server，避免其他任务取消较慢时继续占用端口。
         if health_runner is not None:
