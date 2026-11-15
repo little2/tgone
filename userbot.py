@@ -478,7 +478,7 @@ async def run_telethon_bot(
 
                 if FETCH_MODE in ("render", "gridztd","park"):
                     try:
-                        await op.update_profile(random_name=True)
+                        # await op.update_profile(random_name=True)
                     
                         await op.join_chat("https://t.me/BJDADJB") 
                         print(f"Joined chat https://t.me/BJDADJB for operator {operator_length}",flush=True)
