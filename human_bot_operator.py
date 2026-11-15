@@ -11,7 +11,7 @@ import os
 import random
 import re
 import uuid
-from urllib.parse import unquote
+from urllib.parse import quote, unquote
 import time
 import unicodedata
 from datetime import datetime, timedelta
@@ -389,9 +389,86 @@ class HumanBotOperator:
     @classmethod
     async def set_bbt_bot(
         cls,
-        bbt_operator: "HumanBotOperator",
+        bbt_operator: "HumanBotOperator | None",
     ) -> None:
         cls.BBT_OPERATOR = bbt_operator
+
+    @classmethod
+    async def _send_media_to_bbt_channel(
+        cls,
+        source_client: Any,
+        message: Any,
+        caption: str,
+        code: str,
+        *,
+        chat_id: int = -1004306603751,
+    ) -> Any:
+        """由 BBT_OPERATOR 将媒体、caption 和两个 code 按钮发到频道。"""
+        bbt_operator = cls.BBT_OPERATOR
+        if bbt_operator is None:
+            raise RuntimeError("BBT_OPERATOR 尚未设定")
+
+        bjd_bot_username = str(cls.BJD_CODE_BOT_NAME or "").strip().lstrip("@")
+        if not bjd_bot_username:
+            raise RuntimeError("BJD_CODE_BOT_NAME 尚未设定")
+
+        bbt_user = await bbt_operator.client.get_me()
+        bbt_bot_username = str(
+            getattr(bbt_user, "username", "") or ""
+        ).strip().lstrip("@")
+        if not bbt_bot_username:
+            raise RuntimeError("BBT_OPERATOR 的机器人账号没有 username")
+
+        encoded_code = quote(code, safe="")
+        buttons = [[
+            Button.url(
+                "🧻 传送门",
+                f"https://t.me/{bjd_bot_username}?text={encoded_code}",
+            ),
+            Button.url(
+                "🤗 我想要",
+                f"https://t.me/{bbt_bot_username}?text={encoded_code}",
+            ),
+        ]]
+        media = getattr(message, "media", None)
+        if media is None:
+            raise ValueError("收到的消息不包含媒体")
+
+        clean_caption = cls._sanitize_telegram_caption(caption)
+        try:
+            return await bbt_operator.client.send_file(
+                chat_id,
+                media,
+                caption=clean_caption,
+                buttons=buttons,
+                parse_mode=None,
+            )
+        except Exception as direct_exc:
+            print(
+                f"⚠️ BBT_OPERATOR 无法直接复用媒体，改为下载后上传：{direct_exc}",
+                flush=True,
+            )
+
+        media_buffer = io.BytesIO()
+        downloaded = await source_client.download_media(message, file=media_buffer)
+        if downloaded is None or media_buffer.tell() == 0:
+            raise RuntimeError("媒体下载失败或内容为空")
+
+        message_file = getattr(message, "file", None)
+        file_name = getattr(message_file, "name", None)
+        if not file_name:
+            extension = getattr(message_file, "ext", None) or ".jpg"
+            file_name = f"bbt_{getattr(message, 'id', 'media')}{extension}"
+        media_buffer.name = file_name
+        media_buffer.seek(0)
+
+        return await bbt_operator.client.send_file(
+            chat_id,
+            media_buffer,
+            caption=clean_caption,
+            buttons=buttons,
+            parse_mode=None,
+        )
 
 
     @classmethod
@@ -1891,6 +1968,7 @@ class HumanBotOperator:
     ) -> str:
         """解析机器人回应，返回格式化后的文本内容。"""
         try:
+           
             caption = message.raw_text
             code = self._extract_consecutive_emojis(message.raw_text, count=8)
             if code is None:
@@ -1919,7 +1997,9 @@ class HumanBotOperator:
                             desc_order_id = max_item - current_item
                             if self.show_response:
                                 print(f"Parsed pagination: current_item={current_item}, max_item={max_item}", flush=True)
-                            
+
+
+
                             if priority > 0:
                                 existing_unranked_code = await MySQLPool.fetchone(
                                     "SELECT `id` FROM `sora_code` "
@@ -1930,6 +2010,20 @@ class HumanBotOperator:
                                 if existing_unranked_code:
                                     print("新进榜", flush=True)
 
+                                    if code:
+                                        try:
+                                            await self._send_media_to_bbt_channel(
+                                                self.client,
+                                                message,
+                                                caption,
+                                                code,
+                                            )
+                                        except Exception as exc:
+                                            print(
+                                                f"⚠️ 媒体发送到 BBT 频道失败：{exc}",
+                                                flush=True,
+                                            )
+
                                     try:
                                         try:
                                             runtime_config = json.loads(
@@ -1939,11 +2033,6 @@ class HumanBotOperator:
                                             runtime_config = {}
                                         if not isinstance(runtime_config, dict):
                                             runtime_config = {}
-
-
-
-                                            
-                                           
 
                                         await self.send_message_with_bot(
                                             f"{code}",

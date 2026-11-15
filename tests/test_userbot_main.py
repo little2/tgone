@@ -1,6 +1,6 @@
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, call
 
 import pytest
 
@@ -76,3 +76,24 @@ def test_run_for_fetch_mode_runs_once_outside_ai_mode(monkeypatch):
 
     main.assert_awaited_once_with()
     main_loop.assert_not_awaited()
+
+
+def test_initialize_bbt_operator_sets_shared_operator(monkeypatch):
+    bbt_operator = SimpleNamespace()
+    login = AsyncMock(return_value=bbt_operator)
+    set_bbt = AsyncMock()
+    monkeypatch.setattr(userbot, "BBT_TOKEN", "token")
+    monkeypatch.setattr(userbot, "API_ID", 123)
+    monkeypatch.setattr(userbot, "API_HASH", "hash")
+    monkeypatch.setattr(userbot.HumanBotOperator, "login_with_bot_token", login)
+    monkeypatch.setattr(userbot.HumanBotOperator, "set_bbt_bot", set_bbt)
+
+    result = asyncio.run(userbot._initialize_bbt_operator())
+
+    assert result is bbt_operator
+    login.assert_awaited_once_with(
+        bot_token="token",
+        api_id=123,
+        api_hash="hash",
+    )
+    assert set_bbt.await_args_list == [call(None), call(bbt_operator)]

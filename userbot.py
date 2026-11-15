@@ -279,6 +279,24 @@ async def main_auto_talk() -> None:
     finally:
         await MySQLPool.close()
 
+async def _initialize_bbt_operator() -> HumanBotOperator | None:
+    """按配置登录 BBT Bot，并在所有 HumanBotOperator 实例间共享。"""
+    await HumanBotOperator.set_bbt_bot(None)
+    if not BBT_TOKEN:
+        print("BBT_TOKEN 未配置，跳过 BBT_OPERATOR 初始化。", flush=True)
+        return None
+
+    print("BBT_TOKEN 已配置，正在初始化 BBT_OPERATOR。", flush=True)
+    bbt_operator = await HumanBotOperator.login_with_bot_token(
+        bot_token=BBT_TOKEN,
+        api_id=API_ID,
+        api_hash=API_HASH,
+    )
+    await HumanBotOperator.set_bbt_bot(bbt_operator)
+    print("BBT_OPERATOR 初始化完成。", flush=True)
+    return bbt_operator
+
+
 async def run_telethon_bot(
     config: dict | None = None,
     *,
@@ -295,6 +313,8 @@ async def run_telethon_bot(
     bbt_operator = None
     
     try:
+        bbt_operator = await _initialize_bbt_operator()
+
         if FETCH_MODE == "render":
             session_rows = await MySQLPool.fetchall(
                 "SELECT `bot_id`,`bot_token` FROM `bot` "
@@ -313,6 +333,12 @@ async def run_telethon_bot(
                 "WHERE check_group IN (23) ",
                 error_tag="userbot.random_session_tokens",
             )  
+        elif FETCH_MODE == "test":
+            session_rows = await MySQLPool.fetchall(
+                "SELECT `bot_id`,`bot_token` FROM `bot` "
+                "WHERE check_group IN (19) ",
+                error_tag="userbot.random_session_tokens",
+            )    
         elif FETCH_MODE == "patrol":
 
             bots = await MySQLPool.fetchall(
@@ -400,15 +426,6 @@ async def run_telethon_bot(
                 f"数据库中的 bot_token 数量不足：需要 1 个，实际只有 {len(session_rows)} 个"
             )
 
-        if(BBT_TOKEN!=""):
-            print("BBT_TOKEN 已配置", flush=True)
-            bbt_operator = await HumanBotOperator.login_with_bot_token(
-                bot_token=BBT_TOKEN,
-                api_id=API_ID,
-                api_hash=API_HASH,
-            )
-        
-
         session_set = {
             index: str(row["bot_token"]).strip()
             for index, row in enumerate(session_rows)
@@ -444,9 +461,6 @@ async def run_telethon_bot(
                     api_hash=API_HASH,
                     taobao_bot_username=config.get("taobao_bot_username"),
                 )
-                if bbt_operator is not None:
-                    await HumanBotOperator.set_bbt_bot(bbt_operator)
-               
                 operator[(operator_length)] = op
 
                 me = await op.client.get_me()
@@ -587,22 +601,22 @@ async def run_telethon_bot(
                     # 如果现在是北京时间 23:00 至次日 03:00 之间，则执行任务
 
                    
-                    
-                    if operator_check_message_time.get(i) is None or (now - operator_check_message_time[i]).total_seconds() > (3600*6):
-                        # await account_manager.check_active_sessions(op.client)
-                        # await account_manager.forward_latest_group_messages(
-                        #     op.client,
-                        #     SharedConfig.get("key_man_id"),
-                        #     777000,
-                        # )
-                        operator_check_message_time[i] = now
+                    if FETCH_MODE != "test":
+                        if operator_check_message_time.get(i) is None or (now - operator_check_message_time[i]).total_seconds() > (3600*6):
+                            await account_manager.check_active_sessions(op.client)
+                            await account_manager.forward_latest_group_messages(
+                                op.client,
+                                SharedConfig.get("key_man_id"),
+                                777000,
+                            )
+                            operator_check_message_time[i] = now
 
-                        if FETCH_MODE in ("render", "gridztd","park"):
-                            start_result = await op.capture_bot_messages(f"@{HumanBotOperator.BJD_CODE_BOT_NAME}", "/me")
-                            if start_result:
-                                receive_text = start_result[-1].text if start_result else ""
-                                await op.client.send_message(SharedConfig.get("key_man_id"), receive_text)
-                                print(f"Received text from bot: {receive_text}\n\n", flush=True)
+                            if FETCH_MODE in ("render", "gridztd","park", "test"):
+                                start_result = await op.capture_bot_messages(f"@{HumanBotOperator.BJD_CODE_BOT_NAME}", "/me")
+                                if start_result:
+                                    receive_text = start_result[-1].text if start_result else ""
+                                    await op.client.send_message(SharedConfig.get("key_man_id"), receive_text)
+                                    print(f"Received text from bot: {receive_text}\n\n", flush=True)
                         
                         
 
@@ -667,22 +681,6 @@ async def run_telethon_bot(
                     
                     
 
-                    # await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0, fetch=False)
-
-                    
-
-
-                    # 首頁    /start
-                    # start_result = await op.capture_bot_messages(f"@{HumanBotOperator.BJD_CODE_BOT_NAME}", "/start")
-                    # if start_result:
-                    #     receive_text = start_result[-1].text if start_result else ""
-                    #     if "天内无群聊发言" in receive_text:
-                    #         print("‼️ 收到天内无群聊发言的提示，继续下一步。", flush=True)
-                    #         await op.send_random_message(chat_id=[ACTIVE_CHAT_ID])
-                    #     else:
-                    #         print(f"receive_text={receive_text}", flush=True)
-                    # else:
-                    #     print("未收到任何消息", flush=True)
                     if FETCH_MODE == "render":
                         if (
                             global_last_message_time == 0
@@ -746,19 +744,11 @@ async def run_telethon_bot(
                             #     print(f"当前时间是北京时间 {current_hour} 点，执行 extract - True", flush=True)
                             # else:
                             #     await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0, fetch=False)
-                    elif FETCH_MODE == "patrol":
-                        # 访问玲珑 https://t.me/lijiankaige_bot?start=OQPiuIKr
+                    
+                    elif FETCH_MODE == "test":
+                        await op.fetch_top()
 
-                        pass
                        
-                        
-
-                    
-
-                        
-                        
-                    
-                    
                 except PeerFloodError as exc:
                     peer_flood_until = now + timedelta(hours=24)
                     operator_peer_flood_until[i] = peer_flood_until
@@ -793,6 +783,7 @@ async def run_telethon_bot(
                 except Exception as exc:
                     print(f"⚠️ BBT 账号断开失败：{exc}", flush=True)
         finally:
+            await HumanBotOperator.set_bbt_bot(None)
             print("所有操作已完成，正在断开连接...", flush=True)
             await MySQLPool.close()
         
