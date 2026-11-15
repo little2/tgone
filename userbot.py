@@ -386,7 +386,7 @@ async def run_telethon_bot(
         else:
             session_rows = await MySQLPool.fetchall(
                 "SELECT `bot_id`,`bot_token` FROM `bot` "
-                "WHERE check_group IN (2) ",
+                "WHERE check_group IN (99) ",
                 error_tag="userbot.random_session_tokens",
             )
 
@@ -464,30 +464,7 @@ async def run_telethon_bot(
                 # await op.join_chat("https://t.me/+_Pz9_6udznFlMDhi") #玉树花
 
 
-                if FETCH_MODE in ("patrol"):
-                    try:
-                        await AIBot.t_manbaout_bot(op)
-                        await AIBot.lijiankaige_bot(op)
-                        await AIBot.cyaibox116bot(op)
-                        await AIBot.QQCC_123_bot(op)
-                        await AIBot.huyaback_bot(op)
-                        await AIBot.linglongai_10bot(op)
-                      
-                        await AIBot.ShuoWen_bot(op)
-                        await AIBot.ftcyy04bot(op)
-                       
-                        # await AIBot.dkeiwfBot(op)
-                        await AIBot.huangdoubaozi_bot(op)
-                        await AIBot.LiteAI_ai(op)
-                        await AIBot.xhgsgk_bot(op)
-                        
-                        
-                    except Exception as e:
-                        print(f"Failed: {e}", flush=True)
-                    finally:
-                        sleep_time = random.randint(5, 13)
-                        print(f"==>Sleeping for {sleep_time} .", flush=True)
-                        await asyncio.sleep(sleep_time)
+                
 
 
                
