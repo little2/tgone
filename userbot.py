@@ -1,7 +1,7 @@
 """Telegram 使用者帳號管理程式入口。"""
 
 import asyncio
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 
 import errno
 import os
@@ -9,6 +9,7 @@ from pathlib import Path
 import random
 from aiohttp import web
 from dotenv import load_dotenv
+from telethon.errors import PeerFloodError
 
 from aiogram_bot_operator import AiogramBotOperator
 from tgone_mysql import MySQLPool
@@ -422,6 +423,7 @@ async def run_telethon_bot(
         operator_bot_id = {}
         operator_last_message_time = {}
         operator_check_message_time = {}
+        operator_peer_flood_until = {}
         operator_count = 0
         global_last_message_time = 0
        
@@ -480,8 +482,8 @@ async def run_telethon_bot(
                     try:
                         # await op.update_profile(random_name=True)
                     
-                        await op.join_chat("https://t.me/BJDADJB") 
-                        print(f"Joined chat https://t.me/BJDADJB for operator {operator_length}",flush=True)
+                        await op.join_chat("https://t.me/BJDDJB") 
+                        print(f"Joined chat https://t.me/BJDDJB for operator {operator_length}",flush=True)
                         await asyncio.sleep(3)
                         
                         await op.join_chat("https://t.me/+i5S7P-Dol4dhNzA5")  #加入布吉岛主 
@@ -562,6 +564,19 @@ async def run_telethon_bot(
                 now = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE)
                 current_time = now.time()
 
+                peer_flood_until = operator_peer_flood_until.get(i)
+                if peer_flood_until is not None and now < peer_flood_until:
+                    remaining_seconds = int(
+                        (peer_flood_until - now).total_seconds()
+                    )
+                    print(
+                        f"账号 {i} 仍在 PeerFlood 冷却期，剩余约 "
+                        f"{remaining_seconds // 60 + 1} 分钟，跳过本轮。",
+                        flush=True,
+                    )
+                    await asyncio.sleep(min(60, max(remaining_seconds, 1)))
+                    continue
+
                 try:
                     # 模拟按 Ctrl 键以避免进入休眠状态
                     await op.simulate_ctrl_press()
@@ -624,6 +639,16 @@ async def run_telethon_bot(
                             continue
 
                     
+                except PeerFloodError as exc:
+                    peer_flood_until = now + timedelta(hours=24)
+                    operator_peer_flood_until[i] = peer_flood_until
+                    print(
+                        f"第 {t} 轮、账号 {i} 触发 Telegram PeerFlood，"
+                        f"暂停该账号发送 24 小时（至 {peer_flood_until.isoformat()}）："
+                        f"{exc!r}",
+                        flush=True,
+                    )
+                    continue
                 except Exception as exc:
                     print(
                         f"第 {t} 轮、账号 {i} 执行定时任务发生错误，"
@@ -682,7 +707,7 @@ async def run_telethon_bot(
                                 await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0, fetch=False)
                                 global_last_message_time = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE)
 
-                    elif FETCH_MODE == "gridztd":
+                    elif FETCH_MODE == "gridztd":   # Grp 22
                         
                         # 如果现在是北京时间的早上六点，十一点
                         current_hour = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE).hour
@@ -734,6 +759,15 @@ async def run_telethon_bot(
                         
                     
                     
+                except PeerFloodError as exc:
+                    peer_flood_until = now + timedelta(hours=24)
+                    operator_peer_flood_until[i] = peer_flood_until
+                    print(
+                        f"账号 {i} 触发 Telegram PeerFlood，暂停该账号发送 "
+                        f"24 小时（至 {peer_flood_until.isoformat()}）：{exc!r}",
+                        flush=True,
+                    )
+                    continue
                 except Exception as exc:
                     continue
 

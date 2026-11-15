@@ -52,16 +52,16 @@ def test_run_main_loop_waits_one_minute_before_next_run(monkeypatch):
     sleep.assert_awaited_once_with(60)
 
 
-def test_run_for_fetch_mode_repeats_only_in_ai_mode(monkeypatch):
+def test_run_for_fetch_mode_repeats_only_in_patrol_mode(monkeypatch):
     main = AsyncMock()
     main_loop = AsyncMock()
     monkeypatch.setattr(userbot, "main", main)
     monkeypatch.setattr(userbot, "run_main_loop", main_loop)
 
-    monkeypatch.setattr(userbot, "FETCH_MODE", "ai")
+    monkeypatch.setattr(userbot, "FETCH_MODE", "patrol")
     asyncio.run(userbot.run_for_fetch_mode())
 
-    main_loop.assert_awaited_once_with(60)
+    main_loop.assert_awaited_once_with(7000)
     main.assert_not_awaited()
 
 
