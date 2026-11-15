@@ -312,7 +312,7 @@ async def run_telethon_bot(
                 "WHERE check_group IN (23) ",
                 error_tag="userbot.random_session_tokens",
             )  
-        elif FETCH_MODE == "Patrol":
+        elif FETCH_MODE == "patrol":
 
             bots = await MySQLPool.fetchall(
                 "SELECT * "
