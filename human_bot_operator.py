@@ -65,6 +65,8 @@ from aiogram import Bot
 from captcha_bot_operator import CaptchaBotOperator
 from tgone_mysql import MySQLPool
 
+from google import genai
+import base64
 import os
 from pathlib import Path
 from dotenv import load_dotenv
@@ -80,6 +82,7 @@ BBT_GROUP_ID = int(os.getenv("BBT_GROUP_ID", 0))
 BBT_THREAD_ID = int(os.getenv("BBT_THREAD_ID", 0))
 BBT_TOKEN = os.getenv("BBT_TOKEN", "")
 
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 class HumanBotOperator:
     """执行需要已登录使用者身份的 Telegram 操作。"""
@@ -2007,6 +2010,7 @@ class HumanBotOperator:
                                     (code,),
                                     error_tag="human_bot_operator.parse_bot_response.get_unranked_code",
                                 )
+
                                 if existing_unranked_code:
                                     print("新进榜", flush=True)
 
@@ -2054,7 +2058,7 @@ class HumanBotOperator:
                                     code,
                                     source_chat_id=0,
                                     source_message_id=0,
-                                    priority=priority,
+                                    priority=(desc_order_id+1),
                                 )
                             else:
                                 await self._insert_sora_code(
@@ -2062,7 +2066,7 @@ class HumanBotOperator:
                                     source_chat_id=0,
                                     source_message_id=0,
                                     desc_order_id=desc_order_id,
-                                    priority=priority,
+                                    priority=(desc_order_id+1),
                                 )
                             
                             
@@ -2429,7 +2433,7 @@ class HumanBotOperator:
                         if not isinstance(msg, str):
                             msg = None
                         if msg is not None:
-                            print(f"callback_result message: {msg}", flush=True)
+                            
 
 
                             if "此目录及其下级内容仅限编辑员下载" in msg and secret_id:
@@ -2455,7 +2459,9 @@ class HumanBotOperator:
                                         flush=True,
                                     )
                                     await asyncio.sleep(wait_seconds + 1)      
-                                return response    
+                                return response  
+                            else:
+                                print(f"callback_result message: {msg}", flush=True)
                         # print(
                         #     f"callback_result does not indicate frequent operation or insufficient file quota: {msg}",
                         #     flush=True,
@@ -2611,15 +2617,18 @@ class HumanBotOperator:
                 is_photo = getattr(response, "photo", None) is not None
                 if is_photo and ("图中有几个" in response_message or "图中出现最多的表情" in response_message or "只数清晰的大图案" in response_message or "与上方物体相同" in response_message or "与上方的物体相同" in response_message):
                     print("❗️ 收到符合条件的图片媒体消息(验证码)。", flush=True)
-                    
 
-                    result = await self.handle_captcha(
-                        response,
-                        user_id=self.FREE_CHAT_ID,
-                        reward_bot_name=self.REWARD_BOT_NAME,
-                    )
+                    result = await self.handle_captcha_by_ai(response)
                     if result is True:
                         continue    # 验证成功，继续等待后续媒体
+
+                    # result = await self.handle_captcha(
+                    #     response,
+                    #     user_id=self.FREE_CHAT_ID,
+                    #     reward_bot_name=self.REWARD_BOT_NAME,
+                    # )
+                    # if result is True:
+                    #     continue    # 验证成功，继续等待后续媒体
 
                     print("⚠️ 验证码处理失败，不等待媒体，结束此轮处理。", flush=True)
                     return False
@@ -2669,6 +2678,83 @@ class HumanBotOperator:
             bot = Bot(token=token)
             HumanBotOperator._bot_cache[token] = bot
         return bot
+
+    async def handle_captcha_by_ai(self, response: Any) -> bool:
+        """识别验证码图片并提交选项，仅在原机器人确认成功时返回 True。"""
+        api_key = (GEMINI_API_KEY or "").strip()
+        if not api_key:
+            print("⚠️ 未配置 GEMINI_API_KEY，无法识别验证码。", flush=True)
+            return False
+
+        try:
+            # 限制下载、AI 识别和提交答案的总耗时。
+            async with asyncio.timeout(60):
+                question = self._get_response_text(response)
+                get_buttons = getattr(response, "get_buttons", None)
+                buttons = (
+                    await get_buttons()
+                    if callable(get_buttons)
+                    else getattr(response, "buttons", None)
+                ) or []
+                options = [
+                    str(getattr(button, "text", "") or "").strip()
+                    for button in self._iter_buttons(buttons)
+                    if getattr(button, "data", None) is not None
+                    and str(getattr(button, "text", "") or "").strip()
+                ]
+                if not question or not options:
+                    print("⚠️ 验证码题目或答题按钮为空。", flush=True)
+                    return False
+
+                image_bytes = await self.client.download_media(response, file=bytes)
+                if not image_bytes:
+                    print("⚠️ 验证码图片下载失败，无法发送给 AI。", flush=True)
+                    return False
+                image_base64 = base64.b64encode(image_bytes).decode("ascii")
+                prompt = (
+                    "请根据图片和以下题目，从可选按钮中选择正确答案。\n"
+                    f"题目：{question}\n"
+                    f"可选按钮：{json.dumps(options, ensure_ascii=False)}\n"
+                    "只返回一个按钮的完整原文，不要解释，不要添加引号。"
+                )
+                async with genai.Client(
+                    api_key=api_key,
+                    http_options=genai.types.HttpOptions(timeout=45000),
+                ).aio as ai_client:
+                    ai_response = await ai_client.models.generate_content(
+                        model="gemini-4-hydrogen",
+                        contents=[
+                            prompt,
+                            {
+                                "inline_data": {
+                                    "mime_type": "image/jpeg",
+                                    "data": image_base64,
+                                }
+                            },
+                        ],
+                    )
+
+                answer = (ai_response.text or "").strip()
+                if answer not in options:
+                    print("⚠️ AI 未返回有效的验证码按钮选项。", flush=True)
+                    return False
+
+                click_result = await response.click(
+                    text=lambda text: str(text or "").strip() == answer
+                )
+                result_text = str(getattr(click_result, "message", "") or "").strip()
+                if result_text.rstrip("。.!！") == "验证成功":
+                    print("✅ AI 验证码验证成功。", flush=True)
+                    return True
+                print(f"⚠️ 验证码未确认成功：{result_text or '无验证结果'}", flush=True)
+                return False
+        except asyncio.TimeoutError:
+            print("⚠️ AI 验证码处理超时。", flush=True)
+            return False
+        except Exception as exc:
+            print(f"⚠️ AI 验证码处理失败：{type(exc).__name__}", flush=True)
+            return False
+
 
     async def handle_captcha(self, response: Any, user_id: int | None = None, reward_bot_name: str | None = None) -> bool:
         """委托给独立的验证码处理器执行，并返回是否成功处理。"""

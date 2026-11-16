@@ -14,3 +14,7 @@ aiomysql>=0.1.1
 
 # 加密依赖（解决 caching_sha2_password 认证问题）
 cryptography>=41.0.0
+
+# Gemini 图片识别
+google-genai>=3.3.0
+Pillow>=11.0.0

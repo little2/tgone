@@ -69,8 +69,8 @@ class AiogramBotOperator:
             or "taobao67bot"
         )
 
-    async def print_bot_message(self, message: Message) -> None:
-        """打印 Aiogram Bot 收到的消息摘要与完整内容。"""
+    async def handle_incoming_message(self, message: Message) -> None:
+        """处理 Bot 收到的私聊媒体：解析 caption、写入数据库并排队转发。"""
         media_info = self.get_message_media_info(message)
        
         caption_payload = (
@@ -78,6 +78,26 @@ class AiogramBotOperator:
             if media_info is not None
             else None
         )
+
+        forward_from_id = message.forward_from.id if message.forward_from else None
+        forward_from_username = (
+            message.forward_from.username if message.forward_from else None
+        )
+        reply_to_message_id = message.reply_to_message.message_id if message.reply_to_message else None
+
+        # 打印出收到的消息,包括转发的来源, 以及回覆的对象
+        print(
+            "\n\n[Bot 收到消息] "
+            f"message_id={message.message_id} "
+            f"chat_id={message.chat.id} "
+            f"chat_type={message.chat.type} "
+            f"caption={message.caption!r} "
+            f"forward_from_username={forward_from_username!r} "
+            f"forward_from_id={forward_from_id!r} "
+            f"reply_to_message_id={reply_to_message_id!r}",
+            flush=True,
+        )
+
 
         # print(f"\ncaption_payload=>{caption_payload}\n")
         # line 75 只有在私信时才会继续
@@ -789,7 +809,7 @@ class AiogramBotOperator:
         self.bot = Bot(token=bot_token, session=session)
         bot = self.bot
         dispatcher = Dispatcher()
-        dispatcher.message.register(self.print_bot_message)
+        dispatcher.message.register(self.handle_incoming_message)
         dispatcher.callback_query.register(self.handle_callback_query)
         media_forward_worker = None
         captcha_polling_task = None

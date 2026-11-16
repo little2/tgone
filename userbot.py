@@ -59,8 +59,9 @@ async def main_check_user() -> None:
 
         
         # await account_manager.rec_new_account(phone_number="+19039901630",pw2fa="Qqqw1234",)
-        # await account_manager.rec_new_account(phone_number="+17067077939",pw2fa="qq123456",)
-        # await account_manager.rec_new_account(phone_number="+573151139078",pw2fa="aa1122",)
+        # await account_manager.rec_new_account(phone_number="+573016126623",pw2fa="qq123456",)
+        # await account_manager.rec_new_account(phone_number="+573016126623",pw2fa="aa1122",)
+        # await account_manager.rec_new_account(phone_number="+573171674073",pw2fa="didi",)
         # await account_manager.check_phone("+12282796709")
         # await account_manager.check_phone("+254784812293")
         # await account_manager.check_phone("+254797636990") 
@@ -492,7 +493,7 @@ async def run_telethon_bot(
                 # await op.join_chat("+QEtmtaI-amU5NDRh") #桃花源
 
 
-                if FETCH_MODE in ("render", "gridztd","park"):
+                if FETCH_MODE in ("render", "gridztd" , "park" ):
                     try:
                         # await op.update_profile(random_name=True)
                     
@@ -611,7 +612,7 @@ async def run_telethon_bot(
                             )
                             operator_check_message_time[i] = now
 
-                            if FETCH_MODE in ("render", "gridztd","park", "test"):
+                            if FETCH_MODE in ("render", "gridztd","park"):
                                 start_result = await op.capture_bot_messages(f"@{HumanBotOperator.BJD_CODE_BOT_NAME}", "/me")
                                 if start_result:
                                     receive_text = start_result[-1].text if start_result else ""
@@ -689,21 +690,21 @@ async def run_telethon_bot(
                             # 如果现在是北京时间的早上六点，十一点
                             current_hour = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE).hour
                             print(f"当前时间是北京时间 {current_hour} 点", flush=True)
-                            
-                            if current_hour % 6 == 1:
+                            global_last_message_time = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE)
+                            if (current_hour+i) % 6 == 1:
                                 await op.fetch_top()
-                                global_last_message_time = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE)
+                                
                                 print(f"当前时间是北京时间 {current_hour} 点，执行 fetch_top 和 fetch_list", flush=True)
-                            elif current_hour % 6 == 2:
+                            elif (current_hour+i) % 6 == 2:
                                 await op.fetch_list()
-                                global_last_message_time = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE)
-                            elif current_hour % 6 == 3 or current_hour % 6 == 5:
+                                
+                            elif (current_hour+i) % 6 == 3 or (current_hour+i) % 6 == 5:
                                 await op.tracking_message_range(chat=-1004372020134) 
                                 await op.tracking_message_range(chat=ACTIVE_CHAT_ID)
-                                global_last_message_time = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE)
+                               
                             else:
                                 await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0, fetch=False)
-                                global_last_message_time = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE)
+                                
 
                     elif FETCH_MODE == "gridztd":   # Grp 22
                         
@@ -733,20 +734,23 @@ async def run_telethon_bot(
                        
                         if (global_last_message_time == 0 or (now - global_last_message_time).total_seconds() > 3590):
 
-                            await op.tracking_message_range(chat=-1004372020134) 
-                            await op.tracking_message_range(chat=ACTIVE_CHAT_ID)   
-                            global_last_message_time = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE)
+                         
+                       
 
                             
-                            # if ((current_hour+2) % operator_count) == i:
-                            #     await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=2, fetch=True)
-                            #     global_last_message_time = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE)
-                            #     print(f"当前时间是北京时间 {current_hour} 点，执行 extract - True", flush=True)
-                            # else:
-                            #     await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0, fetch=False)
+                            if ((current_hour+2) % operator_count) == i:
+                                await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=2, fetch=True)
+                                global_last_message_time = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE)
+                                print(f"当前时间是北京时间 {current_hour} 点，执行 extract - True", flush=True)
+                            else:
+                                await op.tracking_message_range(chat=-1004372020134) 
+                                await op.tracking_message_range(chat=ACTIVE_CHAT_ID)   
+
+                                await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0, fetch=False)
                     
                     elif FETCH_MODE == "test":
-                        await op.fetch_top()
+                        await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0, fetch=False)
+                        pass
 
                        
                 except PeerFloodError as exc:
@@ -763,7 +767,7 @@ async def run_telethon_bot(
 
                 # leadtime = await HumanBotOperator.send_bot_message(operator, operator_bot_id) or 0
 
-                sleep_time = random.randint(105, 213)
+                sleep_time = random.randint(15, 23)
                 print(f"==>Sleeping for {sleep_time} seconds before next operation.", flush=True)
                 await asyncio.sleep(sleep_time)
         
