@@ -685,7 +685,7 @@ async def run_telethon_bot(
                     if FETCH_MODE == "render":
                         if (
                             global_last_message_time == 0
-                            or (now - global_last_message_time).total_seconds() > 4000
+                            or (now - global_last_message_time).total_seconds() > 1800
                         ):
                             # 如果现在是北京时间的早上六点，十一点
                             current_hour = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE).hour
@@ -701,9 +701,10 @@ async def run_telethon_bot(
                             elif (current_hour+i) % 6 == 3 or (current_hour+i) % 6 == 5:
                                 await op.tracking_message_range(chat=-1004372020134) 
                                 await op.tracking_message_range(chat=ACTIVE_CHAT_ID)
+                                await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0, fetch=True)
                                
                             else:
-                                await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0, fetch=False)
+                                await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=2, fetch=True)
                                 
 
                     elif FETCH_MODE == "gridztd":   # Grp 22
