@@ -1,6 +1,7 @@
 # Telegram 客户端与 Bot
 telethon==1.44.0
-aiogram==3.20.0.post0
+# 支持与 google-genai 共用 Pydantic 2.12.x
+aiogram==3.24.0
 aiohttp-socks~=0.8.3
 
 # 数据库
