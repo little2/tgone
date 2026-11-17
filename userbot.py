@@ -734,11 +734,6 @@ async def run_telethon_bot(
                         print(f"当前时间是北京时间 {current_hour} 点", flush=True)
                        
                         if (global_last_message_time == 0 or (now - global_last_message_time).total_seconds() > 3590):
-
-                         
-                       
-
-                            
                             if ((current_hour+2) % operator_count) == i:
                                 await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=2, fetch=True)
                                 global_last_message_time = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE)
