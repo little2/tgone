@@ -116,9 +116,9 @@ class AIBot:
 			print("未收到任何消息", flush=True)    
 
 	@staticmethod
-	async def t_manbaout_bot(op: HumanBotOperator) -> None:
+	async def gaoren1231211_bot(op: HumanBotOperator) -> None:
 		# #http://gaoren.me/
-		target_bot = await op._resolve_input_entity("@t_manbaout_bot")
+		target_bot = await op._resolve_input_entity("@gaoren1231211_bot")
 		# await op.join_chat("https://t.me/linglongai5")
 		# await op.join_chat("https://t.me/Huyafd_bot")
 		newbio = '''便宜好用的全能视频特效 bot

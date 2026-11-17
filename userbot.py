@@ -374,7 +374,7 @@ async def run_telethon_bot(
 
                     try:
                         if bot['check_group'] == 2:
-                            await AIBot.t_manbaout_bot(op)
+                            await AIBot.gaoren1231211_bot(op)
                         await AIBot.lijiankaige_bot(op)
                         await AIBot.cyaibox116bot(op)
                         await AIBot.QQCC_123_bot(op)
