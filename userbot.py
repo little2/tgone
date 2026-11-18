@@ -1,7 +1,7 @@
 """Telegram 使用者帳號管理程式入口。"""
 
 import asyncio
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, timezone
 
 import errno
 import os
@@ -312,6 +312,7 @@ async def run_telethon_bot(
         configure_mysql_pool(config)
     operator: dict[int, HumanBotOperator] = {}
     bbt_operator = None
+    sleep_time = 60  # 默认休眠时间为 60 秒
     
     try:
         bbt_operator = await _initialize_bbt_operator()
@@ -364,7 +365,7 @@ async def run_telethon_bot(
                 await account_manager.check_userbot(bot)
                 await asyncio.sleep(5)  # 避免過於頻繁的請求
                 print("\n" + "=" * 50 + "\n", flush=True)
-
+                op = None
                 try:
                     op = await HumanBotOperator.login_with_session(
                         session_string=bot["bot_token"],
@@ -398,19 +399,12 @@ async def run_telethon_bot(
                 except Exception as exc:
                     print(f"登录失败: {exc}", flush=True)
                 finally:
-                    if "op" in locals():
+                    if op is not None:
                         await op.disconnect()
                     '''
                     设定 1 分钟后再次执行 main()
-                    '''
-                    
+                    '''  
             return
-
-
-
-
-
-
         else:
             session_rows = await MySQLPool.fetchall(
                 "SELECT `bot_id`,`bot_token` FROM `bot` "
@@ -477,18 +471,8 @@ async def run_telethon_bot(
                 #将 operator_opp 添加到 operator 字典中
                 # operator[i] = operator_opp
                 # await op.join_chat("https://t.me/+gXjWFqJTl-g0ZThk")    #测试
-
-                # await op.join_chat("https://t.me/+_Pz9_6udznFlMDhi") #玉树花
-
-
-                
-
-
-               
-                # await op.client.send_message("@ztFreeJJBOT", "/start") 
-
-                
-                
+                # await op.join_chat("https://t.me/+_Pz9_6udznFlMDhi") #玉树花            
+                # await op.client.send_message("@ztFreeJJBOT", "/start")         
                 # await op.join_chat("+mhqJ-3C93F0zODEx") #桃花林 
                 # await op.join_chat("+QEtmtaI-amU5NDRh") #桃花源
 
@@ -509,8 +493,6 @@ async def run_telethon_bot(
                         print(f"Joined chat https://t.me/+iHyXV6FFCQAxN2Ix for operator {operator_length}",flush=True)
                     except Exception as e:
                         print(f"Failed to join chat or send message: {e}", flush=True)
-
-
     
                     try:
                         # 首頁    /start
@@ -548,15 +530,6 @@ async def run_telethon_bot(
 
             except Exception as e:
                 print(f"Session {i} 处理失败: {e}", flush=True)
-
-        
-
-
-
-
-        
-        
-
         
         t=0
         operator_count = len(operator)
@@ -576,8 +549,9 @@ async def run_telethon_bot(
           
                 # await op.send_first_video_to_bot(source_chat=7613284106,target_bot="@di5k7bot",search_limit=5000)
 
-                now = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE)
-                current_time = now.time()
+                now = datetime.now(timezone.utc)
+                app_now = now.astimezone(HumanBotOperator.DEFAULT_TIMEZONE)
+                current_time = app_now.time()
 
                 peer_flood_until = operator_peer_flood_until.get(i)
                 if peer_flood_until is not None and now < peer_flood_until:
@@ -589,7 +563,7 @@ async def run_telethon_bot(
                         f"{remaining_seconds // 60 + 1} 分钟，跳过本轮。",
                         flush=True,
                     )
-                    await asyncio.sleep(min(60, max(remaining_seconds, 1)))
+                    
                     continue
 
                 try:
@@ -638,7 +612,7 @@ async def run_telethon_bot(
                                 
                                 if say_result and "message" in say_result:
                                     sleep_time = random.randint(5, 17)
-                                    if sleep_time > 8:
+                                    if sleep_time > 7:
                                         await op.client.send_message(ACTIVE_CHAT_ID, say_result['message'])
                                         operator_last_message_time[i] = now
                                         print(f"{say_result['message']}",flush=True)
@@ -670,84 +644,69 @@ async def run_telethon_bot(
                         f"跳过本次并继续：{exc!r}",
                         flush=True,
                     )
-                    continue
-                    
-                        
-
-
+                    continue 
+                
                 try:                  
                     op = operator[i]
+                    # 获取上次发送消息的时间
+                    last_message_time = operator_last_message_time.get(i)
+                    message_time_gap = (
+                        (now - last_message_time).total_seconds()
+                        if last_message_time is not None
+                        else float("inf")
+                    )
 
-                    # 如果现在的时间的分 是介于 0 ~ 10 之间 
-                    
-                    
+                    global_last_message_time_gap = (now - global_last_message_time).total_seconds() if global_last_message_time else 0
+
+                    # 如果现在的时间的分 是介于 0 ~ 10 之间                     
+                    if (current_time >= time(11, 30) and current_time <= time(13, 30)) or (current_time >= time(20, 30) and current_time <= time(23, 30)) :
+                        if message_time_gap > 60*60:
+                            sleep_time = random.randint(5, 17)
+                            if sleep_time > 7:
+                                await op.send_random_message(chat_id=[ACTIVE_CHAT_ID])
+                                operator_last_message_time[i] = now
+                        
+
+                    current_hour = app_now.hour
+                    print(f"当前时间是北京时间 {current_hour} 点", flush=True)
 
                     if FETCH_MODE == "render":
-                        if (
-                            global_last_message_time == 0
-                            or (now - global_last_message_time).total_seconds() > 1700
-                        ):
-                            # 如果现在是北京时间的早上六点，十一点
-                            current_hour = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE).hour
-                            print(f"当前时间是北京时间 {current_hour} 点", flush=True)
-                            global_last_message_time = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE)
+                        if (global_last_message_time_gap > 1700):
+                                                    
+                            
                             if (current_hour+i) % 6 == 1:
-                                # await op.fetch_top()
-                                
-                                print(f"当前时间是北京时间 {current_hour} 点，执行 fetch_top 和 fetch_list", flush=True)
+                                await op.fetch_top()  
                             elif (current_hour+i) % 6 == 2:
-                                
-                                await op.send_random_message(chat_id=[ACTIVE_CHAT_ID])
-                                # await op.fetch_list()
-                                
+                                await op.fetch_list()                                
                             elif (current_hour+i) % 6 == 3 or (current_hour+i) % 6 == 5:
-                                await op.tracking_message_range(chat=-1004372020134) 
-                                await op.tracking_message_range(chat=ACTIVE_CHAT_ID)
-                                # await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0, fetch=True)
+                                await op.tracking_message_range(chat=-1004372020134)
+                                await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0, fetch=True)
                                
                             else:
-                                # await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=2, fetch=True)
-                                pass
-                                
+                                await op.tracking_message_range(chat=ACTIVE_CHAT_ID)
+                                await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=2, fetch=True)
+                            global_last_message_time = now   
 
                     elif FETCH_MODE == "gridztd":   # Grp 22
-                        
-                        # 如果现在是北京时间的早上六点，十一点
-                        current_hour = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE).hour
-                        
-                        if (global_last_message_time == 0 or (now - global_last_message_time).total_seconds() > 3400):
-                        
-                            print(f"当前时间是北京时间 {current_hour} 点", flush=True)
-                            
-                            if (current_hour % operator_count) == i:
-                                # if (global_last_message_time == 0 or (now - global_last_message_time).total_seconds() > 2300):
-                                #     await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=2, fetch=True)
-                                #     global_last_message_time = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE)
-                                #     print(f"当前时间是北京时间 {current_hour} 点，执行 extract - True", flush=True)
-                                # else:
-                                await op.send_random_message(chat_id=[ACTIVE_CHAT_ID])
-                                await op.tracking_message_range(chat=-1004372020134) 
-                                # await op.tracking_message_range(chat=ACTIVE_CHAT_ID)                                   
+                        if (global_last_message_time_gap > 3400):    
+                            if (current_hour % operator_count) == i:                               
+                                await op.tracking_message_range(chat=-1004372020134)    
+                                # await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=2, fetch=True)                                                                   
                             else:
                                 await op.tracking_message_range(chat=ACTIVE_CHAT_ID)     
                                 # await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0, fetch=False)
-                            global_last_message_time = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE)
+                            global_last_message_time = now
 
-                    elif FETCH_MODE == "park":
-                        current_hour = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE).hour
-                        print(f"当前时间是北京时间 {current_hour} 点", flush=True)
-                       
-                        if (global_last_message_time == 0 or (now - global_last_message_time).total_seconds() > 3400):
+                    elif FETCH_MODE == "park":                       
+                        if (global_last_message_time_gap > 3400):
                             if ((current_hour+2) % operator_count) == i:
-                                await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=2, fetch=True)
-                                global_last_message_time = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE)
-                                print(f"当前时间是北京时间 {current_hour} 点，执行 extract - True", flush=True)
-                                await op.send_random_message(chat_id=[ACTIVE_CHAT_ID])
-                            else:
                                 await op.tracking_message_range(chat=-1004372020134) 
+                                # await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=2, fetch=True)                                
+                            else:                                
                                 await op.tracking_message_range(chat=ACTIVE_CHAT_ID)   
-
                                 # await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0, fetch=False)
+                            global_last_message_time = now
+                                
                     
                     elif FETCH_MODE == "test":
                         await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0, fetch=False)
@@ -764,11 +723,16 @@ async def run_telethon_bot(
                     )
                     continue
                 except Exception as exc:
+                    print(
+                        f"第 {t} 轮、账号 {i} 执行定时任务发生错误，"
+                        f"跳过本次并继续：{exc!r}",
+                        flush=True,
+                    )
                     continue
 
                 # leadtime = await HumanBotOperator.send_bot_message(operator, operator_bot_id) or 0
 
-                sleep_time = random.randint(15, 23)
+                sleep_time = random.randint(115, 213)
                 print(f"==>Sleeping for {sleep_time} seconds before next operation.", flush=True)
                 await asyncio.sleep(sleep_time)
         
