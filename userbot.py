@@ -373,25 +373,28 @@ async def run_telethon_bot(
                         api_hash=API_HASH,
                     )
 
-                    try:
-                        if bot['check_group'] == 2:
-                            await AIBot.gaoren1231211_bot(op)
-                        await AIBot.lijiankaige_bot(op)
-                        await AIBot.cyaibox116bot(op)
-                        await AIBot.QQCC_123_bot(op)
-                        await AIBot.huyaback_bot(op)
-                        await AIBot.linglongai_10bot(op)
-                    
-                        await AIBot.ShuoWen_bot(op)
-                        await AIBot.ftcyy04bot(op)
-                        await AIBot.xhgsgk_bot(op)
-                        # await AIBot.dkeiwfBot(op)
-                        await AIBot.huangdoubaozi_bot(op)
-                        await AIBot.LiteAI_ai(op)
-                        
-                        
-                    except Exception as e:
-                        print(f"Failed: {e}", flush=True)
+                    tasks = []
+                    if bot['check_group'] == 2:
+                        tasks.append(AIBot.gaoren1231211_bot)
+                    tasks.extend([
+                        AIBot.lijiankaige_bot,
+                        AIBot.cyaibox116bot,
+                        AIBot.QQCC_123_bot,
+                        AIBot.huyaback_bot,
+                        AIBot.linglongai_10bot,
+                        AIBot.ShuoWen_bot,
+                        AIBot.ftcyy04bot,
+                        AIBot.xhgsgk_bot,
+                        # AIBot.dkeiwfBot,
+                        AIBot.huangdoubaozi_bot,
+                        AIBot.LiteAI_ai,
+                    ])
+
+                    for task in tasks:
+                        try:
+                            await task(op)
+                        except Exception as e:
+                            print(f"{task.__name__} Failed: {e}", flush=True)
                     
 
 
