@@ -2127,7 +2127,7 @@ class HumanBotOperator:
         extract_status: int |None = None,
         fetch: bool = True,
     ) -> Any:
-        return False
+       
         """发送指定密文，并逐条监听机器人回应直到出现终止内容。"""
         if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
             raise TypeError("timeout 必须是数字")

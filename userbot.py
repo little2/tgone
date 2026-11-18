@@ -685,28 +685,29 @@ async def run_telethon_bot(
                     if FETCH_MODE == "render":
                         if (
                             global_last_message_time == 0
-                            or (now - global_last_message_time).total_seconds() > 3400
+                            or (now - global_last_message_time).total_seconds() > 1700
                         ):
                             # 如果现在是北京时间的早上六点，十一点
                             current_hour = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE).hour
                             print(f"当前时间是北京时间 {current_hour} 点", flush=True)
                             global_last_message_time = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE)
                             if (current_hour+i) % 6 == 1:
-                                await op.fetch_top()
+                                # await op.fetch_top()
                                 
                                 print(f"当前时间是北京时间 {current_hour} 点，执行 fetch_top 和 fetch_list", flush=True)
                             elif (current_hour+i) % 6 == 2:
                                 
                                 await op.send_random_message(chat_id=[ACTIVE_CHAT_ID])
-                                await op.fetch_list()
+                                # await op.fetch_list()
                                 
                             elif (current_hour+i) % 6 == 3 or (current_hour+i) % 6 == 5:
                                 await op.tracking_message_range(chat=-1004372020134) 
                                 await op.tracking_message_range(chat=ACTIVE_CHAT_ID)
-                                await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0, fetch=True)
+                                # await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0, fetch=True)
                                
                             else:
-                                await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=2, fetch=True)
+                                # await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=2, fetch=True)
+                                pass
                                 
 
                     elif FETCH_MODE == "gridztd":   # Grp 22
@@ -746,7 +747,7 @@ async def run_telethon_bot(
                                 await op.tracking_message_range(chat=-1004372020134) 
                                 await op.tracking_message_range(chat=ACTIVE_CHAT_ID)   
 
-                                await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0, fetch=False)
+                                # await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0, fetch=False)
                     
                     elif FETCH_MODE == "test":
                         await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=0, fetch=False)
