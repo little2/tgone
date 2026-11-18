@@ -685,7 +685,7 @@ async def run_telethon_bot(
                     if FETCH_MODE == "render":
                         if (
                             global_last_message_time == 0
-                            or (now - global_last_message_time).total_seconds() > 1800
+                            or (now - global_last_message_time).total_seconds() > 3400
                         ):
                             # 如果现在是北京时间的早上六点，十一点
                             current_hour = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE).hour
@@ -696,6 +696,8 @@ async def run_telethon_bot(
                                 
                                 print(f"当前时间是北京时间 {current_hour} 点，执行 fetch_top 和 fetch_list", flush=True)
                             elif (current_hour+i) % 6 == 2:
+                                
+                                await op.send_random_message(chat_id=[ACTIVE_CHAT_ID])
                                 await op.fetch_list()
                                 
                             elif (current_hour+i) % 6 == 3 or (current_hour+i) % 6 == 5:
@@ -712,7 +714,7 @@ async def run_telethon_bot(
                         # 如果现在是北京时间的早上六点，十一点
                         current_hour = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE).hour
                         
-                        if (global_last_message_time == 0 or (now - global_last_message_time).total_seconds() > 3600):
+                        if (global_last_message_time == 0 or (now - global_last_message_time).total_seconds() > 3400):
                         
                             print(f"当前时间是北京时间 {current_hour} 点", flush=True)
                             
@@ -722,6 +724,7 @@ async def run_telethon_bot(
                                 #     global_last_message_time = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE)
                                 #     print(f"当前时间是北京时间 {current_hour} 点，执行 extract - True", flush=True)
                                 # else:
+                                await op.send_random_message(chat_id=[ACTIVE_CHAT_ID])
                                 await op.tracking_message_range(chat=-1004372020134) 
                                 # await op.tracking_message_range(chat=ACTIVE_CHAT_ID)                                   
                             else:
@@ -733,11 +736,12 @@ async def run_telethon_bot(
                         current_hour = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE).hour
                         print(f"当前时间是北京时间 {current_hour} 点", flush=True)
                        
-                        if (global_last_message_time == 0 or (now - global_last_message_time).total_seconds() > 3590):
+                        if (global_last_message_time == 0 or (now - global_last_message_time).total_seconds() > 3400):
                             if ((current_hour+2) % operator_count) == i:
                                 await op.extract(ask_like=True, bot_id=HumanBotOperator.BJD_CODE_BOT_ID, extract_status=2, fetch=True)
                                 global_last_message_time = datetime.now(HumanBotOperator.DEFAULT_TIMEZONE)
                                 print(f"当前时间是北京时间 {current_hour} 点，执行 extract - True", flush=True)
+                                await op.send_random_message(chat_id=[ACTIVE_CHAT_ID])
                             else:
                                 await op.tracking_message_range(chat=-1004372020134) 
                                 await op.tracking_message_range(chat=ACTIVE_CHAT_ID)   
