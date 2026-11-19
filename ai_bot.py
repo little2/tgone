@@ -378,3 +378,20 @@ https://gaoren.me?start=ref_6941890966'''
 		else:
 			print("未收到任何消息", flush=True)    
 		await op.update_bio("")
+
+	@staticmethod
+	async def myai_01_bot(op: HumanBotOperator) -> None:
+		# https://t.me/myai_1q2w3e4r
+		await op.join_chat("https://t.me/myai_home")
+		target_bot = await op._resolve_input_entity("@myai_01_bot")
+		start_result = await op.capture_bot_messages(target_bot, "/start CFC50F06_cn")
+		if start_result:
+			check_result = await op.capture_bot_messages(target_bot, "📅 每日签到")
+			if check_result:
+				board_id = check_result[-1].id
+				checking = await op.capture_bot_messages(
+					target_bot, click_button_title="💎", message_id=board_id
+				)
+				# print(f"checking={checking}", flush=True)
+		else:
+			print("未收到任何消息", flush=True)
