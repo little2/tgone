@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -17,16 +18,17 @@ class AIBot:
 		if not isinstance(text, str):
 			raise TypeError("验证题内容必须是字符串")
 
+		text = text.replace("−", "-")
 		matches = re.findall(
-			r"(-?\d+)\s*([+\-*/×÷xX])\s*(-?\d+)\s*=\s*\?",
+			r"(-?\d+(?:\.\d+)?)\s*([+\-*/×÷xX])\s*(-?\d+(?:\.\d+)?)\s*=\s*\?",
 			text,
 		)
 		if not matches:
 			raise ValueError("找不到格式为『数字 运算符 数字 = ?』的验证题")
 
 		left_text, operator, right_text = matches[-1]
-		left = int(left_text)
-		right = int(right_text)
+		left = Decimal(left_text)
+		right = Decimal(right_text)
 
 		if operator == "+":
 			answer = left + right
@@ -37,17 +39,17 @@ class AIBot:
 		else:
 			if right == 0:
 				raise ValueError("验证题不能除以零")
-			quotient, remainder = divmod(left, right)
-			if remainder:
-				raise ValueError("验证题的除法结果不是整数")
-			answer = quotient
+			answer = left / right
 
-		return str(answer)
+		answer_text = format(answer, "f")
+		if "." in answer_text:
+			answer_text = answer_text.rstrip("0").rstrip(".")
+		return "0" if answer == 0 else answer_text
 
 	@staticmethod
-	async def lijiankaige_bot(op: HumanBotOperator) -> None:
+	async def juno_fnj7ubot(op: HumanBotOperator) -> None:
 		# oixel.net
-		target_bot = await op._resolve_input_entity("@lijiankaige_bot")
+		target_bot = await op._resolve_input_entity("@juno_fnj7ubot")
 		start_result = await op.capture_bot_messages(target_bot, "/start OnQfPZu8")
 		if start_result:
 			check_result = await op.capture_bot_messages(target_bot, "📅 每日签到")
@@ -61,10 +63,15 @@ class AIBot:
 			print("未收到任何消息", flush=True)
 
 	@staticmethod
-	async def cyaibox116bot(op: HumanBotOperator) -> None:
+	async def cyaibox118bot(op: HumanBotOperator) -> None:
 		# oixel.net
-		target_bot = await op._resolve_input_entity("@cyaibox116bot")
+		target_bot = await op._resolve_input_entity("@cyaibox118bot")
 		await op.join_chat("https://t.me/addlist/hv_WjtuvpvcyMmNl")
+		await op.join_chat("https://t.me/cyberso77")
+
+
+		start_result = await op.capture_bot_messages("@cyberso77", "赛博短片")
+		
 
 		start_result = await op.capture_bot_messages(target_bot, "/start i7154552172")
 		if start_result:
@@ -129,13 +136,30 @@ https://gaoren.me?start=ref_6941890966'''
 
 		start_result = await op.capture_bot_messages(target_bot, "/start ref_7154552172")
 		if start_result:
-			check_result = await op.capture_bot_messages(target_bot, "📅 签到")
-			
+			for attempt in range(1, 4):
+				check_result = await op.capture_bot_messages(target_bot, "📅 签到")
+				if any(
+					keyword in (
+						getattr(message, "text", None)
+						or getattr(message, "message", None)
+						or ""
+					)
+					for message in (check_result or [])
+					for keyword in ("签到成功", "今天已签到")
+				):
+					print("已确认签到成功或今天已签到", flush=True)
+					break
+				if attempt < 3:
+					print(f"第 {attempt} 次未确认签到成功，10 秒后重试", flush=True)
+					await asyncio.sleep(10)
+			else:
+				print("已尝试签到 3 次，仍未收到签到成功", flush=True)
 		else:
-			print("未收到任何消息", flush=True)  
+			print("未收到任何消息", flush=True)
 
 
 		await op.update_bio("")
+		
 
 	@staticmethod
 	async def ShuoWen_bot(op: HumanBotOperator) -> None:
@@ -282,7 +306,7 @@ https://gaoren.me?start=ref_6941890966'''
 		# https://aimu.art/?ref=6941890966
 		target_bot = await op._resolve_input_entity("@huangdoubaozi_bot")
 		# await op.join_chat("https://t.me/linglongai5")
-		# await op.join_chat("https://t.me/Huyafd_bot")
+		await op.join_chat("https://t.me/aitutu55")
 	   
 		me = await op.client.get_me()
 	
@@ -291,15 +315,33 @@ https://gaoren.me?start=ref_6941890966'''
 		await op.update_bio(newbio)
 		await asyncio.sleep(15)
 		start_result = await op.capture_bot_messages(target_bot, "/start p_7154552172")
+		
+
 		if start_result:
-
-			checkin_result = await op.capture_bot_messages(target_bot, "📅 签到")
-
-
-			
+			for attempt in range(1, 4):
+				check_result = await op.capture_bot_messages(target_bot, "📅 签到")
+				if any(
+					keyword in (
+						getattr(message, "text", None)
+						or getattr(message, "message", None)
+						or ""
+					)
+					for message in (check_result or [])
+					for keyword in ("签到成功", "已签到")
+				):
+					print("已确认签到成功或今天已签到", flush=True)
+					break
+				if attempt < 3:
+					print(f"第 {attempt} 次未确认签到成功，10 秒后重试", flush=True)
+					await asyncio.sleep(10)
+			else:
+				print("已尝试签到 3 次，仍未收到签到成功", flush=True)
 		else:
-			print("未收到任何消息", flush=True)    
+			print("未收到任何消息", flush=True)
+
+
 		await op.update_bio("")
+
 
 
 	@staticmethod
