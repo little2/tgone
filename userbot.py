@@ -350,8 +350,9 @@ async def run_telethon_bot(
                 "WHERE bot_id = user_id "
                 "AND bot_token IS NOT NULL "
                 "AND work_status IN ('used', 'free') "
-                "AND check_timestamp <= UNIX_TIMESTAMP() - 39600 "
-                "AND check_group IN (0, 1,2) "
+                # "AND check_timestamp <= UNIX_TIMESTAMP() - 39600 "
+                "AND check_group IN (0, 1, 2) "
+                # "AND check_group IN (19) "
                 "ORDER BY check_timestamp ASC",
                 error_tag="userbot.random_session_tokens",
             )
@@ -362,10 +363,10 @@ async def run_telethon_bot(
                 return
 
             for bot in bots:
-                
+                print("\n\n" + "=" * 50 + "\n\n", flush=True)
                 await account_manager.check_userbot(bot)
-                await asyncio.sleep(5)  # 避免過於頻繁的請求
-                print("\n" + "=" * 50 + "\n", flush=True)
+                # await asyncio.sleep(5)  # 避免過於頻繁的請求
+                
                 op = None
                 try:
                     op = await HumanBotOperator.login_with_session(
@@ -374,25 +375,28 @@ async def run_telethon_bot(
                         api_hash=API_HASH,
                     )
 
-                    try:
-                        if bot['check_group'] == 2:
-                            await AIBot.gaoren1231211_bot(op)
-                        await AIBot.lijiankaige_bot(op)
-                        await AIBot.cyaibox116bot(op)
-                        await AIBot.QQCC_123_bot(op)
-                        await AIBot.huyaback_bot(op)
-                        await AIBot.linglongai_10bot(op)
-                    
-                        await AIBot.ShuoWen_bot(op)
-                        await AIBot.ftcyy04bot(op)
-                        await AIBot.xhgsgk_bot(op)
-                        # await AIBot.dkeiwfBot(op)
-                        await AIBot.huangdoubaozi_bot(op)
-                        await AIBot.LiteAI_ai(op)
-                        
-                        
-                    except Exception as e:
-                        print(f"Failed: {e}", flush=True)
+                    tasks = []
+                    if bot['check_group'] == 2 or bot['check_group'] == 19:
+                        tasks.append(AIBot.gaoren1231211_bot)
+                    tasks.extend([
+                        AIBot.juno_fnj7ubot,
+                        AIBot.cyaibox118bot,
+                        AIBot.QQCC_123_bot,
+                        AIBot.huyaback_bot,
+                        AIBot.linglongai_10bot,
+                        AIBot.ShuoWen_bot,
+                        AIBot.ftcyy04bot,
+                        AIBot.xhgsgk_bot,
+                        AIBot.dkeiwfBot,
+                        AIBot.huangdoubaozi_bot,
+                        AIBot.LiteAI_ai,
+                    ])
+
+                    for task in tasks:
+                        try:
+                            await task(op)
+                        except Exception as e:
+                            print(f"❌{task.__name__} Failed: {e}", flush=True)
                     
 
 

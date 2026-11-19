@@ -2,7 +2,7 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, call
 
-from lijiankaige_bot import AIBot
+from juno_fnj7ubot import AIBot
 
 
 def make_operator(replies):
@@ -17,7 +17,7 @@ def test_check_in_clicks_last_board():
     op = make_operator([[object()], [SimpleNamespace(id=1), SimpleNamespace(id=2)], []])
     asyncio.run(AIBot.check_in(op, 123))
 
-    op._resolve_input_entity.assert_awaited_once_with("@lijiankaige_bot")
+    op._resolve_input_entity.assert_awaited_once_with("@juno_fnj7ubot")
     assert op.capture_bot_messages.await_args_list == [
         call("target", "/start OQPiuIKr"),
         call("target", "📅 每日签到"),
