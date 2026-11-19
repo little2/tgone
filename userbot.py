@@ -2,6 +2,7 @@
 
 import asyncio
 from datetime import datetime, time, timedelta, timezone
+from collections.abc import Awaitable, Callable
 
 import errno
 import os
@@ -810,18 +811,15 @@ async def _start_health_server() -> tuple[web.AppRunner, str]:
     await runner.cleanup()
     raise RuntimeError("找不到可用的健康检查端口（已尝试 10000–10009）") from last_error
 
-async def main() -> None:
-    """执行 Telethon，并在有 Bot Token 时同时执行 Aiogram polling。"""
+async def run_business_once() -> None:
+    """执行一轮业务流程：Telethon，并在有 Bot Token 时同时执行 Aiogram polling。"""
     account_manager = UserAccountManager()
     config = account_manager.load_config()
     configure_mysql_pool(config)
-    health_runner: web.AppRunner | None = None
     aiogram_task: asyncio.Task | None = None
     aiogram_connected_task: asyncio.Task | None = None
     telethon_task: asyncio.Task | None = None
     try:
-        health_runner, bind_address = await _start_health_server()
-        print(f"HTTP 健康检查服务已启动：{bind_address}", flush=True)
         bot_token = str(
             config.get("bot_token") or os.getenv("BOT_TOKEN", "")
         ).strip()
@@ -861,12 +859,6 @@ async def main() -> None:
             running_tasks.append(aiogram_task)
         await asyncio.gather(*running_tasks)
     finally:
-        # 优先关闭 HTTP server，避免其他任务取消较慢时继续占用端口。
-        if health_runner is not None:
-            await health_runner.cleanup()
-            health_runner = None
-            print("HTTP 健康检查服务已关闭，监听端口已释放。", flush=True)
-
         tasks = [
             task
             for task in (aiogram_task, aiogram_connected_task, telethon_task)
@@ -878,8 +870,11 @@ async def main() -> None:
         await asyncio.gather(*tasks, return_exceptions=True)
 
 
-async def run_main_loop(interval_seconds: float = 60) -> None:
-    """持续执行 main；每轮结束或失败后等待指定秒数再重新执行。"""
+async def run_main_loop(
+    worker: Callable[[], Awaitable[None]],
+    interval_seconds: float = 60,
+) -> None:
+    """持续执行指定业务 worker；每轮结束或失败后等待指定秒数再重新执行。"""
     if isinstance(interval_seconds, bool) or not isinstance(
         interval_seconds, (int, float)
     ):
@@ -889,25 +884,34 @@ async def run_main_loop(interval_seconds: float = 60) -> None:
 
     while True:
         try:
-            await main()
+            await worker()
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            print(f"⚠️ main() 执行失败：{exc}", flush=True)
+            print(f"⚠️ 业务流程执行失败：{exc}", flush=True)
 
         print(
-            f"main() 本轮执行结束，{interval_seconds:g} 秒后再次执行。",
+            f"业务流程本轮执行结束，{interval_seconds:g} 秒后再次执行。",
             flush=True,
         )
         await asyncio.sleep(interval_seconds)
 
 
-async def run_for_fetch_mode() -> None:
-    """AI 模式持续循环执行，其余模式仅执行一次。"""
-    if FETCH_MODE == "patrol":
-        await run_main_loop(7000)
-        return
-    await main()
+async def main() -> None:
+    """进程主入口：常驻健康检查服务，独立驱动业务循环。"""
+    health_runner: web.AppRunner | None = None
+    try:
+        health_runner, bind_address = await _start_health_server()
+        print(f"HTTP 健康检查服务已启动：{bind_address}", flush=True)
+
+        if FETCH_MODE == "patrol":
+            await run_main_loop(run_business_once, 7000)
+        else:
+            await run_business_once()
+    finally:
+        if health_runner is not None:
+            await health_runner.cleanup()
+            print("HTTP 健康检查服务已关闭，监听端口已释放。", flush=True)
 
 
 if __name__ == "__main__":
@@ -915,7 +919,7 @@ if __name__ == "__main__":
         # await main_check_user()
         # await main_auto_talk()
         # await main_move()
-        await run_for_fetch_mode()
+        await main()
 
 
 
