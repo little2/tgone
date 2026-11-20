@@ -352,7 +352,7 @@ async def handle_user_private_text(event):
     elif text.startswith("/hello"):
         hello_param = parts[1]
         # 执行加入群组
-        await event.reply(f"已处理 join 指令：{hello_param}")
+        await event.reply(f"已处理 hello 指令：{hello_param}")
 
     elif text.startswith("/sync_bot"):
         await user_client.send_message(event.chat_id, "🔄 开始同步机器人状态，请稍候...")
