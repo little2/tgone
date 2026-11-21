@@ -39,6 +39,7 @@ _client_reconnect_lock = asyncio.Lock()
 LAST_TIME_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"last_run_time_{BOT_TOKEN[:10]}.txt")
 MIN_EXEC_INTERVAL_SECONDS = 12 * 60 * 60
 HOURLY_CHECK_INTERVAL_SECONDS = 60 * 60
+DATABASE_KEEPALIVE_INTERVAL_SECONDS = 60 * 1
 
 if TARGET_GROUP_ID == 0:
     TARGET_GROUP_ID = 0 # bot
@@ -152,6 +153,27 @@ async def keep_alive_ping():
             print(err, flush=True)
 
         await asyncio.sleep(120)  # 每 5 分鐘 ping 一次
+
+
+async def database_keepalive_task():
+    """Run a lightweight query every hour to prevent idle database sleep."""
+    while True:
+        try:
+            result = await MySQLPool.fetchone(
+                "SELECT 1 AS keepalive",
+                error_tag="database_keepalive",
+            )
+            if result is None:
+                print("[WARN] database keep-alive returned no result", flush=True)
+            else:
+                print("[INFO] database keep-alive completed", flush=True)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            # MySQLPool handles reconnect attempts. Keep this task alive for the next interval.
+            print(f"[WARN] database keep-alive failed: {type(e).__name__}: {e}", flush=True)
+
+        await asyncio.sleep(DATABASE_KEEPALIVE_INTERVAL_SECONDS)
 
 
 async def run_time_print_job_if_due():
@@ -618,6 +640,7 @@ async def main():
     # await media_utils.ensure_database_tables()
     asyncio.create_task(media_utils.heartbeat())
     asyncio.create_task(ping_keepalive_task())
+    asyncio.create_task(database_keepalive_task())
     
     
     if BOT_MODE == "webhook":
