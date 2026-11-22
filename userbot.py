@@ -350,7 +350,7 @@ async def run_telethon_bot(
                 "WHERE bot_id = user_id "
                 "AND bot_token IS NOT NULL "
                 "AND work_status IN ('used', 'free') "
-                # "AND check_timestamp <= UNIX_TIMESTAMP() - 39600 "
+                "AND check_timestamp <= UNIX_TIMESTAMP() - 39600 "
                 "AND check_group IN (0, 1, 2) "
                 # "AND check_group IN (19) "
                 "ORDER BY check_timestamp ASC",
