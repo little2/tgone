@@ -7,6 +7,8 @@ import random
 import re
 import time
 from datetime import datetime, timedelta, timezone
+
+import telethon
 from app_timezone import APP_TIMEZONE
 from html import escape
 from typing import Any
@@ -20,6 +22,8 @@ from telethon.errors import (
     FloodWaitError,
     PeerFloodError,
     PeerIdInvalidError,
+    PhoneCodeExpiredError,
+    PhoneCodeInvalidError,
     RPCError,
     SessionPasswordNeededError,
 )
@@ -139,7 +143,95 @@ class UserAccountManager:
         )
 
 
+
+
+
+
+
     async def tg_login(
+        self,
+        user_client: TelegramClient,
+        phone_number: str,
+        pw2fa: str | None,
+    ):
+        stage = "initializing"
+
+        try:
+            print(f"Telethon version: {telethon.__version__}")
+
+            if not user_client.is_connected():
+                await user_client.connect()
+
+            if await user_client.is_user_authorized():
+                return await user_client.get_me()
+
+            stage = "send_code_request"
+
+            sent_code = await user_client.send_code_request(
+                phone_number
+            )
+
+            phone_code_hash = sent_code.phone_code_hash
+            requested_at = time.monotonic()
+
+            print(f"Code type: {sent_code.type}")
+            print(f"Next type: {sent_code.next_type}")
+            print(f"Timeout: {sent_code.timeout}")
+            print(f"Hash received: {bool(phone_code_hash)}")
+
+            stage = "sign_in"
+
+            code = (
+                await asyncio.to_thread(
+                    input, "Please enter verification code: "
+                )
+            ).strip()
+
+            print(f"Code length: {len(code)}")
+            print(f"Code is ASCII digits: "
+                f"{code.isascii() and code.isdigit()}")
+            print(
+                f"Elapsed: "
+                f"{time.monotonic() - requested_at:.2f}s"
+            )
+
+            try:
+                return await user_client.sign_in(
+                    phone=phone_number,
+                    code=code,
+                    phone_code_hash=phone_code_hash,
+                )
+
+            except SessionPasswordNeededError:
+                stage = "2FA"
+
+                password = pw2fa or await asyncio.to_thread(
+                    getpass, "Please enter 2FA password: "
+                )
+
+                return await user_client.sign_in(
+                    password=password
+                )
+
+        except PhoneCodeInvalidError as e:
+            print("❌ PHONE_CODE_INVALID")
+            print(f"Stage: {stage}")
+            return e
+
+        except PhoneCodeExpiredError as e:
+            print("❌ PHONE_CODE_EXPIRED")
+            print(f"Stage: {stage}")
+            return e
+
+        except RPCError as e:
+            print(f"❌ Stage: {stage}")
+            print(f"Error type: {type(e).__name__}")
+            print(f"Error: {e}")
+            return e
+
+
+
+    async def tg_login_old(
         self,
         user_client: TelegramClient,
         phone_number: str,

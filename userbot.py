@@ -59,10 +59,10 @@ async def main_check_user() -> None:
 
 
         
-        await account_manager.rec_new_account(phone_number="+15717640949",pw2fa="Qqqw1234",)
-        # await account_manager.rec_new_account(phone_number="+573016126623",pw2fa="qq123456",)
+        await account_manager.rec_new_account(phone_number="+959693044956",pw2fa="Qqqw1234",)
+        # await account_manager.rec_new_account(phone_number="+12496307967",pw2fa="qq123456",)
         # await account_manager.rec_new_account(phone_number="+573016126623",pw2fa="aa1122",)
-        # await account_manager.rec_new_account(phone_number="+573171674073",pw2fa="didi",)
+        # await account_manager.rec_new_account(phone_number="+12496307967",pw2fa="didi",)
         # await account_manager.check_phone("+12282796709")
         # await account_manager.check_phone("+254784812293")
         # await account_manager.check_phone("+254797636990") 
