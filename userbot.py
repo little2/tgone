@@ -378,8 +378,8 @@ async def run_telethon_bot(
                     tasks = []
                     if bot['check_group'] == 2 or bot['check_group'] == 19:
                         tasks.append(AIBot.gaoren1231211_bot)
-                    tasks.extend([
-                        AIBot.myai_01_bot,
+                        tasks.append(AIBot.myai_01_bot)
+                    tasks.extend([                        
                         AIBot.juno_fnj7ubot,
                         AIBot.cyaibox118bot,
                         AIBot.QQCC_123_bot,
