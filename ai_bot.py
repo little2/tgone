@@ -187,7 +187,7 @@ https://gaoren.me?start=ref_6941890966'''
 	async def ftcyy04bot(op: HumanBotOperator) -> None:
 		# 玲珑Ai10号
 		target_bot = await op._resolve_input_entity("@ftcyy04bot")
-		# await op.join_chat("https://t.me/linglongai5")
+		await op.join_chat("https://t.me/+B08LK_uykbI0ZGUx")
 		# await op.join_chat("https://t.me/Huyafd_bot")
 	   
 		start_result = await op.capture_bot_messages(target_bot, "/start C32378EE")
