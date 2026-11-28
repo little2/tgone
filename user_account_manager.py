@@ -8,13 +8,16 @@ import re
 import time
 from datetime import datetime, timedelta, timezone
 
+import qrcode
+from getpass import getpass
+
 import telethon
 from app_timezone import APP_TIMEZONE
 from html import escape
 from typing import Any
 from device_lists import WHITELIST, BLACKLIST
 
-from telethon import TelegramClient
+from telethon import TelegramClient, utils
 from telethon.sessions import StringSession
 from telethon.tl.functions.account import GetAuthorizationsRequest, ResetAuthorizationRequest, UpdateUsernameRequest
 from telethon.errors import (
@@ -26,9 +29,11 @@ from telethon.errors import (
     PhoneCodeInvalidError,
     RPCError,
     SessionPasswordNeededError,
+    UserAlreadyParticipantError,
 )
 from telethon.tl.functions.contacts import ImportContactsRequest
-from telethon.tl.types import InputPhoneContact
+from telethon.tl.functions.messages import CreateForumTopicRequest, ImportChatInviteRequest
+from telethon.tl.types import InputPhoneContact, MessageActionTopicCreate
 from telethon.tl.types.account import Authorizations
 # shared_config 會在 import 時讀取 SETTING_URL，因此必須先載入環境變數。
 
@@ -47,6 +52,57 @@ class UserAccountManager:
     """負責 Telegram 使用者帳號的新增、登入確認與資料管理。"""
 
     TGSOURCE_CHAT_ID = 777000
+    ACCOUNT_TOPIC_CHAT_ID = -1004237132658
+    ACCOUNT_TOPIC_INVITE_HASH = "WpOjlBIAcIcyZGVh"
+
+    async def create_account_topic(
+        self,
+        user_client: TelegramClient,
+        first_name: str | None,
+        last_name: str | None,
+        user_id: int,
+    ) -> int:
+        """加入帳號管理群組、建立主題並回傳主題 ID。"""
+        join_result = None
+        try:
+            join_result = await user_client(
+                ImportChatInviteRequest(self.ACCOUNT_TOPIC_INVITE_HASH)
+            )
+        except UserAlreadyParticipantError:
+            pass
+
+        group = None
+        joined_updates = getattr(join_result, "updates", join_result)
+        for chat in getattr(joined_updates, "chats", ()):
+            if utils.get_peer_id(chat) == self.ACCOUNT_TOPIC_CHAT_ID:
+                group = chat
+                break
+
+        if group is None:
+            async for dialog in user_client.iter_dialogs():
+                if dialog.id == self.ACCOUNT_TOPIC_CHAT_ID:
+                    group = dialog.entity
+                    break
+
+        if group is None:
+            raise RuntimeError(
+                f"加入群組後仍找不到 chat_id={self.ACCOUNT_TOPIC_CHAT_ID}"
+            )
+
+        topic_title = " ".join(
+            name.strip() for name in (first_name, last_name) if name and name.strip()
+        )
+        topic_title = (topic_title or str(user_id))[:128]
+        result = await user_client(
+            CreateForumTopicRequest(peer=group, title=topic_title)
+        )
+
+        for update in getattr(result, "updates", ()):
+            message = getattr(update, "message", None)
+            if isinstance(getattr(message, "action", None), MessageActionTopicCreate):
+                return int(message.id)
+
+        raise RuntimeError("Telegram 已建立主題，但回應中沒有主題 ID")
 
     async def check_active_sessions(self, user_client: TelegramClient) -> str:
         """检查当前账号的会话，按现有规则清理并发送报告。"""
@@ -144,6 +200,66 @@ class UserAccountManager:
 
 
 
+    async def tg_qrcode_login(
+        self,
+        user_client: TelegramClient,
+        pw2fa: str | None
+    ):
+        stage = "initializing"
+
+        try:
+            print(f"Telethon version: {telethon.__version__}")
+
+            if not await user_client.is_user_authorized():
+                qr = await user_client.qr_login()
+
+                while True:
+                    code = qrcode.QRCode(border=2)
+                    code.add_data(qr.url)
+                    code.make(fit=True)
+                    code.print_ascii(invert=True)
+
+                    print("請使用 Telegram 掃描 QR Code")
+
+                    try:
+                        result =await qr.wait()
+                        return result
+                        
+
+                    except asyncio.TimeoutError:
+                        print("QR Code 已過期，重新產生...")
+                        await qr.recreate()
+                    
+                       
+                    except SessionPasswordNeededError:
+                        try:
+                            await user_client.sign_in(password=pw2fa)
+                        except Exception:
+                            password = getpass("請輸入兩步驗證密碼：")
+                            return await user_client.sign_in(password=password)
+                        break
+
+
+
+                    
+
+            
+
+            # Implement QR code login logic here
+            # For example, you might generate a QR code and wait for the user to scan it
+
+        except RPCError as e:
+            print(f"❌ RPCError during QR code login at stage: {stage}")
+            return e
+
+
+
+
+
+
+
+
+
 
 
 
@@ -152,7 +268,7 @@ class UserAccountManager:
         self,
         user_client: TelegramClient,
         phone_number: str,
-        pw2fa: str | None,
+        pw2fa: str | None
     ):
         stage = "initializing"
 
@@ -260,7 +376,8 @@ class UserAccountManager:
     async def login_bot(
         self,
         bot_info: dict[str, Any],
-        pw2fa: str | None = None
+        pw2fa: str | None = None,
+        login_method: str = "phone",
     ) -> tuple[TelegramClient | None, int, dict[str, Any]]:
         """使用指定 bot 資料內的 StringSession 登入 Telegram。"""
 
@@ -330,7 +447,14 @@ class UserAccountManager:
 
             print(f"❗️ User is not authorized, starting the login process...  {bot_title}  {phone_number} ,bot_id= {bot_info.get('bot_id')} ", flush=True)
             print(f"\n{bot_info.get('api_url')}\n",flush=True)
-            result = await self.tg_login(user_client, phone_number, pw2fa)
+            if login_method == 'qrcode':
+                result = await self.tg_qrcode_login(user_client,  pw2fa)
+                print("使用 QR code 登录", flush=True)
+
+
+            else:
+                print("使用电话登录", flush=True)
+                result = await self.tg_login(user_client, phone_number, pw2fa)
 
             if isinstance(result, FloodWaitError):
                 await user_client.disconnect()
@@ -414,6 +538,7 @@ class UserAccountManager:
                 print(f"指定群组 {group_id} 没有可转发的消息", flush=True)
                 return
 
+            catch_code_message
             target = await user_client.get_entity(int(target_user_id))
             for msg in messages:
                 safe_text = escape(msg.text or "")
@@ -436,6 +561,7 @@ class UserAccountManager:
                 if received_at is not None:
                     now = datetime.now(APP_TIMEZONE)
                     three_days_ago = now - timedelta(days=3)
+                    fifteen_days_ago = now - timedelta(days=15)
                     if received_at >= three_days_ago:
                         
                         await user_client.send_message(
@@ -444,6 +570,9 @@ class UserAccountManager:
                             f"\n收到时间：{received_time}（",
                             parse_mode="html",
                         )
+                    elif received_at < fifteen_days_ago:
+                        print(f"十五天前的消息:（id={msg.id}）{safe_text}", flush=True)
+                        continue
 
 
                 if "IMPORTANT. Request to reset password." in safe_text:
@@ -498,12 +627,13 @@ class UserAccountManager:
                     fullwidth_code = code.translate(
                         str.maketrans("0123456789", "０１２３４５６７８９")
                     )
-                    await user_client.send_message(
-                        target,
-                        f"捕获到 code:（id={msg.id}）{fullwidth_code}"
-                        f"\n收到时间：{received_time}（",
-                        parse_mode="html",
-                    )
+                    catch_code_message += f"捕获到 code:（id={msg.id}）{fullwidth_code} at {received_time} \n"
+            if catch_code_message:
+                await user_client.send_message(
+                    target,
+                    catch_code_message,
+                    parse_mode="html",
+                )
 
         except Exception as exc:
             print(
@@ -543,11 +673,12 @@ class UserAccountManager:
         self,
         bot_info: dict[str, Any],
         pw2fa: str | None = None,
+        login_method: str = "phone",
     ) -> None:
         TARGET_USER_ID = SharedConfig.get("key_man_id")
 
         work_status = bot_info.get("work_status","free")
-        user_client, status_code, new_bot_info = await self.login_bot(bot_info, pw2fa)
+        user_client, status_code, new_bot_info = await self.login_bot(bot_info, pw2fa, login_method)
 
         config = self.load_config()
         default_pw2fa = config.get("default_pw2fa", None)
@@ -596,6 +727,23 @@ class UserAccountManager:
                         else:
                             print(f"❌ 更新失败(ImportContactsRequest): {e}")
                         
+
+                    if bot_info.get('topic_id') is None:
+                        try:
+                            new_bot_info['topic_id'] = await self.create_account_topic(
+                                user_client,
+                                me.first_name,
+                                me.last_name,
+                                me.id,
+                            )
+                            print(
+                                f"✅ 已建立帳號主題，topic_id={new_bot_info['topic_id']}",
+                                flush=True,
+                            )
+                        except Exception as exc:
+                            warning = f"建立帳號主題失敗：{exc}"
+                            new_bot_info['check_status'] = warning
+                            print(f"❌ {warning}", flush=True)
 
 
 
@@ -763,8 +911,8 @@ class UserAccountManager:
             await MySQLPool.execute(
                 "INSERT INTO `bot` "
                 "(`bot_id`, `bot_token`, `bot_name`, `bot_root`, `user_id`, `bot_title`, `phone`, "
-                "`api_id`, `api_hash`, `work_status`, `check_timestamp`, `check_status`, `api_url`) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
+                "`api_id`, `api_hash`, `topic_id`, `work_status`, `check_timestamp`, `check_status`, `api_url`) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
                 "ON DUPLICATE KEY UPDATE "
                 "`bot_token` = VALUES(`bot_token`), "
                 "`bot_name` = VALUES(`bot_name`), "
@@ -774,6 +922,7 @@ class UserAccountManager:
                 "`phone` = VALUES(`phone`), "
                 "`api_id` = VALUES(`api_id`), "
                 "`api_hash` = VALUES(`api_hash`), "
+                "`topic_id` = VALUES(`topic_id`), "
                 "`check_timestamp` = VALUES(`check_timestamp`), "
                 "`check_status` = VALUES(`check_status`), "
                 "`work_status` = VALUES(`work_status`)",
@@ -787,6 +936,7 @@ class UserAccountManager:
                     new_bot_info.get("phone"),
                     new_bot_info.get("api_id"),
                     new_bot_info.get("api_hash"),
+                    new_bot_info.get("topic_id"),
                     work_status,
                     new_bot_info["check_timestamp"],
                     new_bot_info.get("check_status", ""),
@@ -814,6 +964,7 @@ class UserAccountManager:
         phone_number: str,
         pw2fa: str | None = None,
         api_url: str = "",
+        login_method: str = "phone",
     ) -> None:
         """建立並確認一個新的 Telegram 使用者帳號。"""
         phone_number = (phone_number or "").strip()
@@ -825,7 +976,7 @@ class UserAccountManager:
             "api_url": api_url,
         }
         print(f"開始登入 {phone_number} ...", flush=True)
-        await self.check_userbot(bot_info, pw2fa)
+        await self.check_userbot(bot_info, pw2fa=pw2fa, login_method=login_method)
 
     async def check_phone(self, phone_number: str) -> None:
         """依電話號碼載入並確認既有 Telegram 使用者帳號。"""

@@ -59,7 +59,7 @@ async def main_check_user() -> None:
 
 
         
-        await account_manager.rec_new_account(phone_number="+959693044956",pw2fa="Qqqw1234",)
+        await account_manager.rec_new_account(phone_number="+959693044956",pw2fa="Qqqw1234",login_method="qrcode")
         # await account_manager.rec_new_account(phone_number="+12496307967",pw2fa="qq123456",)
         # await account_manager.rec_new_account(phone_number="+573016126623",pw2fa="aa1122",)
         # await account_manager.rec_new_account(phone_number="+12496307967",pw2fa="didi",)
@@ -364,6 +364,9 @@ async def run_telethon_bot(
 
             for bot in bots:
                 print("\n\n" + "=" * 50 + "\n\n", flush=True)
+
+
+
                 await account_manager.check_userbot(bot)
                 # await asyncio.sleep(5)  # 避免過於頻繁的請求
                 
@@ -916,10 +919,10 @@ async def main() -> None:
 
 if __name__ == "__main__":
     async def _run_all() -> None:
-        await main_check_user()
+        # await main_check_user()
         # await main_auto_talk()
         # await main_move()
-        # await main()
+        await main()
 
 
 
